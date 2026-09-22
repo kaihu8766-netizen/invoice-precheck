@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>发票合规预审 · 演示版</title>
+<style>
+  :root { --line:#e3e8ef; --ink:#1f2a37; --sub:#4b5563; --bg:#f5f7fa; --card:#fff;
+          --red:#dc2626; --orange:#b45309; --gray:#4b5563; --blue:#2563eb; }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body { font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif; background:var(--bg); color:var(--ink); }
+  .wrap { max-width:960px; margin:0 auto; padding:24px 16px 48px; }
+  header { display:flex; align-items:baseline; gap:12px; flex-wrap:wrap; }
+  header h1 { font-size:22px; }
+  .ver { color:var(--sub); font-size:13px; }
+  .demo-badge { font-size:11px; background:#fef3c7; color:#92400e; border:1px solid #fcd34d; padding:2px 8px; border-radius:10px; }
+  .disclaimer { margin-top:8px; font-size:12px; color:var(--sub); background:#eef2f7; border-left:3px solid var(--blue); padding:8px 12px; border-radius:4px; }
+
+  .upload { margin-top:16px; background:var(--card); border:1px dashed #c3cdda; border-radius:8px; padding:20px; text-align:center; }
+  .upload .note { font-size:12px; color:var(--sub); margin-top:8px; }
+  .btn { margin-top:12px; padding:10px 24px; background:var(--blue); color:#fff; border:none; border-radius:6px; font-size:14px; cursor:pointer; }
+  .btn:disabled { opacity:.5; cursor:not-allowed; }
+
+  .summary { display:grid; grid-template-columns:repeat(auto-fit,minmax(110px,1fr)); gap:12px; margin-top:20px; }
+  .sum-card { background:var(--card); border:1px solid var(--line); border-radius:8px; padding:14px; }
+  .sum-card .num { font-size:24px; font-weight:600; }
+  .sum-card .lab { font-size:12px; color:var(--sub); margin-top:4px; }
+  .sum-card.orange .num { color:var(--orange); } .sum-card.red .num { color:var(--red); }
+
+  section { margin-top:24px; }
+  section h2 { font-size:16px; margin-bottom:10px; }
+  .risk { background:var(--card); border:1px solid var(--line); border-left:4px solid var(--gray); border-radius:6px; padding:12px 14px; margin-bottom:10px; }
+  .risk.high { border-left-color:var(--red); } .risk.mid { border-left-color:var(--orange); } .risk.low { border-left-color:#d1d5db; }
+  .risk .top { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+  .tag { font-size:11px; padding:2px 8px; border-radius:10px; font-weight:500; }
+  .tag.高 { background:#fee2e2; color:#991b1b; } .tag.中 { background:#fef3c7; color:#92400e; } .tag.低 { background:#e5e7eb; color:#374151; }
+  .tag.确定 { background:#e0e7ff; color:#4338ca; } .tag.疑似 { background:#e5e7eb; color:var(--sub); }
+  .risk .msg { margin-top:6px; font-size:14px; }
+  .risk .ev { margin-top:4px; font-size:12px; color:var(--sub); word-break:break-all; }
+  .risk .sug { margin-top:4px; font-size:12px; color:var(--orange); }
+
+  .table-wrap { overflow-x:auto; }
+  table { width:100%; border-collapse:collapse; background:var(--card); font-size:13px; }
+  caption { text-align:left; font-size:12px; color:var(--sub); padding:4px 0 8px; }
+  th, td { border:1px solid var(--line); padding:8px 10px; text-align:left; }
+  th { background:#f9fafb; font-weight:600; }
+  .st { font-size:11px; padding:2px 8px; border-radius:10px; white-space:nowrap; }
+  .st.ok { background:#e5e7eb; color:#374151; } .st.rev { background:#fef3c7; color:#92400e; }
+  .st.bad { background:#fee2e2; color:#991b1b; } .st.inc { background:#e5e7eb; color:var(--sub); }
+
+  .failed { background:#fff5f5; border:1px solid #fecaca; border-radius:6px; padding:10px 14px; font-size:13px; color:#991b1b; margin-top:10px; }
+  .alert-block { background:#fef2f2; border:1px solid #fecaca; border-radius:8px; padding:16px; font-size:14px; color:#7f1d1d; margin-top:16px; }
+  .meta { margin-top:24px; font-size:12px; color:var(--sub); line-height:1.8; }
+  .empty { color:var(--sub); font-size:14px; margin-top:12px; }
+  #result:focus { outline:none; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>发票合规预审</h1>
+    <span class="ver">应用 v0.1 · 规则 r0.1.1</span>
+    <span class="demo-badge">演示模式</span>
+  </header>
+  <div class="disclaimer">本服务为辅助提示，不替代专业财务/审计判断。基于 XML 结构化数据的规则预审，不替代人工复核与税务判断；命中项需核原始凭证，未命中不等于合规；规则版本与覆盖范围已列明。</div>
+
+  <div class="upload">
+    <div style="font-size:15px;">企业级发票合规预审 —— 上传数电票 XML，一页出风险报告</div>
+    <div class="note">演示版已内置 4 个脱敏样例（3 张数电票 XML + 1 个伪装 PDF），点击下方按钮即可看到完整的解析 → 规则预审 → 报告流程。真实后端解析需本地运行（见 GitHub README）。</div>
+    <button class="btn" id="run">运行演示（内置样例）</button>
+  </div>
+
+  <div id="result" role="status" aria-live="polite" tabindex="-1"></div>
+
+  <div class="meta" id="meta"></div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const runBtn = $("run"), result = $("result"), meta = $("meta");
+
+// 完整 HTML 转义（含引号）：文本与属性位都安全（与产品前端一致）
+const esc = s => String(s ?? "").replace(/[&<>"']/g,
+  c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+
+// 枚举白名单映射
+const SEV_CLS = {"高":"high", "中":"mid", "低":"low"};
+const CONF_ALLOW = new Set(["确定", "疑似"]);
+
+const DISCLAIMER = "基于 XML 结构化数据的规则预审，不替代人工复核与税务判断；命中项需核原始凭证，未命中不等于合规；规则版本与覆盖范围已列明。";
+const SCOPE_NOTE = "本报告基于数电票 XML 结构化数据的确定性规则生成；公开+合成集验证通过，真实分布未验证。（演示版为内置样例数据模拟）";
+
+// —— 演示数据：与真实后端 /review 返回结构完全同构（脱敏样例）——
+function demoReport() {
+  const now = new Date();
+  const ts = now.getFullYear() + "-" + String(now.getMonth()+1).padStart(2,"0") + "-" + String(now.getDate()).padStart(2,"0") + " " + String(now.getHours()).padStart(2,"0") + ":" + String(now.getMinutes()).padStart(2,"0") + ":" + String(now.getSeconds()).padStart(2,"0");
+  return {
+    "summary": {
+      "file_count": 4, "total_count": 3, "total_amount": "339.00",
+      "no_finding_count": 1, "review_count": 2, "failed_count": 1
+    },
+    "invoices": [
+      {"invoice_no":"26003300000000008801","invoice_type":"数电专票","issue_date":"2026-08-01","total":"113.00","seller_name":"北京华信办公用品有限公司","status":"待复核","warning_count":0},
+      {"invoice_no":"26003300000000008802","invoice_type":"数电专票","issue_date":"2026-08-01","total":"113.00","seller_name":"北京华信办公用品有限公司","status":"待复核","warning_count":0},
+      {"invoice_no":"26003300000000009999","invoice_type":"数电普票","issue_date":"2026-08-15","total":"113.00","seller_name":"上海辰光会展服务有限公司","status":"未见异常","warning_count":0}
+    ],
+    "findings": [
+      {"rule_id":"R1","severity":"高","confidence":"确定","invoice_no":"26003300000000008801","field":"发票号码+开票日期+价税合计","message":"本批次内存在票号+开票日期+价税合计相同的发票（26003300000000008801 出现 2 次）","evidence":"票号 26003300000000008801，开票日期 2026-08-01，价税合计 113.00，出现 2 次","suggestion":"核实是否为重复报销或红冲未处理；如为误开请留存红字发票凭证"},
+      {"rule_id":"R3","severity":"低","confidence":"疑似","invoice_no":"26003300000000008801","field":"开票号码连号","message":"同一供应商同日开具的发票存在连号（…8801、…8802），建议结合业务场景判断是否异常拆分开票","evidence":"北京华信办公用品有限公司 2026-08-01 两张发票号码连续","suggestion":"对照业务合同/订单核实开票连续性"}
+    ],
+    "failed": [
+      {"file":"invoice-scan.pdf","error":"不支持的输入类型：检测为 pdf（当前 P1 仅支持数电票 XML；OFD/PDF/图片兜底为 P2 里程碑）"}
+    ],
+    "rules": [
+      {"rule_id":"R1","name":"同号重复检测","state":"命中"},
+      {"rule_id":"R2","name":"购买方抬头/税号校验","state":"未执行（未配置企业主体）"},
+      {"rule_id":"R3","name":"连号开票提示","state":"命中"},
+      {"rule_id":"R4","name":"报销类别超标校验","state":"未执行（缺少报销类别）"},
+      {"rule_id":"R6","name":"日期异常提示","state":"未命中"},
+      {"rule_id":"R7","name":"敏感字段扫描","state":"未命中"}
+    ],
+    "rules_summary": {"enabled_count": 6, "命中": 2, "未命中": 2, "未执行": 2, "note": "未执行的规则因数据不足或未配置未判定，不计入命中；仅列出已启用规则"},
+    "batch_id": "demo-20260923-0001",
+    "generated_at": ts,
+    "ruleset_version": "0.1.1",
+    "scope_note": SCOPE_NOTE,
+    "disclaimer": DISCLAIMER
+  };
+}
+
+runBtn.addEventListener("click", () => {
+  runBtn.disabled = true; runBtn.textContent = "解析中…";
+  // 模拟真实后端的处理时延（演示用）
+  setTimeout(() => {
+    render(demoReport());
+    runBtn.disabled = false; runBtn.textContent = "重新运行演示";
+  }, 700);
+});
+
+function render(d) {
+  try {
+    if (!d || !d.summary) throw new Error("报告数据缺失");
+    const s = d.summary;
+    if (s.total_count === 0) {
+      result.innerHTML = `<div class="alert-block">
+        <strong>本批次无可分析发票</strong>：成功解析 0 张，解析失败 ${esc(s.failed_count)} 个文件，请查看下方失败列表。
+        本结果不构成任何合规结论。
+      </div>`;
+      if (d.failed && d.failed.length) {
+        result.innerHTML += `<section><h2>解析失败（${d.failed.length} 个文件）</h2>${d.failed.map(f => `<div class="failed">${esc(f.file)}：${esc(f.error)}</div>`).join("")}</section>`;
+      }
+      renderMeta(d);
+      result.focus();
+      return;
+    }
+    const find = d.findings || [], invs = d.invoices || [], failed = d.failed || [];
+    result.innerHTML = `
+      <div class="summary">
+        <div class="sum-card"><div class="num">${esc(s.total_count)}</div><div class="lab">成功解析发票（共 ${esc(s.file_count)} 个文件）</div></div>
+        <div class="sum-card"><div class="num">${esc(s.total_amount)}</div><div class="lab">价税合计（元）*</div></div>
+        <div class="sum-card"><div class="num">${esc(s.no_finding_count)}</div><div class="lab">未见规则命中</div></div>
+        <div class="sum-card orange"><div class="num">${esc(s.review_count)}</div><div class="lab">待复核</div></div>
+        <div class="sum-card red"><div class="num">${esc(s.failed_count)}</div><div class="lab">解析失败</div></div>
+      </div>
+
+      <section><h2>风险清单（${find.length} 项，按严重度排序）</h2>
+        ${find.length ? find.map(f => {
+          const sevCls = SEV_CLS[f.severity] || "low";
+          const conf = CONF_ALLOW.has(f.confidence) ? f.confidence : "疑似";
+          return `
+          <div class="risk ${sevCls}">
+            <div class="top">
+              <span class="tag ${esc(f.severity)}">${esc(f.severity)}严重</span>
+              <span class="tag ${esc(conf)}">${esc(conf)}</span>
+              <span style="font-size:12px;color:var(--sub)">${esc(f.rule_id)} · ${esc(f.invoice_no)} · ${esc(f.field)}</span>
+            </div>
+            <div class="msg">${esc(f.message)}</div>
+            <div class="ev">证据：${esc(f.evidence)}</div>
+            ${f.suggestion ? `<div class="sug">建议：${esc(f.suggestion)}</div>` : ""}
+          </div>`;
+        }).join("") : '<div class="empty">未发现风险点（不代表合规，详见免责）。</div>'}
+      </section>
+
+      <section><h2>发票明细（${invs.length} 张）</h2>
+        <div class="table-wrap"><table>
+          <caption>状态说明：待复核 = 命中规则或字段缺失需人工核对；未见异常 = 规则未命中且无解析告警。</caption>
+          <thead><tr><th scope="col">票号</th><th scope="col">票种</th><th scope="col">开票日期</th><th scope="col">价税合计</th><th scope="col">销售方</th><th scope="col">状态</th></tr></thead>
+          <tbody>${invs.map(i => {
+            const stCls = i.status === "未见异常" ? "ok" : i.status === "待复核" ? "rev" : i.status === "待复核（字段缺失）" ? "rev" : i.status === "数据不完整" ? "inc" : "bad";
+            const stTip = i.warning_count ? `（${i.warning_count} 项解析告警）` : "";
+            return `<tr>
+              <td>${esc(i.invoice_no)}</td><td>${esc(i.invoice_type)}</td><td>${esc(i.issue_date)}</td>
+              <td>${esc(i.total)}</td><td>${esc(i.seller_name)}</td>
+              <td><span class="st ${stCls}" title="${esc(stTip)}">${esc(i.status)}${stTip ? `<sup>${i.warning_count}</sup>` : ""}</span></td>
+            </tr>`;
+          }).join("")}</tbody>
+        </table></div>
+      </section>
+
+      ${failed.length ? `<section><h2>解析失败（${failed.length} 个文件）</h2>${failed.map(f => `<div class="failed">${esc(f.file)}：${esc(f.error)}</div>`).join("")}</section>` : ""}
+    `;
+    renderMeta(d);
+    result.focus();
+  } catch (e) {
+    result.innerHTML = `<div class="failed">报告渲染失败，请刷新重试。${esc(e.message)}</div>`;
+  }
+}
+
+function renderMeta(d) {
+  const rules = (d.rules || []).map(r => `${esc(r.rule_id)} ${esc(r.name)}【${esc(r.state)}】`).join("、");
+  const rs = d.rules_summary || {};
+  const stateNote = rs.enabled_count
+    ? `启用 ${esc(rs.enabled_count)} 条 · 命中 ${esc(rs["命中"] ?? 0)} · 未命中 ${esc(rs["未命中"] ?? 0)} · 未执行 ${esc(rs["未执行"] ?? 0)}`
+    : "";
+  meta.innerHTML = `批次 ${esc(d.batch_id)} · 生成 ${esc(d.generated_at)}<br>
+    规则版本：${esc(d.ruleset_version)} · ${esc(stateNote)}<br>
+    规则清单：${rules || "—"}<br>
+    ${esc(d.scope_note)}<br>${esc(d.disclaimer)}`;
+}
+</script>
+</body>
+</html>

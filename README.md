@@ -6,12 +6,18 @@
 
 > **⚠️ 使用声明：本项目当前仅限本地/内网学习与演示使用，未实现认证、多租户隔离、验签/验真与持久化；报告仅为规则预审风险提示，不构成任何合规结论。**
 
+## 在线演示
+
+- 演示页（GitHub Pages，内置脱敏样例模拟后端返回）：`https://kaihu8766-netizen.github.io/invoice-precheck/`
+- 演示页源码：`docs/index.html`（与产品前端一致；真实解析需本地运行后端）
+
 ## 目录结构
 
 ```
 invoice-precheck/
 ├── README.md            # 本文件
 ├── docs/
+│   ├── index.html        # GitHub Pages 演示页（内置脱敏样例）
 │   └── P1-技术方案.md    # P1 技术方案（含 DeepSeek 评审意见与采纳决策）
 ├── app/
 │   ├── models.py        # 数据契约（NormalizedInvoice / Finding）
