@@ -3,3 +3,4 @@ fastapi>=0.110
 uvicorn>=0.29
 python-multipart>=0.0.9
 defusedxml>=0.7
+httpx2>=1.0          # starlette.testclient 依赖（CI 首次运行暴露：缺此包 TestClient 无法导入）
