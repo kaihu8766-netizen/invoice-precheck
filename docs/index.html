@@ -5,92 +5,216 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>发票合规预审 · 演示</title>
 <style>
-  :root{ --ok:#2f7d4f; --mid:#c98a1b; --high:#b42318; --ink:#1f2329; --sub:#646a73; --line:#e2e5ea; --bg:#f6f7f9; }
+  :root{
+    --brand:#3370ff; --brand-weak:#eaf0ff;
+    --ok:#2f7d4f; --ok-bg:#e8f4ee;
+    --mid:#b45309; --mid-bg:#fef3c7;
+    --high:#b42318; --high-bg:#fdecea;
+    --ink:#1f2329; --sub:#646a73; --weak:#8f959e;
+    --line:#e2e5ea; --line-soft:#eef0f3;
+    --bg:#f6f7f9; --card:#fff;
+    --r-lg:12px; --r-md:8px; --r-sm:6px;
+    --shadow:0 1px 2px rgba(15,23,42,.04), 0 1px 3px rgba(15,23,42,.06);
+  }
   *{ box-sizing:border-box; margin:0; padding:0; }
+  html,body{ height:100%; }
   body{ font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif; background:var(--bg); color:var(--ink); font-size:14px; line-height:1.6; }
-  .wrap{ max-width:960px; margin:0 auto; padding:20px 16px 48px; }
-  header{ display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px; margin-bottom:16px; }
-  h1{ font-size:21px; }
-  .sub{ color:var(--sub); font-size:13px; }
-  .badge{ font-size:11px; padding:2px 8px; border-radius:10px; border:1px solid; }
-  .badge.demo{ background:#fef3c7; color:#92400e; border-color:#fcd34d; }
-  .badge.live{ background:#e8f4ee; color:#2f7d4f; border-color:#2f7d4f; }
-  .card{ background:#fff; border:1px solid var(--line); border-radius:10px; padding:14px 16px; margin-bottom:14px; }
-  .card h2{ font-size:15px; margin-bottom:10px; }
-  .row{ display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
-  input, select, button{ font:inherit; padding:7px 10px; border:1px solid var(--line); border-radius:6px; }
-  input{ flex:1; min-width:180px; }
-  button{ background:#3370ff; color:#fff; border:none; cursor:pointer; }
-  button.ghost{ background:#fff; color:#3370ff; border:1px solid #3370ff; }
-  button:disabled{ opacity:.5; cursor:not-allowed; }
-  .hint{ color:var(--sub); font-size:12.5px; margin-top:6px; }
-  .ok{ color:var(--ok); } .mid{ color:var(--mid); } .high{ color:var(--high); }
-  .sum{ display:flex; gap:10px; flex-wrap:wrap; }
-  .sum .item{ flex:1 1 120px; background:#fafbfc; border:1px solid var(--line); border-radius:8px; padding:8px 10px; }
-  .sum .n{ font-size:19px; font-weight:700; }
-  .sum .l{ font-size:12px; color:var(--sub); }
+  .app{ max-width:1180px; margin:0 auto; padding:0 20px 48px; }
+
+  /* ---------- 顶栏 ---------- */
+  .topbar{ display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px; padding:16px 0; border-bottom:1px solid var(--line); margin-bottom:16px; }
+  .brand{ display:flex; align-items:center; gap:10px; }
+  .logo{ width:34px; height:34px; border-radius:9px; background:linear-gradient(135deg,var(--brand),#5b8bff); display:flex; align-items:center; justify-content:center; color:#fff; font-weight:800; font-size:15px; box-shadow:var(--shadow); }
+  .brand-name{ font-size:17px; font-weight:700; letter-spacing:.2px; }
+  .brand-sub{ font-size:12px; color:var(--sub); }
+  .top-right{ display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
+
+  /* 分段模式切换（segmented control） */
+  .seg{ display:flex; background:var(--line-soft); border:1px solid var(--line); border-radius:var(--r-md); padding:3px; gap:2px; }
+  .seg button{ border:none; background:transparent; padding:5px 14px; border-radius:6px; font-size:13px; color:var(--sub); cursor:pointer; }
+  .seg button.active{ background:#fff; color:var(--ink); font-weight:600; box-shadow:var(--shadow); }
+  .badge{ font-size:11px; padding:2px 10px; border-radius:10px; border:1px solid; font-weight:600; }
+  .badge.demo{ background:var(--mid-bg); color:var(--mid); border-color:#fcd34d; }
+  .badge.live{ background:var(--ok-bg); color:var(--ok); border-color:var(--ok); }
+
+  /* ---------- 工作台：左右分栏 ---------- */
+  .layout{ display:grid; grid-template-columns:340px 1fr; gap:16px; align-items:start; }
+  @media (max-width:900px){ .layout{ grid-template-columns:1fr; } }
+  .input-panel{ display:flex; flex-direction:column; gap:14px; position:sticky; top:16px; }
+  @media (max-width:900px){ .input-panel{ position:static; } }
+  .output-panel{ min-width:0; }
+
+  .card{ background:var(--card); border:1px solid var(--line); border-radius:var(--r-lg); box-shadow:var(--shadow); }
+  .card-pad{ padding:16px; }
+  .card h3{ font-size:13px; font-weight:700; color:var(--sub); text-transform:none; margin-bottom:10px; letter-spacing:.3px; }
+  .card h3 .n{ color:var(--ink); }
+
+  /* 上传区 */
+  .drop{ border:1.5px dashed var(--line); border-radius:var(--r-md); padding:22px 14px; text-align:center; cursor:pointer; transition:border-color .15s, background .15s; background:#fafbfc; }
+  .drop:hover, .drop.over{ border-color:var(--brand); background:var(--brand-weak); }
+  .drop .ic{ font-size:26px; line-height:1; margin-bottom:8px; }
+  .drop .t{ font-size:13.5px; font-weight:600; }
+  .drop .s{ font-size:12px; color:var(--sub); margin-top:2px; }
+  .filelist{ font-size:12.5px; color:var(--sub); margin-top:10px; }
+  .filelist .f{ display:flex; align-items:center; gap:6px; background:var(--line-soft); border-radius:6px; padding:4px 8px; margin-top:4px; font-size:12px; overflow:hidden; }
+  .filelist .f .nm{ flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+
+  /* 按钮 */
+  .btn{ font:inherit; border:none; cursor:pointer; border-radius:var(--r-md); padding:9px 14px; font-size:14px; font-weight:600; transition:filter .12s; }
+  .btn-primary{ background:var(--brand); color:#fff; width:100%; box-shadow:0 1px 2px rgba(51,112,255,.3); }
+  .btn-primary:hover{ filter:brightness(1.05); }
+  .btn-primary:disabled{ opacity:.55; cursor:not-allowed; }
+  .btn-ghost{ background:#fff; color:var(--brand); border:1px solid var(--brand); padding:5px 12px; font-size:13px; font-weight:500; }
+  .btn-ghost:hover{ background:var(--brand-weak); }
+
+  /* 折叠（渐进披露） */
+  details.adv{ border:1px solid var(--line); border-radius:var(--r-md); background:#fafbfc; }
+  details.adv summary{ cursor:pointer; padding:9px 12px; font-size:13px; font-weight:600; color:var(--sub); list-style:none; display:flex; align-items:center; justify-content:space-between; }
+  details.adv summary::-webkit-details-marker{ display:none; }
+  details.adv summary::after{ content:"展开 ▾"; font-size:12px; font-weight:400; color:var(--weak); }
+  details.adv[open] summary::after{ content:"收起 ▴"; }
+  details.adv .inner{ padding:4px 12px 12px; }
+
+  .fld{ display:flex; flex-direction:column; gap:6px; margin-top:8px; }
+  .fld label{ font-size:12px; color:var(--sub); font-weight:600; }
+  input[type=text], input[type=password]{ font:inherit; padding:8px 10px; border:1px solid var(--line); border-radius:var(--r-md); background:#fff; width:100%; }
+  input:focus{ outline:none; border-color:var(--brand); box-shadow:0 0 0 2px var(--brand-weak); }
+  .hint{ color:var(--sub); font-size:12px; margin-top:6px; line-height:1.5; }
+  .hint.err{ color:var(--high); }
+  .hint.okc{ color:var(--ok); }
+
+  /* 输出区 */
+  #empty{ text-align:center; padding:64px 20px; color:var(--sub); }
+  #empty .ic{ font-size:40px; margin-bottom:12px; }
+  #empty .t{ font-size:15px; font-weight:600; color:var(--ink); }
+  #empty .s{ font-size:13px; margin-top:6px; }
+
+  /* KPI 摘要 */
+  .kpis{ display:grid; grid-template-columns:repeat(6,1fr); gap:10px; padding:16px; }
+  @media (max-width:720px){ .kpis{ grid-template-columns:repeat(3,1fr); } }
+  .kpi{ background:#fafbfc; border:1px solid var(--line-soft); border-radius:var(--r-md); padding:10px 12px; }
+  .kpi .n{ font-size:20px; font-weight:800; line-height:1.2; }
+  .kpi .l{ font-size:11.5px; color:var(--sub); margin-top:2px; }
+  .kpi .n.ok{ color:var(--ok); } .kpi .n.mid{ color:var(--mid); } .kpi .n.high{ color:var(--high); }
+  .kpi.main{ background:var(--brand-weak); border-color:#d6e2ff; }
+  .kpi.main .l{ color:#3d5bb3; }
+
+  /* 风险清单 */
+  .section{ margin-top:14px; }
+  .section-head{ display:flex; align-items:baseline; justify-content:space-between; margin-bottom:8px; }
+  .section-head h2{ font-size:15px; font-weight:700; }
+  .section-head .sub{ font-size:12px; color:var(--sub); }
+  .finding{ display:flex; border:1px solid var(--line); border-radius:var(--r-lg); background:#fff; box-shadow:var(--shadow); overflow:hidden; margin-bottom:10px; }
+  .finding .bar{ width:4px; flex-shrink:0; }
+  .bar.high{ background:var(--high); } .bar.mid{ background:var(--mid); } .bar.low{ background:var(--sub); }
+  .finding .body{ flex:1; padding:12px 14px; min-width:0; }
+  .finding .head{ display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+  .sev{ font-size:11px; font-weight:800; padding:2px 8px; border-radius:10px; letter-spacing:.2px; }
+  .sev.high{ background:var(--high-bg); color:var(--high); } .sev.mid{ background:var(--mid-bg); color:var(--mid); } .sev.low{ background:var(--line-soft); color:var(--sub); }
+  .finding .msg{ font-size:13.5px; font-weight:600; margin-top:6px; line-height:1.5; }
+  .finding .meta{ font-size:12px; color:var(--sub); margin-top:4px; }
+  .finding .meta code{ background:var(--line-soft); border-radius:4px; padding:0 5px; font-family:ui-monospace,Menlo,Consolas,monospace; font-size:11.5px; }
+  .finding .sug{ font-size:13px; margin-top:8px; color:var(--ink); }
+  .finding .sug b{ color:var(--sub); font-weight:600; font-size:12px; }
+  .chain{ font-size:12.5px; color:var(--sub); margin-top:8px; }
+  .chain li{ margin:2px 0 2px 18px; }
+  .chain code{ background:var(--line-soft); border-radius:4px; padding:0 5px; font-family:ui-monospace,Menlo,Consolas,monospace; font-size:11.5px; }
+
+  /* 通俗解释 */
+  .explain{ margin-top:10px; background:var(--brand-weak); border-left:3px solid var(--brand); border-radius:0 var(--r-md) var(--r-md) 0; padding:10px 12px; font-size:13px; line-height:1.75; }
+  .explain .tag{ display:inline-block; font-size:11px; font-weight:700; color:var(--brand); background:#fff; border:1px solid #c9d8ff; border-radius:10px; padding:1px 8px; margin-bottom:6px; }
+  .explain b{ color:var(--ink); }
+  .explain.tpl{ background:var(--line-soft); border-left-color:var(--weak); }
+  .explain.tpl .tag{ color:var(--sub); border-color:var(--line); }
+
+  /* 表格（折叠区） */
   table{ width:100%; border-collapse:collapse; font-size:13px; }
-  th, td{ text-align:left; padding:6px 8px; border-bottom:1px solid var(--line); vertical-align:top; }
-  th{ color:var(--sub); font-weight:600; background:#fafbfc; }
-  .pill{ display:inline-block; font-size:12px; padding:1px 8px; border-radius:10px; }
-  .pill.hit{ background:#fdecea; color:#b42318; }
-  .pill.nohit{ background:#e8f4ee; color:#2f7d4f; }
-  .pill.skip{ background:#eef0f3; color:#646a73; }
-  .sev{ font-size:12px; font-weight:600; }
-  .chain{ margin:4px 0 0; padding-left:18px; color:var(--sub); font-size:12.5px; }
-  .chain li{ margin-bottom:2px; }
+  th, td{ text-align:left; padding:7px 8px; border-bottom:1px solid var(--line-soft); vertical-align:top; }
+  th{ color:var(--sub); font-weight:600; font-size:12px; background:#fafbfc; }
+  tr:last-child td{ border-bottom:none; }
+  .pill{ display:inline-block; font-size:11.5px; padding:1px 8px; border-radius:10px; font-weight:600; }
+  .pill.hit{ background:var(--high-bg); color:var(--high); }
+  .pill.nohit{ background:var(--ok-bg); color:var(--ok); }
+  .pill.skip{ background:var(--line-soft); color:var(--sub); }
+  .ok{ color:var(--ok); } .mid{ color:var(--mid); } .high{ color:var(--high); }
   .fail{ color:var(--high); }
-  .meta{ color:var(--sub); font-size:12px; margin-top:10px; word-break:break-all; }
-  .disc{ margin-top:14px; padding:10px 12px; background:#fafbfc; border-left:3px solid var(--line); font-size:12.5px; color:var(--sub); }
-  .empty{ color:var(--sub); text-align:center; padding:18px 0; }
-  .filelist{ font-size:12.5px; color:var(--sub); margin-top:6px; }
+
+  /* 页脚元信息 */
+  .meta{ color:var(--weak); font-size:11.5px; margin-top:12px; line-height:1.7; word-break:break-all; }
+  .disc{ margin-top:8px; padding:8px 12px; background:#fafbfc; border-left:3px solid var(--line); font-size:12px; color:var(--sub); border-radius:0 var(--r-md) var(--r-md) 0; }
+
   .live-only{ display:none; }
   body.live .live-only{ display:block; }
   body.live .demo-only{ display:none; }
 </style>
 </head>
 <body class="demo">
-<div class="wrap">
-  <header>
-    <div>
-      <h1>发票合规预审</h1>
-      <div class="sub">数电票规则预审引擎 · ruleset <span id="ver">0.3.0</span> · <span id="modeLabel" class="badge demo">演示模式（内置样例）</span></div>
+<div class="app">
+  <!-- 顶栏：品牌 + 模式切换 -->
+  <header class="topbar">
+    <div class="brand">
+      <div class="logo">票</div>
+      <div>
+        <div class="brand-name">发票合规预审</div>
+        <div class="brand-sub">数电票规则预审引擎 · ruleset <span id="ver">0.3.0</span></div>
+      </div>
     </div>
-    <div class="row">
-      <button id="btnDemo" class="ghost">演示模式</button>
-      <button id="btnLive">真实模式（连后端）</button>
+    <div class="top-right">
+      <span id="modeLabel" class="badge demo">演示模式（内置样例）</span>
+      <div class="seg">
+        <button id="btnDemo" class="active">演示模式</button>
+        <button id="btnLive">真实模式</button>
+      </div>
     </div>
   </header>
 
-  <div class="card live-only" id="configCard">
-    <h2>连接后端</h2>
-    <div class="row">
-      <input id="backendUrl" type="text" placeholder="后端地址，如 https://xxx.trycloudflare.com 或 http://localhost:8000">
-      <input id="apiKey" type="password" placeholder="API Key（X-API-Key）">
-      <button id="btnTest">测试连接</button>
-    </div>
-    <div class="hint" id="connHint">地址与 Key 仅保存在本浏览器，不发送到第三方。业务接口必须携带 X-API-Key。</div>
-  </div>
+  <main class="layout">
+    <!-- 左栏：输入区 -->
+    <aside class="input-panel">
+      <section class="card card-pad">
+        <h3>上传发票</h3>
+        <div class="drop" id="dropZone" tabindex="0" role="button" aria-label="上传发票文件">
+          <div class="ic">📄</div>
+          <div class="t">拖拽文件到此处，或点击选择</div>
+          <div class="s">支持数电票 XML 与 OFD 容器 · 可多选 · 或粘贴 Ctrl+V</div>
+        </div>
+        <input id="fileInput" type="file" multiple accept=".xml,.ofd,.zip" style="display:none">
+        <div class="filelist" id="fileList"></div>
+        <button id="btnReview" class="btn btn-primary" style="margin-top:12px;">运行预审</button>
+        <div class="hint" id="runHint">运行后右侧显示合规预审报告。</div>
+      </section>
 
-  <div class="card live-only">
-    <h2>上传发票（XML / OFD）</h2>
-    <div class="row">
-      <input id="fileInput" type="file" multiple accept=".xml,.ofd,.zip">
-      <button id="btnReview">运行预审</button>
-    </div>
-    <div class="filelist" id="fileList"></div>
-  </div>
+      <section class="card card-pad live-only">
+        <h3>连接后端</h3>
+        <div class="fld">
+          <label for="backendUrl">后端地址</label>
+          <input id="backendUrl" type="text" placeholder="https://xxx.trycloudflare.com 或 http://localhost:8000">
+        </div>
+        <div class="fld">
+          <label for="apiKey">API Key（X-API-Key）</label>
+          <input id="apiKey" type="password" placeholder="后端环境变量 INVOICE_API_KEY 的值">
+        </div>
+        <button id="btnTest" class="btn btn-ghost" style="margin-top:10px;">测试连接</button>
+        <div class="hint" id="connHint">地址与 Key 仅保存在本浏览器，不发送到第三方。</div>
+      </section>
 
-  <div class="card demo-only">
-    <h2>演示样例</h2>
-    <p style="color:var(--sub);font-size:13px;">内置 4 张样例发票 + 1 个失败文件，覆盖：重复票（R1）、差额征税备注缺失（R9）、行级勾稽异常（R10）、红冲关联缺失（R11）与证据链展示。可切「真实模式」连接你本机部署的后端。</p>
-    <div class="row" style="margin-top:10px;">
-      <button id="btnRun">重新运行演示</button>
-      <span class="hint" style="margin-top:0;">支持数电票 XML 与 OFD 容器（A1）</span>
-    </div>
-  </div>
+      <section class="card card-pad demo-only">
+        <h3>演示样例</h3>
+        <div class="hint">内置 4 张样例发票 + 1 个失败文件，覆盖重复票（R1）、差额征税（R9）、行级勾稽（R10）、红冲关联（R11）与证据链展示。</div>
+        <button id="btnRun" class="btn btn-ghost" style="margin-top:10px;">重新运行演示</button>
+      </section>
+    </aside>
 
-  <div id="result" role="status" aria-live="polite" tabindex="-1"></div>
+    <!-- 右栏：输出区 -->
+    <section class="output-panel">
+      <div id="empty" style="display:none;">
+        <div class="ic">🔍</div>
+        <div class="t">上传发票，运行预审</div>
+        <div class="s">左侧选择发票文件后点击「运行预审」，合规报告将显示在这里。</div>
+      </div>
+      <div id="result" role="status" aria-live="polite" tabindex="-1"></div>
+    </section>
+  </main>
 </div>
 
 <script>
@@ -197,67 +321,83 @@ function explainBlock(f) {
 /* ---------- 渲染 ---------- */
 function render(d) {
   const el = $("result");
-  if (!d || d.error) { el.innerHTML = `<div class="card high">${esc(d?.error || "无响应")}</div>`; return; }
+  $("empty").style.display = "none";
+  if (!d || d.error) { el.innerHTML = `<div class="card card-pad high">${esc(d?.error || "无响应")}</div>`; return; }
   const s = d.summary || {};
   const rules = d.rules || [], rs = d.rules_summary || {};
   const stateNote = rs.enabled_count ? `启用 ${rs.enabled_count} 条 · 命中 ${rs.命中||0} · 未命中 ${rs.未命中||0} · 未执行 ${rs.未执行||0}` : "";
 
-  const html = `
-  <div class="card">
-    <h2>汇总</h2>
-    <div class="sum">
-      <div class="item"><div class="n">${esc(s.file_count ?? 0)}</div><div class="l">文件数</div></div>
-      <div class="item"><div class="n">${esc(s.total_count ?? 0)}</div><div class="l">成功解析</div></div>
-      <div class="item"><div class="n">¥${esc(s.total_amount ?? "—")}</div><div class="l">金额合计</div></div>
-      <div class="item"><div class="n ok">${esc(s.no_finding_count ?? 0)}</div><div class="l">未见异常</div></div>
-      <div class="item"><div class="n mid">${esc(s.review_count ?? 0)}</div><div class="l">待复核</div></div>
-      <div class="item"><div class="n high">${esc(s.failed_count ?? 0)}</div><div class="l">解析失败</div></div>
-    </div>
-  </div>
+  const kpis = `
+  <div class="kpis">
+    <div class="kpi main"><div class="n">${esc(s.file_count ?? 0)}</div><div class="l">文件数</div></div>
+    <div class="kpi main"><div class="n">¥${esc(s.total_amount ?? "—")}</div><div class="l">金额合计</div></div>
+    <div class="kpi main"><div class="n mid">${esc(s.review_count ?? 0)}</div><div class="l">待复核</div></div>
+    <div class="kpi"><div class="n">${esc(s.total_count ?? 0)}</div><div class="l">成功解析</div></div>
+    <div class="kpi"><div class="n ok">${esc(s.no_finding_count ?? 0)}</div><div class="l">未见异常</div></div>
+    <div class="kpi"><div class="n high">${esc(s.failed_count ?? 0)}</div><div class="l">解析失败</div></div>
+  </div>`;
 
-  <div class="card">
-    <h2>风险清单（${(d.findings||[]).length}）</h2>
-    ${(d.findings||[]).length === 0 ? `<div class="empty">本批次未见规则命中；未命中不等于合规，请结合规则覆盖范围判断。</div>` : (d.findings||[]).map(f => {
-      const sevCls = SEV_CLS[f.severity] || "low";
+  const findings = (d.findings||[]).length === 0
+    ? `<div class="card card-pad"><div class="hint">本批次未见规则命中；未命中不等于合规，请结合规则覆盖范围判断。</div></div>`
+    : (d.findings||[]).map(f => {
+      const sev = f.severity || "低";
+      const sevCls = SEV_CLS[sev] || "low";
       const conf = CONF_ALLOW.has(f.confidence) ? f.confidence : "疑似";
       const chain = (f.evidence_chain||[]).map(e => `<li><code>${esc(e.field)}</code>${e.row != null ? `（行 ${esc(e.row)}）` : ""}：原文 ${esc(e.raw)} → ${esc(e.value)}${e.note ? ` · ${esc(e.note)}` : ""}</li>`).join("");
-      return `<div style="margin-bottom:10px;padding-bottom:10px;border-bottom:1px solid var(--line);">
-        <div><span class="sev ${sevCls}">[${esc(f.rule_id)}·${esc(f.severity)}·${esc(conf)}]</span> <b>${esc(f.message)}</b></div>
-        <div style="color:var(--sub);font-size:12.5px;margin-top:2px;">票号 ${esc(f.invoice_no)} · 字段 ${esc(f.field)} · 原文「${esc(f.evidence)}」</div>
-        ${chain ? `<ul class="chain">证据链：${chain}</ul>` : ""}
-        <div style="margin-top:4px;font-size:13px;">建议：${esc(f.suggestion)}</div>
-        ${explainBlock(f)}
+      return `<div class="finding">
+        <div class="bar ${sevCls}"></div>
+        <div class="body">
+          <div class="head"><span class="sev ${sevCls}">${esc(f.rule_id)} · ${esc(sev)} · ${esc(conf)}</span></div>
+          <div class="msg">${esc(f.message)}</div>
+          <div class="meta">票号 <code>${esc(f.invoice_no)}</code> · 字段 <code>${esc(f.field)}</code> · 原文「${esc(f.evidence)}」</div>
+          <div class="sug"><b>建议：</b>${esc(f.suggestion)}</div>
+          ${chain ? `<ul class="chain"><b>证据链：</b>${chain}</ul>` : ""}
+          ${explainBlock(f)}
+        </div>
       </div>`;
-    }).join("")}
-  </div>
+    }).join("");
 
-  <div class="card">
-    <h2>发票明细（${(d.invoices||[]).length}）</h2>
-    <table>
-      <tr><th>票号</th><th>日期</th><th>类型</th><th>金额</th><th>税额</th><th>价税合计</th><th>行数</th><th>状态</th></tr>
-      ${(d.invoices||[]).map(i => {
-        const stCls = i.status === "未见异常" ? "ok" : i.status === "待复核" || i.status === "待复核（字段缺失）" ? "mid" : "high";
-        return `<tr><td>${esc(i.invoice_no)}</td><td>${esc(i.issue_date)}</td><td>${esc(i.invoice_type)}</td>
-          <td>${esc(i.amount)}</td><td>${esc(i.tax)}</td><td>${esc(i.total)}</td>
-          <td>${esc(i.item_count ?? 0)}${i.warning_count ? `<span class="hint">（${i.warning_count} 告警）</span>` : ""}</td>
-          <td class="${stCls}">${esc(i.status)}</td></tr>`;
-      }).join("") || `<tr><td colspan="8" class="empty">无成功解析的发票</td></tr>`}
-    </table>
-    ${(d.failed||[]).length ? `<div class="filelist" style="margin-top:8px;">解析失败：${d.failed.map(f => `<span class="fail">${esc(f.file)}</span>：${esc(f.error)}`).join("；")}</div>` : ""}
-  </div>
+  const invoices = `
+  <details class="adv section" id="invSec">
+    <summary>发票明细（${(d.invoices||[]).length}）</summary>
+    <div class="inner">
+      <table>
+        <tr><th>票号</th><th>日期</th><th>类型</th><th>金额</th><th>税额</th><th>价税合计</th><th>行数</th><th>状态</th></tr>
+        ${(d.invoices||[]).map(i => {
+          const stCls = i.status === "未见异常" ? "ok" : i.status === "待复核" || i.status === "待复核（字段缺失）" ? "mid" : "high";
+          return `<tr><td>${esc(i.invoice_no)}</td><td>${esc(i.issue_date)}</td><td>${esc(i.invoice_type)}</td>
+            <td>${esc(i.amount)}</td><td>${esc(i.tax)}</td><td>${esc(i.total)}</td>
+            <td>${esc(i.item_count ?? 0)}${i.warning_count ? `<span class="hint">（${i.warning_count} 告警）</span>` : ""}</td>
+            <td class="${stCls}">${esc(i.status)}</td></tr>`;
+        }).join("") || `<tr><td colspan="8" class="hint">无成功解析的发票</td></tr>`}
+      </table>
+      ${(d.failed||[]).length ? `<div class="hint" style="margin-top:8px;">解析失败：${d.failed.map(f => `<span class="fail">${esc(f.file)}</span>：${esc(f.error)}`).join("；")}</div>` : ""}
+    </div>
+  </details>`;
 
-  <div class="card">
-    <h2>规则清单 <span class="hint">${stateNote}</span></h2>
-    <table>
-      <tr><th>规则</th><th>名称</th><th>状态</th></tr>
-      ${(rules||[]).map(r => {
-        const st = r.state || "未执行";
-        const cls = st === "命中" ? "pill hit" : st === "未命中" ? "pill nohit" : "pill skip";
-        return `<tr><td><b>${esc(r.rule_id)}</b></td><td>${esc(r.name)}</td><td><span class="${cls}">${esc(st)}</span></td></tr>`;
-      }).join("")}
-    </table>
-  </div>
+  const rulesSec = `
+  <details class="adv section">
+    <summary>规则清单（${stateNote}）</summary>
+    <div class="inner">
+      <table>
+        <tr><th>规则</th><th>名称</th><th>状态</th></tr>
+        ${(rules||[]).map(r => {
+          const st = r.state || "未执行";
+          const cls = st === "命中" ? "pill hit" : st === "未命中" ? "pill nohit" : "pill skip";
+          return `<tr><td><b>${esc(r.rule_id)}</b></td><td>${esc(r.name)}</td><td><span class="${cls}">${esc(st)}</span></td></tr>`;
+        }).join("")}
+      </table>
+    </div>
+  </details>`;
 
+  const html = `
+  <div class="card">${kpis}</div>
+  <div class="section">
+    <div class="section-head"><h2>风险清单 <span class="sub">${(d.findings||[]).length} 条命中 · 按严重度排序</span></h2></div>
+    ${findings}
+  </div>
+  ${invoices}
+  ${rulesSec}
   <div class="meta">
     <div>规则包：${esc(d.ruleset?.version || d.ruleset_version)}（生效 ${esc(d.ruleset?.effective_date || "")}）· 批次 ${esc(d.batch_id)} · 生成 ${esc(d.generated_at)}</div>
     <div>范围说明：${esc(d.ruleset?.scope_note || d.scope_note || "")}</div>
@@ -271,9 +411,13 @@ function setMode(live) {
   document.body.classList.toggle("live", live);
   $("modeLabel").textContent = live ? "真实模式（连后端）" : "演示模式（内置样例）";
   $("modeLabel").className = "badge " + (live ? "live" : "demo");
+  $("btnDemo").classList.toggle("active", !live);
+  $("btnLive").classList.toggle("active", live);
   if (live) {
     $("backendUrl").value = localStorage.getItem("ipc_backend") || "http://localhost:8000";
     $("apiKey").value = localStorage.getItem("ipc_key") || "";
+    $("empty").style.display = "";
+    $("result").innerHTML = "";
   }
 }
 
@@ -284,18 +428,18 @@ async function healthCheck() {
   localStorage.setItem("ipc_backend", url);
   try {
     const r = await fetch(url + "/healthz", {method:"GET"});
-    if (r.ok) { const j = await r.json(); $("connHint").textContent = "连接成功 · 服务正常（ruleset " + (j.ruleset || "?") + "）"; return true; }
-    $("connHint").textContent = "连接失败：HTTP " + r.status + "（后端未启动？地址不对？）"; return false;
-  } catch (e) { $("connHint").textContent = "连接失败：" + e.message + "（注意：GitHub Pages 是 https，后端需 https 或 localhost）"; return false; }
+    if (r.ok) { const j = await r.json(); $("connHint").textContent = "连接成功 · 服务正常（ruleset " + (j.ruleset || "?") + "）"; $("connHint").className = "hint okc"; return true; }
+    $("connHint").textContent = "连接失败：HTTP " + r.status + "（后端未启动？地址不对？）"; $("connHint").className = "hint err"; return false;
+  } catch (e) { $("connHint").textContent = "连接失败：" + e.message + "（注意：GitHub Pages 是 https，后端需 https 或 localhost）"; $("connHint").className = "hint err"; return false; }
 }
 
 async function runReview() {
   const url = $("backendUrl").value.trim().replace(/\/+$/, "");
   const key = $("apiKey").value.trim();
   const files = $("fileInput").files;
-  if (!url) { $("connHint").textContent = "请填写后端地址"; return; }
-  if (!key) { $("connHint").textContent = "请填写 API Key（后端环境变量 INVOICE_API_KEY 的值）"; return; }
-  if (!files.length) { $("connHint").textContent = "请选择要上传的发票文件（XML/OFD）"; return; }
+  if (!url) { $("connHint").textContent = "请填写后端地址"; $("connHint").className = "hint err"; return; }
+  if (!key) { $("connHint").textContent = "请填写 API Key（后端环境变量 INVOICE_API_KEY 的值）"; $("connHint").className = "hint err"; return; }
+  if (!files.length) { $("runHint").textContent = "请选择要上传的发票文件（XML/OFD）"; $("runHint").className = "hint err"; return; }
   localStorage.setItem("ipc_backend", url); localStorage.setItem("ipc_key", key);
   const fd = new FormData();
   for (const f of files) fd.append("files", f, f.name);
@@ -303,7 +447,7 @@ async function runReview() {
   try {
     const r = await fetch(url + "/review", {method:"POST", headers:{"X-API-Key": key}, body: fd});
     const j = await r.json();
-    if (!r.ok) { $("result").innerHTML = `<div class="card high">后端拒绝：${esc(j.detail || ("HTTP " + r.status))}</div>`; return; }
+    if (!r.ok) { $("result").innerHTML = `<div class="card card-pad high">后端拒绝：${esc(j.detail || ("HTTP " + r.status))}</div>`; return; }
     render(j);
     // F：请求通俗解释（独立 explain 端点，失败不影响报告展示）
     if ((j.findings||[]).length) {
@@ -319,22 +463,45 @@ async function runReview() {
       } catch (e2) { /* 解释获取失败：保留已渲染的报告 */ }
     }
   } catch (e) {
-    $("result").innerHTML = `<div class="card high">请求失败：${esc(e.message)}（检查后端地址与网络；跨域需后端 CORS 放行）</div>`;
+    $("result").innerHTML = `<div class="card card-pad high">请求失败：${esc(e.message)}（检查后端地址与网络；跨域需后端 CORS 放行）</div>`;
   } finally {
     $("btnReview").disabled = false; $("btnReview").textContent = "运行预审";
   }
 }
 
+/* ---------- 上传交互 ---------- */
+const dz = $("dropZone");
+dz.addEventListener("click", () => $("fileInput").click());
+dz.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); $("fileInput").click(); } });
+dz.addEventListener("dragover", e => { e.preventDefault(); dz.classList.add("over"); });
+dz.addEventListener("dragleave", () => dz.classList.remove("over"));
+dz.addEventListener("drop", e => {
+  e.preventDefault(); dz.classList.remove("over");
+  if (e.dataTransfer.files.length) { $("fileInput").files = e.dataTransfer.files; syncFiles(); }
+});
+document.addEventListener("paste", e => {
+  const items = e.clipboardData?.items || [];
+  const dt = new DataTransfer();
+  let got = false;
+  for (const it of items) if (it.kind === "file") { dt.items.add(it.getAsFile()); got = true; }
+  if (got) { $("fileInput").files = dt.files; syncFiles(); }
+});
+function syncFiles() {
+  const fs = $("fileInput").files;
+  $("fileList").innerHTML = fs.length
+    ? Array.from(fs).map(f => `<div class="f"><span>📎</span><span class="nm">${esc(f.name)}</span><span>${(f.size/1024).toFixed(0)}KB</span></div>`).join("")
+    : "";
+  $("runHint").textContent = fs.length ? `已选 ${fs.length} 个文件，点击「运行预审」开始。` : "运行后右侧显示合规预审报告。";
+  $("runHint").className = "hint";
+}
+$("fileInput").onchange = syncFiles;
+
 /* ---------- 绑定 ---------- */
 $("btnDemo").onclick = () => { setMode(false); render(demoReport()); };
-$("btnLive").onclick = () => { setMode(true); };
+$("btnLive").onclick = () => setMode(true);
 $("btnRun").onclick = () => render(demoReport());
 $("btnTest").onclick = healthCheck;
 $("btnReview").onclick = runReview;
-$("fileInput").onchange = () => {
-  const fs = $("fileInput").files;
-  $("fileList").textContent = fs.length ? `已选 ${fs.length} 个：` + Array.from(fs).map(f => f.name).join("、") : "";
-};
 
 /* 初始：演示模式展示内置样例（一打开就能看到产品样子） */
 setMode(false);
