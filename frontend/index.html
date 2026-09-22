@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>发票合规预审 · 一页风险报告</title>
+<style>
+  :root { --line:#e3e8ef; --ink:#1f2a37; --sub:#4b5563; --bg:#f5f7fa; --card:#fff;
+          --red:#dc2626; --orange:#b45309; --gray:#4b5563; --blue:#2563eb; }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body { font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif; background:var(--bg); color:var(--ink); }
+  .wrap { max-width:960px; margin:0 auto; padding:24px 16px 48px; }
+  header { display:flex; align-items:baseline; gap:12px; flex-wrap:wrap; }
+  header h1 { font-size:22px; }
+  .ver { color:var(--sub); font-size:13px; }
+  .disclaimer { margin-top:8px; font-size:12px; color:var(--sub); background:#eef2f7; border-left:3px solid var(--blue); padding:8px 12px; border-radius:4px; }
+
+  .upload { margin-top:16px; background:var(--card); border:1px dashed #c3cdda; border-radius:8px; padding:20px; text-align:center; }
+  .sr-only { position:absolute; width:1px; height:1px; clip:rect(0 0 0 0); overflow:hidden; }
+  .upload label { display:inline-block; padding:10px 18px; border:1px solid var(--blue); color:var(--blue); border-radius:6px; cursor:pointer; font-size:14px; }
+  .upload label:focus-within, .upload label:focus-visible { outline:2px solid var(--blue); outline-offset:2px; }
+  .filelist { margin-top:10px; font-size:13px; color:var(--sub); }
+  .btn { margin-top:12px; padding:10px 24px; background:var(--blue); color:#fff; border:none; border-radius:6px; font-size:14px; cursor:pointer; }
+  .btn:disabled { opacity:.5; cursor:not-allowed; }
+
+  .summary { display:grid; grid-template-columns:repeat(auto-fit,minmax(110px,1fr)); gap:12px; margin-top:20px; }
+  .sum-card { background:var(--card); border:1px solid var(--line); border-radius:8px; padding:14px; }
+  .sum-card .num { font-size:24px; font-weight:600; }
+  .sum-card .lab { font-size:12px; color:var(--sub); margin-top:4px; }
+  .sum-card.orange .num { color:var(--orange); } .sum-card.red .num { color:var(--red); }
+
+  section { margin-top:24px; }
+  section h2 { font-size:16px; margin-bottom:10px; }
+  .risk { background:var(--card); border:1px solid var(--line); border-left:4px solid var(--gray); border-radius:6px; padding:12px 14px; margin-bottom:10px; }
+  .risk.high { border-left-color:var(--red); } .risk.mid { border-left-color:var(--orange); } .risk.low { border-left-color:#d1d5db; }
+  .risk .top { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+  .tag { font-size:11px; padding:2px 8px; border-radius:10px; font-weight:500; }
+  .tag.高 { background:#fee2e2; color:#991b1b; } .tag.中 { background:#fef3c7; color:#92400e; } .tag.低 { background:#e5e7eb; color:#374151; }
+  .tag.确定 { background:#e0e7ff; color:#4338ca; } .tag.疑似 { background:#e5e7eb; color:var(--sub); }
+  .risk .msg { margin-top:6px; font-size:14px; }
+  .risk .ev { margin-top:4px; font-size:12px; color:var(--sub); word-break:break-all; }
+  .risk .sug { margin-top:4px; font-size:12px; color:var(--orange); }
+
+  .table-wrap { overflow-x:auto; }
+  table { width:100%; border-collapse:collapse; background:var(--card); font-size:13px; }
+  caption { text-align:left; font-size:12px; color:var(--sub); padding:4px 0 8px; }
+  th, td { border:1px solid var(--line); padding:8px 10px; text-align:left; }
+  th { background:#f9fafb; font-weight:600; }
+  .st { font-size:11px; padding:2px 8px; border-radius:10px; white-space:nowrap; }
+  .st.ok { background:#e5e7eb; color:#374151; } .st.rev { background:#fef3c7; color:#92400e; }
+  .st.bad { background:#fee2e2; color:#991b1b; } .st.inc { background:#e5e7eb; color:var(--sub); }
+
+  .failed { background:#fff5f5; border:1px solid #fecaca; border-radius:6px; padding:10px 14px; font-size:13px; color:#991b1b; margin-top:10px; }
+  .alert-block { background:#fef2f2; border:1px solid #fecaca; border-radius:8px; padding:16px; font-size:14px; color:#7f1d1d; margin-top:16px; }
+  .meta { margin-top:24px; font-size:12px; color:var(--sub); line-height:1.8; }
+  .loading { color:var(--sub); margin-top:16px; font-size:14px; }
+  .empty { color:var(--sub); font-size:14px; margin-top:12px; }
+  #result:focus { outline:none; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>发票合规预审</h1>
+    <span class="ver" id="ver">应用 v0.1 · 规则 r{{RULESET_VERSION}}</span>
+  </header>
+  <div class="disclaimer">{{DISCLAIMER}}</div>
+
+  <div class="upload">
+    <label for="files">选择数电票 XML 文件（可多选）</label>
+    <input type="file" id="files" class="sr-only" multiple accept=".xml">
+    <div class="filelist" id="filelist"></div>
+    <button class="btn" id="run">开始预审</button>
+  </div>
+
+  <div id="result" role="status" aria-live="polite" tabindex="-1"></div>
+
+  <div class="meta" id="meta"></div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const filesInput = $("files"), filelist = $("filelist"), runBtn = $("run"), result = $("result"), meta = $("meta");
+
+// 完整 HTML 转义（含引号）：文本与属性位都安全
+const esc = s => String(s ?? "").replace(/[&<>"']/g,
+  c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+
+// 枚举白名单映射（不直接把后端值拼进 class）
+const SEV_CLS = {"高":"high", "中":"mid", "低":"low"};
+const CONF_ALLOW = new Set(["确定", "疑似"]);
+
+filesInput.addEventListener("change", () => {
+  const names = [...filesInput.files].map(f => f.name);
+  filelist.textContent = names.length ? `已选择 ${names.length} 个文件：${names.join("、")}` : "";
+});
+
+runBtn.addEventListener("click", async () => {
+  const files = filesInput.files;
+  if (!files.length) { result.innerHTML = '<div class="empty">请先选择 XML 文件</div>'; return; }
+  runBtn.disabled = true; runBtn.textContent = "预审中…";
+  const fd = new FormData();
+  [...files].forEach(f => fd.append("files", f));
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 60000);
+  try {
+    const resp = await fetch("/review", { method: "POST", body: fd, signal: ctrl.signal });
+    const text = await resp.text();
+    let data;
+    try { data = JSON.parse(text); } catch { throw new Error("服务返回异常（非 JSON），请稍后重试"); }
+    if (!resp.ok) throw new Error(data.detail || "请求失败");
+    render(data);
+  } catch (e) {
+    result.innerHTML = `<div class="failed">请求失败：${esc(e.message)}</div>`;
+  } finally {
+    clearTimeout(timer);
+    runBtn.disabled = false; runBtn.textContent = "开始预审";
+  }
+});
+
+function render(d) {
+  try {
+    if (!d || !d.summary) throw new Error("报告数据缺失");
+    const s = d.summary;
+    // 0 票短路：绝不显示"未发现风险点/未见异常"（红线：不构成任何合规结论）
+    if (s.total_count === 0) {
+      result.innerHTML = `<div class="alert-block">
+        <strong>本批次无可分析发票</strong>：成功解析 0 张，解析失败 ${esc(s.failed_count)} 个文件，请查看下方失败列表。
+        本结果不构成任何合规结论。
+      </div>`;
+      if (d.failed && d.failed.length) {
+        result.innerHTML += `<section><h2>解析失败（${d.failed.length} 个文件）</h2>${d.failed.map(f => `<div class="failed">${esc(f.file)}：${esc(f.error)}</div>`).join("")}</section>`;
+      }
+      renderMeta(d);
+      result.focus();
+      return;
+    }
+    const find = d.findings || [], invs = d.invoices || [], failed = d.failed || [];
+    result.innerHTML = `
+      <div class="summary">
+        <div class="sum-card"><div class="num">${esc(s.total_count)}</div><div class="lab">成功解析发票（共 ${esc(s.file_count)} 个文件）</div></div>
+        <div class="sum-card"><div class="num">${esc(s.total_amount)}</div><div class="lab">价税合计（元）*</div></div>
+        <div class="sum-card"><div class="num">${esc(s.no_finding_count)}</div><div class="lab">未见规则命中</div></div>
+        <div class="sum-card orange"><div class="num">${esc(s.review_count)}</div><div class="lab">待复核</div></div>
+        <div class="sum-card red"><div class="num">${esc(s.failed_count)}</div><div class="lab">解析失败</div></div>
+      </div>
+
+      <section><h2>风险清单（${find.length} 项，按严重度排序）</h2>
+        ${find.length ? find.map(f => {
+          const sevCls = SEV_CLS[f.severity] || "low";
+          const conf = CONF_ALLOW.has(f.confidence) ? f.confidence : "疑似";
+          return `
+          <div class="risk ${sevCls}">
+            <div class="top">
+              <span class="tag ${esc(f.severity)}">${esc(f.severity)}严重</span>
+              <span class="tag ${esc(conf)}">${esc(conf)}</span>
+              <span style="font-size:12px;color:var(--sub)">${esc(f.rule_id)} · ${esc(f.invoice_no)} · ${esc(f.field)}</span>
+            </div>
+            <div class="msg">${esc(f.message)}</div>
+            <div class="ev">证据：${esc(f.evidence)}</div>
+            ${f.suggestion ? `<div class="sug">建议：${esc(f.suggestion)}</div>` : ""}
+          </div>`;
+        }).join("") : '<div class="empty">未发现风险点（不代表合规，详见免责）。</div>'}
+      </section>
+
+      <section><h2>发票明细（${invs.length} 张）</h2>
+        <div class="table-wrap"><table>
+          <caption>状态说明：待复核 = 命中规则或字段缺失需人工核对；未见异常 = 规则未命中且无解析告警。</caption>
+          <thead><tr><th scope="col">票号</th><th scope="col">票种</th><th scope="col">开票日期</th><th scope="col">价税合计</th><th scope="col">销售方</th><th scope="col">状态</th></tr></thead>
+          <tbody>${invs.map(i => {
+            const stCls = i.status === "未见异常" ? "ok" : i.status === "待复核" ? "rev" : i.status === "待复核（字段缺失）" ? "rev" : i.status === "数据不完整" ? "inc" : "bad";
+            const stTip = i.warning_count ? `（${i.warning_count} 项解析告警）` : "";
+            return `<tr>
+              <td>${esc(i.invoice_no)}</td><td>${esc(i.invoice_type)}</td><td>${esc(i.issue_date)}</td>
+              <td>${esc(i.total)}</td><td>${esc(i.seller_name)}</td>
+              <td><span class="st ${stCls}" title="${esc(stTip)}">${esc(i.status)}${stTip ? `<sup>${i.warning_count}</sup>` : ""}</span></td>
+            </tr>`;
+          }).join("")}</tbody>
+        </table></div>
+      </section>
+
+      ${failed.length ? `<section><h2>解析失败（${failed.length} 个文件）</h2>${failed.map(f => `<div class="failed">${esc(f.file)}：${esc(f.error)}</div>`).join("")}</section>` : ""}
+    `;
+    renderMeta(d);
+    result.focus();
+  } catch (e) {
+    result.innerHTML = `<div class="failed">报告渲染失败，请刷新重试。${esc(e.message)}</div>`;
+  }
+}
+
+function renderMeta(d) {
+  const rules = (d.rules || []).map(r => `${esc(r.rule_id)} ${esc(r.name)}`).join("、");
+  meta.innerHTML = `批次 ${esc(d.batch_id)} · 生成 ${esc(d.generated_at)}<br>
+    规则版本：${esc(d.ruleset_version)} · 启用规则：${rules || "—"}<br>
+    ${esc(d.scope_note)}<br>${esc(d.disclaimer)}`;
+}
+</script>
+</body>
+</html>
