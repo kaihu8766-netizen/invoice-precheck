@@ -1,6 +1,7 @@
 """API 集成测试：上传 XML → /review → 一页风险报告（P1 完整闭环）。
 
 场景：正常票 / 重复票（R1）/ 连号票（R3）/ 差旅超标（R4）/ PDF 拒绝（failed 列表）。
+鉴权（D 阶段）：业务端点需 X-API-Key；公开路径（/、/healthz）免鉴权。
 """
 import sys
 import unittest
@@ -10,10 +11,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from fastapi.testclient import TestClient
 
-from app.main import MAX_FILE_BYTES, app
+from app.main import DEV_API_KEY, MAX_FILE_BYTES, app
 from app.report import DISCLAIMER
 
-client = TestClient(app)
+# 业务调用默认携带开发 key；匿名客户端用于鉴权用例
+client = TestClient(app, headers={"X-API-Key": DEV_API_KEY})
+anon = TestClient(app)
 
 NS = "urn:cn:gov:etax:2021:invoice"
 
@@ -41,6 +44,29 @@ def files(*items):
 
 
 class TestAPI(unittest.TestCase):
+    def test_index_and_healthz_public(self):
+        """公开路径免鉴权：首页 + 探活。"""
+        r = anon.get("/")
+        self.assertEqual(r.status_code, 200)
+        self.assertIn("发票合规预审", r.text)
+        self.assertIn(DISCLAIMER, r.text)
+        r = anon.get("/healthz")
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.json()["status"], "ok")
+
+    def test_business_endpoints_require_key(self):
+        """无 key / 错误 key → 401（业务端点全部上锁）。"""
+        for path, kwargs in (
+            ("/parse", dict(files=[("file", ("a.xml", xml("26003300000000000001", "20260801", "100.00", "13.00", "113.00"), "application/xml"))])),
+            ("/review", dict(files=files(("a.xml", xml("26003300000000000001", "20260801", "100.00", "13.00", "113.00"))))),
+        ):
+            r = anon.post(path, **kwargs)
+            self.assertEqual(r.status_code, 401, path)
+            self.assertIn("API Key", r.json()["detail"])
+            r = TestClient(app, headers={"X-API-Key": "wrong-key"}).post(path, **kwargs)
+            self.assertEqual(r.status_code, 401, f"{path} with wrong key")
+            self.assertIn("API Key", r.json()["detail"])
+
     def test_index_serves_frontend(self):
         r = client.get("/")
         self.assertEqual(r.status_code, 200)

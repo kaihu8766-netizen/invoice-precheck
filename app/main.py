@@ -1,9 +1,16 @@
 """FastAPI 入口（P1：上传数电票 XML → 一页风险报告）。
 
 接口（DeepSeek 评审：/parse 与 /review 分离，可独立测试替换）：
-- GET  /        单页前端（免责文案由后端注入，单一来源）
-- POST /parse   单文件解析 → NormalizedInvoice（调试/独立测试用）
-- POST /review  整批解析+规则 → 一页风险报告（主流程）
+- GET  /         单页前端（免责文案由后端注入，单一来源；公开）
+- GET  /healthz  存活探活（公开，无业务数据）
+- POST /parse    单文件解析 → NormalizedInvoice（需 X-API-Key）
+- POST /review   整批解析+规则 → 一页风险报告（需 X-API-Key）
+
+鉴权（D 阶段公网部署前置，方案 A：Cloudflare Tunnel 本地穿透）：
+- API Key 经环境变量 INVOICE_API_KEY 注入；未设置时使用开发默认 key（启动打警告日志，
+  仅限本地开发，公网部署必须设置强 key——部署脚本负责生成）
+- 请求头 X-API-Key 比对（hmac.compare_digest 防时序攻击）；缺失/错误 → 401
+- CORS 放行所有源 + X-API-Key 请求头（演示页跨域调用；生产部署应收紧白名单，见部署文档）
 
 安全边界（二轮审查 P0）：
 - 文件数/单文件/总大小上限（防内存 DoS）；类型前置校验（parse_document 内 detect_type：
@@ -14,12 +21,15 @@
 """
 from __future__ import annotations
 
+import hmac
 import logging
+import os
 import time
 import uuid
 from pathlib import Path
 
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import FastAPI, File, HTTPException, Request, UploadFile
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 
 from .parser import parse_document
@@ -32,9 +42,27 @@ MAX_FILES = 200
 MAX_FILE_BYTES = 10 * 1024 * 1024   # 10MB（与 parser.MAX_FILE_SIZE 一致）
 MAX_TOTAL_BYTES = 50 * 1024 * 1024  # 50MB
 
+# 鉴权配置（D 阶段）：生产 key 由部署方经环境变量注入；本地未设置时用开发默认 key
+DEV_API_KEY = "dev-invoice-precheck-key"
+API_KEY = os.environ.get("INVOICE_API_KEY") or DEV_API_KEY
+if not os.environ.get("INVOICE_API_KEY"):
+    logger.warning(
+        "INVOICE_API_KEY 未设置，使用开发默认 key（仅限本地开发；公网部署必须设置强 key）"
+    )
+
 app = FastAPI(title="发票合规预审", version="0.1.0")
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # 演示期放行；生产收紧白名单（见 docs/DEPLOY.md）
+    allow_methods=["*"],
+    allow_headers=["X-API-Key", "Content-Type"],
+)
+
 FRONTEND = Path(__file__).resolve().parent.parent / "frontend" / "index.html"
+
+# 无需鉴权的公开路径（仅静态页面与探活，无业务数据）
+PUBLIC_PATHS = {"/", "/healthz"}
 
 
 @app.exception_handler(Exception)
@@ -53,6 +81,17 @@ async def security_headers(request, call_next):
     return resp
 
 
+@app.middleware("http")
+async def api_key_auth(request, call_next):
+    """API Key 鉴权：公开路径放行；其余校验 X-API-Key（时序安全比对）。"""
+    if request.url.path in PUBLIC_PATHS:
+        return await call_next(request)
+    key = request.headers.get("X-API-Key", "")
+    if not hmac.compare_digest(key, API_KEY):
+        return JSONResponse(status_code=401, content={"detail": "API Key 缺失或错误"})
+    return await call_next(request)
+
+
 def _safe_name(name: str | None) -> str:
     """文件名消毒：去路径、截断、空值兜底。"""
     if not name:
@@ -65,6 +104,12 @@ def _public_error(e: Exception) -> str:
     if isinstance(e, ValueError):
         return str(e)
     return "文件无法解析（格式或编码不支持）"
+
+
+@app.get("/healthz")
+async def healthz():
+    """存活探活（公开；无业务数据）。"""
+    return {"status": "ok", "ruleset": RULESET_VERSION}
 
 
 @app.get("/", response_class=HTMLResponse)
