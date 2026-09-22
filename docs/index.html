@@ -99,22 +99,32 @@
   .kpi.main{ background:var(--brand-weak); border-color:#d6e2ff; }
   .kpi.main .l{ color:#3d5bb3; }
 
-  /* 风险清单 */
+  /* 风险清单：密集行式列表（财务批量复核场景，DeepSeek 评审 P0） */
   .section{ margin-top:14px; }
-  .section-head{ display:flex; align-items:baseline; justify-content:space-between; margin-bottom:8px; }
+  .section-head{ display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; flex-wrap:wrap; gap:8px; }
   .section-head h2{ font-size:15px; font-weight:700; }
   .section-head .sub{ font-size:12px; color:var(--sub); }
-  .finding{ display:flex; border:1px solid var(--line); border-radius:var(--r-lg); background:#fff; box-shadow:var(--shadow); overflow:hidden; margin-bottom:10px; }
-  .finding .bar{ width:4px; flex-shrink:0; }
-  .bar.high{ background:var(--high); } .bar.mid{ background:var(--mid); } .bar.low{ background:var(--sub); }
-  .finding .body{ flex:1; padding:12px 14px; min-width:0; }
-  .finding .head{ display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
-  .sev{ font-size:11px; font-weight:800; padding:2px 8px; border-radius:10px; letter-spacing:.2px; }
+  .tools{ display:flex; gap:6px; }
+  .tools .btn-ghost{ padding:4px 10px; font-size:12px; }
+  .finding{ border:1px solid var(--line); border-radius:var(--r-md); background:#fff; margin-bottom:5px; }
+  .finding summary{ list-style:none; display:flex; align-items:center; gap:10px; padding:7px 10px; cursor:pointer; border-radius:var(--r-md); }
+  .finding summary::-webkit-details-marker{ display:none; }
+  .finding summary:hover{ background:#fafbfc; }
+  .finding[open] summary{ background:#fafbfc; border-bottom:1px solid var(--line-soft); }
+  .finding .bar{ width:3px; align-self:stretch; border-radius:2px; flex-shrink:0; }
+  .bar.high{ background:var(--high); } .bar.mid{ background:var(--mid); } .bar.low{ background:var(--weak); }
+  .finding .sev{ font-size:11px; font-weight:800; padding:1px 8px; border-radius:10px; letter-spacing:.2px; white-space:nowrap; }
   .sev.high{ background:var(--high-bg); color:var(--high); } .sev.mid{ background:var(--mid-bg); color:var(--mid); } .sev.low{ background:var(--line-soft); color:var(--sub); }
-  .finding .msg{ font-size:13.5px; font-weight:600; margin-top:6px; line-height:1.5; }
-  .finding .meta{ font-size:12px; color:var(--sub); margin-top:4px; }
+  .finding .rname{ font-size:13px; font-weight:600; white-space:nowrap; }
+  .finding .ticket{ font-size:12px; color:var(--sub); font-family:ui-monospace,Menlo,Consolas,monospace; }
+  .finding .amt{ font-size:12.5px; font-weight:600; margin-left:auto; white-space:nowrap; }
+  .finding .caret{ color:var(--weak); font-size:11px; flex-shrink:0; }
+  .finding[open] .caret{ transform:rotate(90deg); }
+  .finding .body{ padding:10px 12px 12px; }
+  .finding .msg{ font-size:13.5px; font-weight:600; line-height:1.5; }
+  .finding .meta{ font-size:12px; color:var(--sub); margin-top:6px; }
   .finding .meta code{ background:var(--line-soft); border-radius:4px; padding:0 5px; font-family:ui-monospace,Menlo,Consolas,monospace; font-size:11.5px; }
-  .finding .sug{ font-size:13px; margin-top:8px; color:var(--ink); }
+  .finding .sug{ font-size:13px; margin-top:8px; }
   .finding .sug b{ color:var(--sub); font-weight:600; font-size:12px; }
   .chain{ font-size:12.5px; color:var(--sub); margin-top:8px; }
   .chain li{ margin:2px 0 2px 18px; }
@@ -146,6 +156,17 @@
   .live-only{ display:none; }
   body.live .live-only{ display:block; }
   body.live .demo-only{ display:none; }
+
+  /* 打印：只保留报告 */
+  @media print{
+    .topbar, .input-panel, .tools, details.adv summary{ display:none !important; }
+    .app{ max-width:100%; padding:0; }
+    body{ background:#fff; }
+    .finding{ break-inside:avoid; }
+    .finding summary{ cursor:default; }
+    .finding .caret{ display:none; }
+    .finding .body{ display:block !important; }
+  }
 </style>
 </head>
 <body class="demo">
@@ -181,7 +202,7 @@
         <input id="fileInput" type="file" multiple accept=".xml,.ofd,.zip" style="display:none">
         <div class="filelist" id="fileList"></div>
         <button id="btnReview" class="btn btn-primary" style="margin-top:12px;">运行预审</button>
-        <div class="hint" id="runHint">运行后右侧显示合规预审报告。</div>
+        <div class="hint" id="runHint">运行后右侧显示合规预审报告。文件仅发往你配置的后端，不发送第三方。</div>
       </section>
 
       <section class="card card-pad live-only">
@@ -237,6 +258,7 @@ const RULES_META = [
   {rule_id:"R10", name:"明细行勾稽（行级一致性）", severity:"高"},
   {rule_id:"R11", name:"红冲关联（占位）", severity:"中"},
 ];
+const ruleName = id => (RULES_META.find(r => r.rule_id === id) || {}).name || id;
 
 /* ---------- 内置样例报告（ruleset 0.3.0 结构：证据链 + 行级明细 + R9-R11） ---------- */
 function demoReport() {
@@ -318,6 +340,22 @@ function explainBlock(f) {
     <b>该谁处理：</b>${esc(e.who)}</div>`;
 }
 
+/* 导出 CSV（DeepSeek 评审 P0：财务需留痕/导出） */
+function exportCSV(findings) {
+  const rows = [["规则", "规则名", "严重度", "置信度", "票号", "字段", "问题", "建议"]];
+  (findings || []).forEach(f => rows.push([
+    f.rule_id, ruleName(f.rule_id), f.severity, f.confidence || "疑似", f.invoice_no,
+    f.field, f.message, f.suggestion
+  ]));
+  const csv = "\uFEFF" + rows.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
+  const blob = new Blob([csv], {type: "text/csv;charset=utf-8"});
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "invoice-precheck-findings-" + new Date().toISOString().slice(0,10) + ".csv";
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
 /* ---------- 渲染 ---------- */
 function render(d) {
   const el = $("result");
@@ -330,7 +368,7 @@ function render(d) {
   const kpis = `
   <div class="kpis">
     <div class="kpi main"><div class="n">${esc(s.file_count ?? 0)}</div><div class="l">文件数</div></div>
-    <div class="kpi main"><div class="n">¥${esc(s.total_amount ?? "—")}</div><div class="l">金额合计</div></div>
+    <div class="kpi main"><div class="n">¥${esc(s.total_amount ?? "—")}</div><div class="l">金额合计（价税）</div></div>
     <div class="kpi main"><div class="n mid">${esc(s.review_count ?? 0)}</div><div class="l">待复核</div></div>
     <div class="kpi"><div class="n">${esc(s.total_count ?? 0)}</div><div class="l">成功解析</div></div>
     <div class="kpi"><div class="n ok">${esc(s.no_finding_count ?? 0)}</div><div class="l">未见异常</div></div>
@@ -338,23 +376,30 @@ function render(d) {
   </div>`;
 
   const findings = (d.findings||[]).length === 0
-    ? `<div class="card card-pad"><div class="hint">本批次未见规则命中；未命中不等于合规，请结合规则覆盖范围判断。</div></div>`
+    ? `<div class="card card-pad"><div class="hint">本批次未见规则命中，报告完成 ✓<br/>未命中不等于合规，请结合规则覆盖范围判断。</div></div>`
     : (d.findings||[]).map(f => {
       const sev = f.severity || "低";
       const sevCls = SEV_CLS[sev] || "low";
       const conf = CONF_ALLOW.has(f.confidence) ? f.confidence : "疑似";
       const chain = (f.evidence_chain||[]).map(e => `<li><code>${esc(e.field)}</code>${e.row != null ? `（行 ${esc(e.row)}）` : ""}：原文 ${esc(e.raw)} → ${esc(e.value)}${e.note ? ` · ${esc(e.note)}` : ""}</li>`).join("");
-      return `<div class="finding">
-        <div class="bar ${sevCls}"></div>
+      const amt = f.evidence_amt != null ? `¥${esc(f.evidence_amt)}` : "";
+      return `<details class="finding">
+        <summary>
+          <span class="bar ${sevCls}"></span>
+          <span class="sev ${sevCls}">${sev === "高" ? "▲" : sev === "中" ? "●" : "·"} ${esc(f.rule_id)} ${esc(sev)}</span>
+          <span class="rname">${esc(ruleName(f.rule_id))}</span>
+          <span class="ticket">${esc(f.invoice_no)}</span>
+          ${amt ? `<span class="amt">${amt}</span>` : ""}
+          <span class="caret">▸</span>
+        </summary>
         <div class="body">
-          <div class="head"><span class="sev ${sevCls}">${esc(f.rule_id)} · ${esc(sev)} · ${esc(conf)}</span></div>
           <div class="msg">${esc(f.message)}</div>
-          <div class="meta">票号 <code>${esc(f.invoice_no)}</code> · 字段 <code>${esc(f.field)}</code> · 原文「${esc(f.evidence)}」</div>
-          <div class="sug"><b>建议：</b>${esc(f.suggestion)}</div>
+          <div class="meta">字段 <code>${esc(f.field)}</code> · 原文「${esc(f.evidence)}」 · 置信度 ${esc(conf)}</div>
           ${chain ? `<ul class="chain"><b>证据链：</b>${chain}</ul>` : ""}
+          <div class="sug"><b>建议：</b>${esc(f.suggestion)}</div>
           ${explainBlock(f)}
         </div>
-      </div>`;
+      </details>`;
     }).join("");
 
   const invoices = `
@@ -393,7 +438,13 @@ function render(d) {
   const html = `
   <div class="card">${kpis}</div>
   <div class="section">
-    <div class="section-head"><h2>风险清单 <span class="sub">${(d.findings||[]).length} 条命中 · 按严重度排序</span></h2></div>
+    <div class="section-head">
+      <h2>风险清单 <span class="sub">${(d.findings||[]).length} 条命中 · 按严重度排序</span></h2>
+      <div class="tools">
+        <button class="btn-ghost" onclick="exportCSV(${JSON.stringify(d.findings||[]).replace(/"/g,"&quot;")})">导出 CSV</button>
+        <button class="btn-ghost" onclick="window.print()">打印</button>
+      </div>
+    </div>
     ${findings}
   </div>
   ${invoices}
