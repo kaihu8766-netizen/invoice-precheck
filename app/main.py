@@ -83,8 +83,12 @@ async def security_headers(request, call_next):
 
 @app.middleware("http")
 async def api_key_auth(request, call_next):
-    """API Key 鉴权：公开路径放行；其余校验 X-API-Key（时序安全比对）。"""
-    if request.url.path in PUBLIC_PATHS:
+    """API Key 鉴权：公开路径与 CORS 预检（OPTIONS）放行；其余校验 X-API-Key（时序安全比对）。
+
+    OPTIONS 预检由浏览器发起（跨域自定义头触发），不携带业务语义与自定义头——
+    放行交由 CORS middleware 处理，否则跨域调用会 Failed to fetch（实测发现）。
+    """
+    if request.method == "OPTIONS" or request.url.path in PUBLIC_PATHS:
         return await call_next(request)
     key = request.headers.get("X-API-Key", "")
     if not hmac.compare_digest(key, API_KEY):
