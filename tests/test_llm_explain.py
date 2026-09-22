@@ -119,7 +119,7 @@ class TestValidation(unittest.TestCase):
         self.assertEqual(exps[0]["source"], "template")
 
     def test_verdict_wording_falls_back(self):
-        """LLM 输出判定性措辞（'该发票合规'）→ 降级模板。"""
+        """LLM 输出判定性措辞（'该发票合规，可以报销'）→ 降级模板。"""
         bad = json.dumps({"what": "该发票合规，可以报销", "impact": "无", "action": "入账", "who": "出纳",
                           "evidence_refs": []})
         with mock.patch.object(llm_explain, "LLM_ENABLED", True), \
@@ -127,6 +127,26 @@ class TestValidation(unittest.TestCase):
              mock.patch.object(llm_explain, "DEEPSEEK_MODEL", "deepseek-v4-flash"):
             exps = llm_explain.explain_findings([make_finding()])
         self.assertEqual(exps[0]["source"], "template")
+
+    def test_concept_mention_not_flagged(self):
+        """解释中合理提及'合规'概念（如'影响合规性'）不应被误杀（精准判定模式）。"""
+        ok = json.dumps({"what": "税额勾稽断裂，影响发票合规性判断与进项抵扣准确性", "impact": "需人工复核",
+                         "action": "核对原始凭证后重新入账", "who": "财务复核岗", "evidence_refs": []})
+        with mock.patch.object(llm_explain, "LLM_ENABLED", True), \
+             mock.patch.object(llm_explain, "_call_llm", return_value=ok), \
+             mock.patch.object(llm_explain, "DEEPSEEK_MODEL", "deepseek-v4-flash"):
+            exps = llm_explain.explain_findings([make_finding()])
+        self.assertTrue(exps[0]["source"].startswith("llm:"), exps[0]["source"])
+
+    def test_advice_wording_not_flagged(self):
+        """建议性表达（'核对后再入账'）不是判定，应放行。"""
+        ok = json.dumps({"what": "行级税额异常", "impact": "影响抵扣", "action": "核对原始凭证后再入账",
+                         "who": "财务复核岗", "evidence_refs": []})
+        with mock.patch.object(llm_explain, "LLM_ENABLED", True), \
+             mock.patch.object(llm_explain, "_call_llm", return_value=ok), \
+             mock.patch.object(llm_explain, "DEEPSEEK_MODEL", "deepseek-v4-flash"):
+            exps = llm_explain.explain_findings([make_finding()])
+        self.assertTrue(exps[0]["source"].startswith("llm:"), exps[0]["source"])
 
     def test_evidence_hallucination_falls_back(self):
         """evidence_refs 引用输入外的字段（幻觉）→ 降级模板。"""
@@ -137,6 +157,17 @@ class TestValidation(unittest.TestCase):
              mock.patch.object(llm_explain, "DEEPSEEK_MODEL", "deepseek-v4-flash"):
             exps = llm_explain.explain_findings([make_finding()])
         self.assertEqual(exps[0]["source"], "template")
+
+    def test_no_chain_refs_to_contract_keys_allowed(self):
+        """无证据链 finding：LLM 引用输入契约字段名（如 rule_id）不算幻觉（引用输入内信息）。"""
+        f = make_finding(evidence_chain=[])
+        ok = json.dumps({"what": "未配置企业主体", "impact": "影响覆盖率", "action": "补充配置",
+                         "who": "配置维护员", "evidence_refs": ["rule_id", "field", "message"]})
+        with mock.patch.object(llm_explain, "LLM_ENABLED", True), \
+             mock.patch.object(llm_explain, "_call_llm", return_value=ok), \
+             mock.patch.object(llm_explain, "DEEPSEEK_MODEL", "deepseek-v4-flash"):
+            exps = llm_explain.explain_findings([f])
+        self.assertTrue(exps[0]["source"].startswith("llm:"), exps[0]["source"])
 
     def test_good_llm_output_used(self):
         """合法 LLM 输出 → 采用并带来源与版本。"""
