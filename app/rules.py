@@ -1,11 +1,13 @@
-"""规则引擎服务化（P1 技术方案第 2 节 · DeepSeek 评审采纳 + 2026-09-22 代码审查修订）。
+"""规则引擎服务化（P1 技术方案第 2 节 · DeepSeek 评审采纳 + 2026-09-22 代码审查修订 + G1 规则版本化/证据链）。
 
 契约：
 - 输入：list[NormalizedInvoice]（整批——R1/R3/R6 是跨票规则，逐张调用会失效）
-- 输出：list[Finding]（rule_id / severity / confidence 双标签 + ruleset_version 溯源）
+- 输出：list[Finding]（rule_id / severity / confidence 双标签 + ruleset_version 溯源 + evidence_chain 证据链）
 - 红线保护：关键字段缺失或企业主体未配置时，禁止产出"确定"级对外结论（降级为低危/疑似提示）
 - 规则隔离：单条规则异常不拖垮整批（逐规则 try/except，异常降级为批次级 Finding）
 - 规则分级（validation-week 规则清单）：确定性规则（A 级）可上线；需真实数据的标疑似。
+- G1（2026-09-23）：规则包单一来源 RULESET_META（版本+生效日期+政策依据），report 不再各自维护
+  规则清单（实证漂移：R8 曾缺失于 report 的 RULES_META）；Finding 携带 evidence_chain（可审计定位）。
 """
 from __future__ import annotations
 
@@ -14,9 +16,38 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from decimal import Decimal
 
-from .models import Finding, NormalizedInvoice
+from .models import EvidenceLink, Finding, NormalizedInvoice
 
-RULESET_VERSION = "0.1.1"
+# ---------- G1 规则包元数据（单一权威来源；report/前端均引用此处） ----------
+
+RULESET_VERSION = "0.2.0"
+RULESET_EFFECTIVE_DATE = "2026-09-23"  # 规则包生效日期（报告溯源：按哪版规则判的）
+
+# 政策依据说明（G1）：按主题引用法规/管理办法/业界实践，不编造条款号；
+# 条款级引用与阈值校准登记为待核验项（scope_note 承载诚实声明）。
+RULESET_META = {
+    "version": RULESET_VERSION,
+    "name": "invoice-precheck 规则包",
+    "effective_date": RULESET_EFFECTIVE_DATE,
+    "scope_note": "政策依据按主题引用（法规/管理办法/业界实践），条款级引用待法务/税务核验；"
+                  "规则阈值（限额/连号窗口/大额上限）为占位口径，待真实数据校准。",
+    "rules": [
+        {"rule_id": "R1", "name": "重复报销 / 整文件重复", "severity": "高",
+         "basis": "企业内部报销管理制度（防重复报销/重复录入）"},
+        {"rule_id": "R2", "name": "抬头/税号校验", "severity": "高",
+         "basis": "《中华人民共和国发票管理办法》发票开具基本要求；企业报销制度"},
+        {"rule_id": "R3", "name": "连号异常", "severity": "中",
+         "basis": "反拆分开票风险提示（业界通用实践：同日同供应商连号疑拆分凑票）"},
+        {"rule_id": "R4", "name": "超标准（类别限额）", "severity": "中",
+         "basis": "财政部差旅费管理办法等开支标准；企业自定限额（默认值占位待校准）"},
+        {"rule_id": "R6", "name": "供应商集中度异常", "severity": "中",
+         "basis": "税务风险与反洗票实践（同供应商单日大量开票）"},
+        {"rule_id": "R7", "name": "日期异常", "severity": "中",
+         "basis": "企业所得税税前扣除凭证管理办法（国家税务总局公告2018年第28号）跨期口径"},
+        {"rule_id": "R8", "name": "金额异常类型化", "severity": "高",
+         "basis": "数电票会计数据标准（勾稽关系）；差额征税/红冲规则（差额征税与数电票红冲口径）"},
+    ],
+}
 
 # 严重度/置信度常量（双标签）
 _SEV_HIGH = "高"
@@ -31,6 +62,11 @@ def _mask_taxid(value: str) -> str:
     if len(value) >= 8:
         return value[:2] + "****" + value[-2:]
     return value
+
+
+def _link(field_: str, raw: str, value: str = "", row: int = 0, note: str = "") -> EvidenceLink:
+    """构造单条证据链（G1）。"""
+    return EvidenceLink(field=field_, raw=raw, value=value, row=row, note=note)
 
 
 @dataclass
@@ -62,7 +98,8 @@ class RulesConfig:
 
 
 def _finding(rule_id: str, inv: NormalizedInvoice, severity: str, confidence: str,
-             field_: str, message: str, evidence: str, suggestion: str = "") -> Finding:
+             field_: str, message: str, evidence: str, suggestion: str = "",
+             evidence_chain: list[EvidenceLink] | None = None) -> Finding:
     return Finding(
         rule_id=rule_id,
         severity=severity,
@@ -73,6 +110,7 @@ def _finding(rule_id: str, inv: NormalizedInvoice, severity: str, confidence: st
         evidence=evidence,
         suggestion=suggestion,
         ruleset_version=RULESET_VERSION,
+        evidence_chain=evidence_chain or [],
     )
 
 
@@ -124,6 +162,13 @@ def r1_duplicate(invoices: list[NormalizedInvoice]) -> list[Finding]:
                     "本批次内存在票号+开票日期+价税合计相同的发票",
                     f"{key[0]} / {key[1]} / 金额 {key[2]}（{others}）",
                     "核查是否为同一张发票重复报销或重复录入",
+                    evidence_chain=[
+                        _link("invoice_no", key[0], note="判重键①：发票号码"),
+                        _link("issue_date", key[1], note="判重键②：开票日期"),
+                        _link("total", f"{inv.total:.2f}", key[2], note="判重键③：价税合计"),
+                        _link("source_hash", inv.source_hash or "(空)",
+                              note=f"本组 {len(group)} 张票同键"),
+                    ],
                 ))
     for h, group in hash_groups.items():
         if len(group) > 1:
@@ -133,6 +178,9 @@ def r1_duplicate(invoices: list[NormalizedInvoice]) -> list[Finding]:
                 "整文件重复上传：相同来源文件出现多次",
                 f"文件哈希 {h} 出现 {len(group)} 次",
                 "同一文件重复导入，确认是否重复录入",
+                evidence_chain=[
+                    _link("source_hash", h[:16] + "…", h, note=f"同文件 {len(group)} 次"),
+                ],
             ))
     return out
 
@@ -172,6 +220,16 @@ def r2_header(invoices: list[NormalizedInvoice], cfg: RulesConfig) -> list[Findi
                 f"票面抬头：{inv.buyer_name} / {_mask_taxid(inv.buyer_taxid)}；"
                 f"企业主体：{cfg.company_name} / {_mask_taxid(cfg.company_taxid)}",
                 "核对发票抬头是否开错（退票重开或补充说明）",
+                evidence_chain=[
+                    _link("buyer_name", inv.buyer_name, inv.buyer_name.strip().replace(" ", ""),
+                          note="票面购买方名称（去空格归一）"),
+                    _link("buyer_taxid", _mask_taxid(inv.buyer_taxid), inv.buyer_taxid,
+                          note="票面购买方税号（脱敏展示）"),
+                    _link("config.company_name", cfg.company_name,
+                          cfg.company_name.strip().replace(" ", ""), note="企业主体配置名称"),
+                    _link("config.company_taxid", _mask_taxid(cfg.company_taxid),
+                          cfg.company_taxid, note="企业主体配置税号（脱敏展示）"),
+                ],
             ))
     return out
 
@@ -221,6 +279,14 @@ def r3_serial(invoices: list[NormalizedInvoice], cfg: RulesConfig) -> list[Findi
                                 f"供应商：{seller}（{_mask_taxid(taxid)}）；开票日：{day}；票号：{nums}"
                                 f"（末{cfg.serial_tail_len}位差值≤{cfg.serial_max_gap}）",
                                 "弱信号提示：关注同日集中开票是否拆分/凑票，需人工核实业务合理性",
+                                evidence_chain=[
+                                    _link("seller_name", seller, note="供应商分组键①"),
+                                    _link("seller_taxid", _mask_taxid(taxid), taxid,
+                                          note="供应商分组键②（脱敏展示）"),
+                                    _link("issue_date", day, note="同开票日分组键③"),
+                                    _link("invoice_no", nums,
+                                          note=f"末{cfg.serial_tail_len}位差值≤{cfg.serial_max_gap}，共 {len(marked)} 张"),
+                                ],
                             ))
                         found = True
                         break  # 每供应商每日只提示一组，避免重复刷屏
@@ -246,6 +312,12 @@ def r4_overlimit(invoices: list[NormalizedInvoice], cfg: RulesConfig) -> list[Fi
                 f"可能超标：{inv.category}类限额 {limit} 元{note}",
                 f"价税合计 {inv.total} 元 > 限额 {limit} 元（类别：{inv.category}）",
                 "按企业报销标准复核；限额可配置",
+                evidence_chain=[
+                    _link("total", f"{inv.total:.2f}", f"{inv.total:.2f}", note="票面价税合计"),
+                    _link("category", inv.category or "", note="报销类别"),
+                    _link("config.category_limits", f"{limit}", f"{limit}",
+                          note="该类别限额（配置/默认占位）"),
+                ],
             ))
     return out
 
@@ -276,6 +348,13 @@ def r6_concentrated(invoices: list[NormalizedInvoice], cfg: RulesConfig) -> list
                     "异常集中：同一供应商单日大量开票",
                     f"{seller}（{_mask_taxid(taxid)}） / {date} 共 {len(group)} 张（{nums}）",
                     "关注供应商集中开票是否异常（建议关注）",
+                    evidence_chain=[
+                        _link("seller_name", seller, note="供应商分组键①"),
+                        _link("seller_taxid", _mask_taxid(taxid), taxid,
+                              note="供应商分组键②（脱敏展示）"),
+                        _link("issue_date", date, note="同开票日分组键③"),
+                        _link("invoice_no", nums, note=f"同组 {len(group)} 张（≥阈值 {cfg.concentrate_threshold}）"),
+                    ],
                 ))
     return out
 
@@ -296,6 +375,10 @@ def r7_date_anomaly(invoices: list[NormalizedInvoice], cfg: RulesConfig) -> list
                 "日期异常：开票日期晚于当前日期（疑似录入/开票错误）",
                 f"开票 {inv.issue_date} 晚于今天 {today}",
                 "核实开票日期是否正确",
+                evidence_chain=[
+                    _link("issue_date", inv.issue_date, inv.issue_date, note="票面开票日期"),
+                    _link("system.today", str(today), str(today), note="当前日期"),
+                ],
             ))
             continue
         if not inv.reimburse_date:
@@ -310,6 +393,11 @@ def r7_date_anomaly(invoices: list[NormalizedInvoice], cfg: RulesConfig) -> list
                 "日期异常：开票日期晚于报销日期",
                 f"开票 {inv.issue_date} 晚于报销 {inv.reimburse_date}",
                 "核实是否票期倒挂（开票滞后/录入错误）",
+                evidence_chain=[
+                    _link("issue_date", inv.issue_date, inv.issue_date, note="票面开票日期"),
+                    _link("reimburse_date", inv.reimburse_date, inv.reimburse_date,
+                          note="报销日期（批次携带）"),
+                ],
             ))
         elif (reimb - issue).days > cfg.max_carry_days:
             out.append(_finding(
@@ -317,6 +405,13 @@ def r7_date_anomaly(invoices: list[NormalizedInvoice], cfg: RulesConfig) -> list
                 "日期异常：跨期报销（开票距报销超 365 天）",
                 f"开票 {inv.issue_date} 距报销 {inv.reimburse_date} 共 {(reimb - issue).days} 天",
                 "按财务制度核实跨期报销是否允许",
+                evidence_chain=[
+                    _link("issue_date", inv.issue_date, inv.issue_date, note="票面开票日期"),
+                    _link("reimburse_date", inv.reimburse_date, inv.reimburse_date,
+                          note="报销日期（批次携带）"),
+                    _link("system.gap_days", str((reimb - issue).days),
+                          str((reimb - issue).days), note=f"距报销 {(reimb - issue).days} 天（>365）"),
+                ],
             ))
     return out
 
@@ -343,11 +438,19 @@ def r8_amount_anomaly(invoices: list[NormalizedInvoice], cfg: RulesConfig) -> li
     out: list[Finding] = []
     for inv in invoices:
         if abs((inv.amount + inv.tax) - inv.total) > Decimal("0.01"):
+            diff = inv.amount + inv.tax - inv.total
             out.append(_finding(
                 "R8", inv, _SEV_HIGH, _CONF_SURE, "total",
                 f"金额异常（{ANOMALY_RECONCILE}）：金额+税额≠价税合计",
-                f"{inv.amount}+{inv.tax}={inv.amount + inv.tax} ≠ {inv.total}（差 {inv.amount + inv.tax - inv.total}）",
+                f"{inv.amount}+{inv.tax}={inv.amount + inv.tax} ≠ {inv.total}（差 {diff}）",
                 "金额字段可能缺失/被篡改，人工核对票面",
+                evidence_chain=[
+                    _link("amount", f"{inv.amount:.2f}", f"{inv.amount:.2f}", note="票面金额（不含税）"),
+                    _link("tax", f"{inv.tax:.2f}", f"{inv.tax:.2f}", note="票面税额"),
+                    _link("total", f"{inv.total:.2f}", f"{inv.total:.2f}", note="票面价税合计"),
+                    _link("calc", f"{inv.amount}+{inv.tax}={inv.amount + inv.tax}",
+                          f"{inv.amount + inv.tax:.2f}", note=f"勾稽差 {diff}（容差 ±0.01）"),
+                ],
             ))
             continue
         if inv.total < 0:
@@ -358,6 +461,11 @@ def r8_amount_anomaly(invoices: list[NormalizedInvoice], cfg: RulesConfig) -> li
                 f"金额异常（{ANOMALY_NEGATIVE_NON_RED}）：负金额但非红字发票",
                 f"价税合计 {inv.total}（票种：{inv.invoice_type or '未知'}）",
                 "负数金额通常仅红冲/退款出现，核实票面与业务",
+                evidence_chain=[
+                    _link("total", f"{inv.total:.2f}", f"{inv.total:.2f}", note="票面价税合计（负数）"),
+                    _link("invoice_type", inv.invoice_type or "未知", note="票种（非红字）"),
+                    _link("is_red_letter", str(inv.is_red_letter), note="红冲标志=False"),
+                ],
             ))
             continue
         if inv.is_differential:
@@ -366,6 +474,13 @@ def r8_amount_anomaly(invoices: list[NormalizedInvoice], cfg: RulesConfig) -> li
                 f"金额说明（{ANOMALY_DIFFERENTIAL_PENDING}）：差额征税票，勾稽按扣除后口径",
                 f"价税合计 {inv.total}；差额扣除额（EI386/KCE）专项校验待 P2 支持",
                 "当前按票面勾稽校验；差额票的扣除额-税额联动核验登记 P2 待办",
+                evidence_chain=[
+                    _link("total", f"{inv.total:.2f}", f"{inv.total:.2f}", note="票面价税合计"),
+                    _link("differential_deduction",
+                          f"{inv.differential_deduction:.2f}" if inv.differential_deduction is not None else "(空)",
+                          f"{inv.differential_deduction}" if inv.differential_deduction is not None else "",
+                          note="差额扣除额 KCE（专项校验待支持）"),
+                ],
             ))
             continue
         if abs(inv.total) > cfg.max_plausible_total:
@@ -374,6 +489,11 @@ def r8_amount_anomaly(invoices: list[NormalizedInvoice], cfg: RulesConfig) -> li
                 f"金额异常（{ANOMALY_ABSURD_TOTAL}）：单票价税合计超出合理阈值",
                 f"价税合计 {inv.total} 元 > 阈值 {cfg.max_plausible_total} 元（占位阈值，可配置）",
                 "大额票需人工复核业务合理性；阈值待真实数据校准",
+                evidence_chain=[
+                    _link("total", f"{inv.total:.2f}", f"{inv.total:.2f}", note="票面价税合计"),
+                    _link("config.max_plausible_total", f"{cfg.max_plausible_total}",
+                          f"{cfg.max_plausible_total}", note="占位阈值（待真实数据校准）"),
+                ],
             ))
     return out
 

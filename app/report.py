@@ -1,14 +1,16 @@
-"""风险报告组装（P1 技术方案第 3 节 · DeepSeek 评审采纳 + 2026-09-22 二轮审查修订）。
+"""风险报告组装（P1 技术方案第 3 节 · DeepSeek 评审采纳 + 2026-09-22 二轮审查修订 + G1 规则包/证据链）。
 
 信息架构（自上而下）：
 ① 汇总条：文件数 / 成功解析票数 / 金额合计 / 未见异常 / 待复核 / 解析失败
-② 风险清单：按严重度降序，每条含规则名/票号/命中字段/证据/建议
+② 风险清单：按严重度降序，每条含规则名/票号/命中字段/证据链/建议
 ③ 发票明细：关键字段 + 状态标签（含字段缺失提示）
-④ 规则清单与版本、生成时间、批次标识
+④ 规则清单与规则包版本、生效日期、生成时间、批次标识
 ⑤ 免责（固定文案，单一来源由后端注入前端）
 
 红线：本模块不产出"拦截/拒报/对外合规结论"——只有提示与建议。
 措辞纪律：不用"通过/合规"字样（避免隐性合规结论），用"未见异常"。
+G1：规则清单单一来源（引用 rules.RULESET_META，修复 R8 曾缺失于本地清单的漂移）；
+     risk_list 输出结构化证据链 evidence_chain（可审计定位：字段/原文/行号/计算）。
 """
 from __future__ import annotations
 
@@ -17,23 +19,14 @@ import uuid
 from dataclasses import asdict
 from decimal import Decimal
 
-from .models import Finding, NormalizedInvoice
+from .models import EvidenceLink, Finding, NormalizedInvoice
+from .rules import RULESET_META, RULESET_VERSION
 
 DISCLAIMER = (
     "基于 XML 结构化数据的规则预审，不替代人工复核与税务判断；"
     "命中项需核原始凭证，未命中不等于合规；规则版本与覆盖范围已列明。"
 )
 SCOPE_NOTE = "本报告基于数电票 XML 结构化数据的确定性规则生成；公开+合成集验证通过，真实分布未验证。"
-
-# 规则清单（报告溯源：哪些规则实际启用；R5 需工商数据，未实现）
-RULES_META = [
-    {"rule_id": "R1", "name": "重复报销 / 整文件重复", "severity": "高"},
-    {"rule_id": "R2", "name": "抬头/税号校验", "severity": "高"},
-    {"rule_id": "R3", "name": "连号异常", "severity": "中"},
-    {"rule_id": "R4", "name": "超标准（类别限额）", "severity": "中"},
-    {"rule_id": "R6", "name": "供应商集中度异常", "severity": "中"},
-    {"rule_id": "R7", "name": "日期异常", "severity": "中"},
-]
 
 
 def _money(value: Decimal | None) -> str:
@@ -88,7 +81,7 @@ def build_report(
         "failed_count": len(failed),
     }
 
-    # ② 风险清单（findings 已按严重度/置信度排序）
+    # ② 风险清单（findings 已按严重度/置信度排序；evidence_chain 结构化证据链）
     risk_list = [
         {
             "rule_id": f.rule_id,
@@ -99,6 +92,7 @@ def build_report(
             "message": f.message,
             "evidence": f.evidence,
             "suggestion": f.suggestion,
+            "evidence_chain": [_evidence_link_to_dict(e) for e in f.evidence_chain],
         }
         for f in findings
     ]
@@ -115,14 +109,15 @@ def build_report(
             "seller_name": i.seller_name,
             "status": _invoice_status(i, review_ids),
             "warning_count": len(i.parse_warnings),
+            "item_count": len(i.items),  # G0 行级：明细行数（行级展示随 D 阶段交互上线）
         }
         for i in invoices
     ]
     failed_list = [{"file": f["name"], "error": f["error"]} for f in failed]
 
-    # ④ 规则三态（里程碑评审）：未执行的规则必须可见，禁止沉默
+    # ④ 规则三态（里程碑评审）：未执行的规则必须可见，禁止沉默；规则包单一来源（G1）
     rule_states = rule_states or {}
-    rules = [{**m, "state": rule_states.get(m["rule_id"], "未执行")} for m in RULES_META]
+    rules = [{**m, "state": rule_states.get(m["rule_id"], "未执行")} for m in RULESET_META["rules"]]
     state_counts = {"命中": 0, "未命中": 0, "未执行": 0}
     for m in rules:
         st = m["state"]
@@ -134,6 +129,12 @@ def build_report(
         "invoices": invoice_list,
         "failed": failed_list,
         "ruleset_version": ruleset_version,
+        "ruleset": {
+            "version": RULESET_META["version"],
+            "name": RULESET_META["name"],
+            "effective_date": RULESET_META["effective_date"],
+            "scope_note": RULESET_META["scope_note"],
+        },
         "rules": rules,
         "rules_summary": {
             "enabled_count": len(rules),
@@ -144,6 +145,17 @@ def build_report(
         "batch_id": uuid.uuid4().hex[:12],
         "scope_note": SCOPE_NOTE,
         "disclaimer": DISCLAIMER,
+    }
+
+
+def _evidence_link_to_dict(e: EvidenceLink) -> dict:
+    """证据链单条 → JSON dict（G1 可审计定位）。"""
+    return {
+        "field": e.field,
+        "raw": e.raw,
+        "value": e.value,
+        "row": e.row,
+        "note": e.note,
     }
 
 

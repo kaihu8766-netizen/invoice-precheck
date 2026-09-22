@@ -68,6 +68,24 @@ class NormalizedInvoice:
 
 
 @dataclass
+class EvidenceLink:
+    """证据链单条定位（G1：合规预审可审计——每条命中能定位到字段/原文/行号/计算）。
+
+    - field：命中的字段标识（票面字段名/明细行字段/系统字段）
+    - raw：原始值（已脱敏：税号类打码）
+    - value：规范化值（Decimal 的字符串/日期 ISO/数值）
+    - row：明细行号（行级证据时 ≥1；票面/系统证据 = 0）
+    - note：计算过程或说明（如"金额+税额≠价税合计，差 -0.01"）
+    """
+
+    field: str = ""
+    raw: str = ""
+    value: str = ""
+    row: int = 0
+    note: str = ""
+
+
+@dataclass
 class Finding:
     """单条风险发现（规则引擎输出）。"""
 
@@ -79,4 +97,5 @@ class Finding:
     message: str                       # 人类可读描述
     evidence: str                      # 原始证据（票号/金额/供应商等；敏感字段已脱敏）
     suggestion: str = ""               # 建议动作
-    ruleset_version: str = ""          # 规则版本（报告溯源用，审计要求）
+    ruleset_version: str = ""          # 规则包版本（报告溯源用，审计要求）
+    evidence_chain: list[EvidenceLink] = field(default_factory=list)  # G1 结构化证据链（可审计定位）
