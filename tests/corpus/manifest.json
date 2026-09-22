@@ -1,5 +1,5 @@
 {
-  "corpus_version": "v0.1",
+  "corpus_version": "v0.2",
   "created": "2026-09-23",
   "description": "真实结构数电票 XML 票样（脱敏）——parser 第三方言（EInvoice 英文结构）回归语料",
   "governance": {
@@ -112,6 +112,65 @@
           "税务机关代码/名称",
           "结构",
           "原博客已打码的买方(91xxx.../xxxxxx)"
+        ]
+      }
+    },
+    {
+      "file": "bj-platform-it.xml",
+      "sha256": "1e190d1ffd357c5af1c016f89dfaf643045fa9a5161eb9dc96c23d2654322554",
+      "province": "北京",
+      "tax_region_code": "1100",
+      "issuing_system": "电子发票服务平台·网页开票",
+      "version": "0.33",
+      "invoice_type": "增值税专用发票",
+      "taxpayer_type": "一般纳税人",
+      "scenario": "蓝字专票·信息技术服务·6%·大额票（25万）·单明细行·含完整签名子树",
+      "dialect": "EInvoice英文结构",
+      "features": {
+        "negative_line": false,
+        "red_letter": false,
+        "differential_taxation": false,
+        "multi_tax_rate": false
+      },
+      "source": {
+        "type": "公开社区源码示例（二次脱敏）",
+        "url": "https://www.yingdao.com/community/detaildiscuss?id=735785349741531136",
+        "authority": "影刀RPA开发者社区《提取xml格式的发票信息》(2024-12-08，原文已部分打码)",
+        "accessed": "2026-09-23",
+        "license": "公开可见内容，已二次脱敏后引用"
+      },
+      "masking": {
+        "status": "已脱敏",
+        "replaced": [
+          "SellerName",
+          "SellerIdNum",
+          "SellerAddr",
+          "SellerTelNum",
+          "SellerBankName",
+          "SellerBankAccNum",
+          "BuyerName",
+          "BuyerIdNum",
+          "BuyerTelNum",
+          "BuyerAddr",
+          "BuyerBankName",
+          "BuyerBankAccNum",
+          "Drawer",
+          "EIid",
+          "InvoiceNumber",
+          "Remark",
+          "TaxClassificationCode",
+          "SignatureValue(清空)",
+          "LabelName(行业)"
+        ],
+        "kept": [
+          "金额",
+          "税额",
+          "税率",
+          "日期",
+          "税务机关代码/名称",
+          "签名算法",
+          "结构",
+          "UnPrice小数位"
         ]
       }
     }

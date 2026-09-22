@@ -1,0 +1,104 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+<!--
+  语料库票样：bj-platform-it.xml
+  来源：影刀 RPA 开发者社区《提取xml格式的发票信息》（2024-12-08，公开源码示例）
+       https://www.yingdao.com/community/detaildiscuss?id=735785349741531136
+  省份：北京（EInvoiceTag=SWEI1100）｜ 开票系统：电子发票服务平台·网页开票 ｜ 场景：蓝字·增值税专用发票·一般纳税人·信息技术服务·6%·大额票（25万）
+  脱敏：EIid/票号/税号/名称/地址/电话/银行/账号/开票人/备注已虚构或沿用原帖打码；
+        金额/税率/日期/税务机关代码/签名结构保留；SignatureValue（原帖含完整签名）已清空
+  结构：EInvoice 英文标签树（Version=0.33，SellerAuthentication=01，含完整签名子树）
+-->
+<EInvoice>
+  <Header>
+    <EIid>24110000000000100003</EIid>
+    <EInvoiceTag>SWEI1100</EInvoiceTag>
+    <Version>0.33</Version>
+    <InherentLabel>
+      <InIssuType>
+        <LabelCode>Y</LabelCode>
+        <LabelName>是否蓝字发票标志</LabelName>
+      </InIssuType>
+      <EInvoiceType>
+        <LabelCode>01</LabelCode>
+        <LabelName>电子发票</LabelName>
+      </EInvoiceType>
+      <GeneralOrSpecialVAT>
+        <LabelCode>01</LabelCode>
+        <LabelName>增值税专用发票</LabelName>
+      </GeneralOrSpecialVAT>
+      <TaxpayerType>
+        <LabelCode>1</LabelCode>
+        <LabelName>一般纳税人</LabelName>
+      </TaxpayerType>
+    </InherentLabel>
+    <UndefinedLabel>
+      <Label>
+        <LabelType>企业行业性质类标签</LabelType>
+        <LabelCode>02</LabelCode>
+        <LabelName>示例行业</LabelName>
+      </Label>
+      <Label>
+        <LabelType>发票开具方式标签</LabelType>
+        <LabelCode>1</LabelCode>
+        <LabelName>网页开票</LabelName>
+      </Label>
+    </UndefinedLabel>
+  </Header>
+  <EInvoiceData>
+    <SellerInformation>
+      <SellerIdNum>91110000000000000X</SellerIdNum>
+      <SellerName>示例科技有限公司</SellerName>
+      <SellerAddr>示例市示例区示例路100号</SellerAddr>
+      <SellerTelNum>13800000000</SellerTelNum>
+      <SellerBankName>示例银行股份有限公司示例支行</SellerBankName>
+      <SellerBankAccNum>0000000000000000000</SellerBankAccNum>
+    </SellerInformation>
+    <BuyerInformation>
+      <BuyerIdNum>91440000000000001Y</BuyerIdNum>
+      <BuyerName>示例商贸有限公司</BuyerName>
+      <BuyerTelNum>13800000000</BuyerTelNum>
+      <BuyerAddr>示例市示例区示例路200号</BuyerAddr>
+      <BuyerBankName>示例银行股份有限公司示例支行</BuyerBankName>
+      <BuyerBankAccNum>0000000000000000000</BuyerBankAccNum>
+    </BuyerInformation>
+    <BasicInformation>
+      <TotalAmWithoutTax>235891.26</TotalAmWithoutTax>
+      <TotalTaxAm>14153.48</TotalTaxAm>
+      <TotalTax-includedAmount>250044.74</TotalTax-includedAmount>
+      <TotalTax-includedAmountInChinese>贰拾伍万零肆拾肆圆柒角肆分</TotalTax-includedAmountInChinese>
+      <Drawer>示例</Drawer>
+      <RequestTime>2024-09-24 14:16:05</RequestTime>
+    </BasicInformation>
+    <IssuItemInformation>
+      <ItemName>*信息技术服务*技术服务费</ItemName>
+      <Quantity>1</Quantity>
+      <UnPrice>235891.2641509434</UnPrice>
+      <Amount>235891.26</Amount>
+      <TaxRate>0.06</TaxRate>
+      <ComTaxAm>14153.48</ComTaxAm>
+      <TotaltaxIncludedAmount>250044.74</TotaltaxIncludedAmount>
+      <TaxClassificationCode>3040xxxxxxxxxxxxxxx</TaxClassificationCode>
+    </IssuItemInformation>
+    <SpecificInformation />
+    <AdditionalInformation>
+      <Remark>示例平台服务费 2024.08</Remark>
+    </AdditionalInformation>
+  </EInvoiceData>
+  <SellerAuthentication>
+    <AuthenticationMethods>01</AuthenticationMethods>
+  </SellerAuthentication>
+  <TaxSupervisionInfo>
+    <InvoiceNumber>24110000000000100003</InvoiceNumber>
+    <IssueTime>2024-09-24</IssueTime>
+    <TaxBureauCode>11100000000</TaxBureauCode>
+    <TaxBureauName>国家税务总局北京市税务局</TaxBureauName>
+  </TaxSupervisionInfo>
+  <TaxBureauSignature>
+    <Reference URI="/Einvoice/Header|/Einvoice/EInvoiceData|/Einvoice/SellerAuthentication|/Einvoice/TaxSupervisionInfo|/Einvoice/TaxBureauSignature/SignatureTime" />
+    <SignatureAlgorithm>1.2.156.10197.1.501</SignatureAlgorithm>
+    <SignatureFormat>DETACH</SignatureFormat>
+    <SignatureTime>2024-09-24 14:26:17</SignatureTime>
+    <SignatureValue></SignatureValue>
+    <KeyInfo />
+  </TaxBureauSignature>
+</EInvoice>
