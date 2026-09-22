@@ -12,9 +12,10 @@ from app.rules import RulesConfig, run_rules
 
 def inv(no, date, amount, total, seller="北京华信办公用品有限公司",
         buyer="示例科技有限公司", taxid="91310000MA1FL1XXXX",
-        category="办公", reimburse=None, tax=Decimal("0")):
+        category="办公", reimburse=None, tax=Decimal("0"),
+        invoice_type="专票"):
     return NormalizedInvoice(
-        invoice_no=no, invoice_type="专票", issue_date=date,
+        invoice_no=no, invoice_type=invoice_type, issue_date=date,
         amount=amount, tax=tax, total=total,
         buyer_name=buyer, buyer_taxid=taxid, seller_name=seller,
         category=category, reimburse_date=reimburse,
@@ -77,6 +78,54 @@ class TestRules(unittest.TestCase):
         r3 = [x for x in run_rules(batch, CFG) if x.rule_id == "R3"]
         self.assertEqual(len(r3), 3)  # 窗口内 3 张全标
         self.assertEqual(r3[0].confidence, "疑似")
+
+    def test_r1_missing_date_not_duplicate(self):
+        # 里程碑评审 None 短路：票号相同但开票日期缺失的票，不得撞 key 误判"重复"
+        batch = [
+            inv("1001", "", Decimal("100"), Decimal("113"), tax=Decimal("13")),
+            inv("1001", "", Decimal("100"), Decimal("113"), tax=Decimal("13")),
+        ]
+        r1 = [x for x in run_rules(batch, CFG) if x.rule_id == "R1"]
+        self.assertTrue(all(x.severity == "低" for x in r1))
+        self.assertTrue(all(x.confidence == "疑似" for x in r1))
+        self.assertFalse(any(x.severity == "高" for x in r1))
+
+    def test_r3_red_invoice_excluded(self):
+        # 里程碑评审：红冲票不参与连号判定
+        batch = [inv(f"20260100{t:04d}", "2026-08-01", Decimal("100"), Decimal("113"),
+                     seller="连号供应商", tax=Decimal("13"),
+                     invoice_type="红字专票") for t in (1001, 1002, 1003)]
+        r3 = [x for x in run_rules(batch, CFG) if x.rule_id == "R3"]
+        self.assertFalse(any(x.severity == "低" for x in r3))
+
+    def test_r3_cross_day_not_flagged(self):
+        # 里程碑评审口径收敛：同供应商跨开票日的连号不提示（同日批量开票才构成拆分嫌疑）
+        batch = [
+            inv("202601000001", "2026-08-01", Decimal("100"), Decimal("113"), seller="连号供应商", tax=Decimal("13")),
+            inv("202601000002", "2026-08-05", Decimal("100"), Decimal("113"), seller="连号供应商", tax=Decimal("13")),
+            inv("202601000003", "2026-08-09", Decimal("100"), Decimal("113"), seller="连号供应商", tax=Decimal("13")),
+        ]
+        r3 = [x for x in run_rules(batch, CFG) if x.rule_id == "R3"]
+        self.assertFalse(any(x.severity == "低" for x in r3))
+
+    def test_rule_states(self):
+        # 里程碑评审三态化：命中/未命中/未执行 必须显式返回
+        from app.rules import run_rules_with_states
+        batch = [
+            NormalizedInvoice(invoice_no="1001", invoice_type="专票", issue_date="2026-08-01",
+                              amount=Decimal("100"), tax=Decimal("13"), total=Decimal("113"),
+                              buyer_name="示例科技有限公司", buyer_taxid="91310000MA1FL1XXXX",
+                              seller_name="s", category=None),  # 类别缺失 → R4 未执行
+            NormalizedInvoice(invoice_no="1001", invoice_type="专票", issue_date="2026-08-01",
+                              amount=Decimal("100"), tax=Decimal("13"), total=Decimal("113"),
+                              buyer_name="示例科技有限公司", buyer_taxid="91310000MA1FL1XXXX",
+                              seller_name="s", category=None),
+        ]
+        _, states = run_rules_with_states(batch, CFG)
+        self.assertEqual(states["R1"], "命中")
+        self.assertIn(states["R2"], ("命中", "未命中"))
+        self.assertEqual(states["R4"], "未执行（缺少报销类别）")  # 类别未提供
+        self.assertEqual(states["R3"], "未命中")
 
     def test_r3_dirty_tail_no_crash(self):
         # 票号不可解析 → 不崩溃、只出低危提示（H1）

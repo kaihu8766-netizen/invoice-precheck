@@ -90,6 +90,13 @@ class TestAPI(unittest.TestCase):
         for key in ("summary", "findings", "invoices", "failed", "ruleset_version", "scope_note", "disclaimer"):
             self.assertIn(key, d)
         self.assertTrue(d["disclaimer"])
+        # 规则三态（里程碑评审）：未执行规则必须可见，禁止沉默暗示合规
+        self.assertIn("rules_summary", d)
+        rstates = {r["rule_id"]: r["state"] for r in d["rules"]}
+        self.assertIn("未执行", rstates["R2"])          # 未配置企业主体 → 未执行
+        self.assertIn("未执行", rstates["R4"])          # 单 XML 无报销类别 → 未执行
+        self.assertEqual(rstates["R1"], "命中")
+        self.assertGreaterEqual(d["rules_summary"]["enabled_count"], 6)
 
     def test_review_all_failed_short_circuit(self):
         # 0 票批次：total_count=0，报告不含"未发现风险点"式合规结论（H-5）

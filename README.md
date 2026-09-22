@@ -2,7 +2,9 @@
 
 > 报销/进项发票合规预审产品（ADR-005/006）。定位：数电票时代的发票合规预审工具——上传数电票 XML，返回一页风险报告。
 > 团队：用户（决策）+ 豆包助手（执行 A）+ DeepSeek（执行 B，联合执行）。
-> 状态：P1 闭环完成（XML 上传 → 解析 → 规则 → 一页风险报告，25 项测试通过）。
+> 状态：P1 闭环完成（XML 上传 → 解析 → 规则 → 一页风险报告，35 项测试通过 + 真实服务验证）。
+
+> **⚠️ 使用声明：本项目当前仅限本地/内网学习与演示使用，未实现认证、多租户隔离、验签/验真与持久化；报告仅为规则预审风险提示，不构成任何合规结论。**
 
 ## 目录结构
 
@@ -34,7 +36,7 @@ invoice-precheck/
 
 ```bash
 cd invoice-precheck
-pip install fastapi uvicorn httpx
+pip install fastapi uvicorn httpx defusedxml
 uvicorn app.main:app --reload     # 浏览器打开 http://127.0.0.1:8000
 ```
 

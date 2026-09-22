@@ -19,11 +19,11 @@ import uuid
 from pathlib import Path
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
-from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 
 from .parser import parse_xml
 from .report import DISCLAIMER, build_report, invoice_to_dict
-from .rules import RULESET_VERSION, run_rules
+from .rules import RULESET_VERSION, run_rules_with_states
 
 logger = logging.getLogger("invoice-precheck")
 
@@ -34,6 +34,13 @@ MAX_TOTAL_BYTES = 50 * 1024 * 1024  # 50MB
 app = FastAPI(title="发票合规预审", version="0.1.0")
 
 FRONTEND = Path(__file__).resolve().parent.parent / "frontend" / "index.html"
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception(request, exc):
+    """全局兜底：未捕获异常一律返回通用文案，不泄漏堆栈/内部细节（里程碑评审安全项）。"""
+    logger.exception("unhandled error: %s", exc)
+    return JSONResponse(status_code=500, content={"detail": "服务内部错误，请稍后重试"})
 
 
 @app.middleware("http")
@@ -109,8 +116,9 @@ async def review(files: list[UploadFile] = File(...)):
             logger.exception("parse failed: %s", _safe_name(f.filename))
             failed.append({"name": _safe_name(f.filename), "error": _public_error(e)})
 
-    findings = run_rules(invoices)
-    report = build_report(invoices, findings, failed, RULESET_VERSION, file_count=len(files))
+    findings, rule_states = run_rules_with_states(invoices)
+    report = build_report(invoices, findings, failed, RULESET_VERSION,
+                          file_count=len(files), rule_states=rule_states)
     report["batch_id"] = batch_id
     logger.info(
         "batch=%s files=%d parsed=%d failed=%d findings=%d elapsed_ms=%.0f ruleset=%s",

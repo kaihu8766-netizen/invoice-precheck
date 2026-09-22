@@ -1,4 +1,4 @@
-"""数电票 XML 解析（P1 技术方案第 1 节 · DeepSeek 评审采纳 + 2026-09-22 代码审查修订）。
+"""数电票 XML 解析（P1 技术方案第 1 节 · DeepSeek 评审采纳 + 2026-09-22 代码审查修订 + 里程碑评审加固）。
 
 设计要点：
 - localname 匹配（tag.rsplit('}',1)[-1]）兼容命名空间/厂商差异；
@@ -8,7 +8,9 @@
 - iterparse 读 BytesIO，规避编码声明不符；字段缺失进 parse_warnings 不中断；
 - detect_type 前置：剥 BOM、支持无 prolog 的合法 XML；非 XML 输入明确报"不支持类型"；
 - raw_fields 白名单收集 + 税号脱敏（防 PII 外泄）；
-- 文件大小上限（防超大文件/资源耗尽）。
+- 文件大小上限（防超大文件/资源耗尽）；
+- 安全加固（DeepSeek 里程碑评审）：defusedxml 禁 DTD/外部实体/实体膨胀；签名子树剥离；
+  元素数上限防深度嵌套 DoS；单 XML 多票节点检测（禁止静默丢票）。
 """
 from __future__ import annotations
 
@@ -16,11 +18,22 @@ import hashlib
 import re
 from decimal import Decimal, InvalidOperation
 from io import BytesIO
-from xml.etree import ElementTree
+
+from defusedxml import ElementTree as DET
+from defusedxml.common import DefusedXmlException
 
 from .models import NormalizedInvoice
 
 MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
+MAX_ELEMENTS = 50_000  # XML 元素数上限（防深度嵌套/事件膨胀 DoS）
+_MAX_TEXT = 20_000  # 单节点文本长度上限（防超大文本节点）
+
+# 签名子树（数电票普遍带 XMLDSig，内含 X509SubjectName/Base64 大块；
+# 全局搜索会命中签名内同名节点，必须先剥离再取值）
+_SIGNATURE_TAGS = {"Signature", "XMLSignature", "Signatures"}
+
+# 发票根节点（用于多票检测：单 XML 含多个发票 → 显式告警，禁止静默取最后）
+_ROOT_TAGS = {"发票", "Invoice", "EInvoice"}
 
 # 中文标签 → 模型字段（别名映射；金额/税额/合计只用"合计类"明确标签，防歧义）
 # 双规范兼容：数电票 XML 用中文标签（财政部电子凭证会计数据标准），
@@ -115,23 +128,55 @@ def detect_type(data: bytes) -> str:
     return "unknown"
 
 
-def _collect_fields(data: bytes, warnings: list[str]) -> dict[str, str]:
-    """扁平化收集字段：普通字段取首个，金额/合计类取最后出现。"""
+def _collect_fields(data: bytes, warnings: list[str]) -> tuple[dict[str, str], int]:
+    """扁平化收集字段：普通字段取首个，金额/合计类取最后出现。
+
+    返回 (fields, invoice_node_count)；count>1 表示单 XML 含多个发票节点。
+    安全：defusedxml（禁 DTD/外部实体/膨胀）；签名子树剥离；元素数上限。
+    """
     fields: dict[str, str] = {}
+    invoice_node_count = 0
+    depth = 0
+    skip_depth: int | None = None
+    elem_count = 0
     try:
-        context = ElementTree.iterparse(BytesIO(data), events=("end",))
-        for _event, elem in context:
+        context = DET.iterparse(BytesIO(data), events=("start", "end"))
+        for event, elem in context:
             name = _localname(elem.tag)
+            if event == "start":
+                depth += 1
+                elem_count += 1
+                if elem_count > MAX_ELEMENTS:
+                    raise ValueError(
+                        f"XML 元素数超过上限（>{MAX_ELEMENTS}），疑似资源耗尽攻击，已拒绝"
+                    )
+                if name in _ROOT_TAGS and depth > 0:
+                    invoice_node_count += 1
+                if skip_depth is None and name in _SIGNATURE_TAGS:
+                    skip_depth = depth  # 进入签名子树：以下节点全部跳过
+                continue
+            # end 事件
+            if skip_depth is not None:
+                if depth == skip_depth:
+                    skip_depth = None  # 离开签名子树
+                depth -= 1
+                elem.clear()
+                continue
             if elem.text and elem.text.strip():
                 text = elem.text.strip()
+                if len(text) > _MAX_TEXT:
+                    text = text[:_MAX_TEXT]
                 if name in _LAST_WINS:
                     fields[name] = text  # 合计类覆盖（文档尾部才是合计）
                 else:
                     fields.setdefault(name, text)
+            depth -= 1
             elem.clear()
-    except ElementTree.ParseError as e:
+    except DET.ParseError as e:
         raise ValueError(f"XML 结构损坏：{e}") from e
-    return fields
+    except DefusedXmlException as e:
+        raise ValueError("XML 含被禁止的实体/DTD（外部实体与内部实体膨胀已拒绝）") from e
+    return fields, invoice_node_count
 
 
 def parse_xml(data: bytes) -> NormalizedInvoice:
@@ -147,7 +192,13 @@ def parse_xml(data: bytes) -> NormalizedInvoice:
         raise ValueError(f"不支持的输入类型：{dtype}（仅支持数电票 XML，请转 XML 后上传）")
 
     warnings: list[str] = []
-    fields = _collect_fields(data, warnings)
+    fields, invoice_node_count = _collect_fields(data, warnings)
+
+    if invoice_node_count > 1:
+        warnings.append(
+            f"检测到 {invoice_node_count} 个发票节点（批量导出可能多票合一），仅解析最后一个，"
+            "请单文件单票上传以避免丢票"
+        )
 
     def pick(key: str) -> str | None:
         return _find_by_alias(fields, key)

@@ -68,8 +68,9 @@ def build_report(
     failed: list[dict],
     ruleset_version: str,
     file_count: int | None = None,
+    rule_states: dict[str, str] | None = None,
 ) -> dict:
-    """组装一页风险报告 JSON。"""
+    """组装一页风险报告 JSON。rule_states：{rule_id: 命中/未命中/未执行（…）} 三态。"""
     review_ids = {f.invoice_no for f in findings if f.invoice_no != "-"}
 
     # ① 汇总（按"张"计数；"未见异常"= 无命中且无解析告警）
@@ -119,13 +120,26 @@ def build_report(
     ]
     failed_list = [{"file": f["name"], "error": f["error"]} for f in failed]
 
+    # ④ 规则三态（里程碑评审）：未执行的规则必须可见，禁止沉默
+    rule_states = rule_states or {}
+    rules = [{**m, "state": rule_states.get(m["rule_id"], "未执行")} for m in RULES_META]
+    state_counts = {"命中": 0, "未命中": 0, "未执行": 0}
+    for m in rules:
+        st = m["state"]
+        state_counts["命中" if st == "命中" else ("未命中" if st == "未命中" else "未执行")] += 1
+
     return {
         "summary": summary,
         "findings": risk_list,
         "invoices": invoice_list,
         "failed": failed_list,
         "ruleset_version": ruleset_version,
-        "rules": RULES_META,
+        "rules": rules,
+        "rules_summary": {
+            "enabled_count": len(rules),
+            **state_counts,
+            "note": "未执行的规则因数据不足或未配置未判定，不计入命中；仅列出已启用规则",
+        },
         "generated_at": _dt.datetime.now(_dt.timezone.utc).isoformat(timespec="seconds"),
         "batch_id": uuid.uuid4().hex[:12],
         "scope_note": SCOPE_NOTE,

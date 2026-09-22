@@ -110,6 +110,58 @@ class TestParser(unittest.TestCase):
         inv = parse_xml(bad.encode())
         self.assertTrue(any("20 位" in w for w in inv.parse_warnings))
 
+    def test_xxe_external_entity_rejected(self):
+        # 里程碑评审安全项：外部实体（XXE）必须被拒绝
+        xxe = """<?xml version="1.0"?>
+<!DOCTYPE foo [<!ENTITY xxe SYSTEM "file:///etc/passwd">]>
+<发票><发票号码>&xxe;</发票号码></发票>"""
+        with self.assertRaises(ValueError) as ctx:
+            parse_xml(xxe.encode())
+        self.assertIn("实体", str(ctx.exception))
+
+    def test_billion_laughs_rejected(self):
+        # 里程碑评审安全项：内部实体膨胀（Billion Laughs）必须被拒绝
+        bomb = """<?xml version="1.0"?>
+<!DOCTYPE lolz [
+ <!ENTITY lol "lol">
+ <!ENTITY lol2 "&lol;&lol;&lol;&lol;&lol;">
+ <!ENTITY lol3 "&lol2;&lol2;&lol2;&lol2;&lol2;">
+ <!ENTITY lol4 "&lol3;&lol3;&lol3;&lol3;&lol3;">
+]>
+<lolz>&lol4;</lolz>"""
+        with self.assertRaises(ValueError) as ctx:
+            parse_xml(bomb.encode())
+        self.assertIn("实体", str(ctx.exception))
+
+    def test_multi_invoice_node_warns(self):
+        # 里程碑评审正确性项：单 XML 多个发票节点 → 显式告警，禁止静默丢票
+        multi = """<?xml version="1.0"?>
+<发票列表>
+  <发票><发票号码>26003300000000000001</发票号码></发票>
+  <发票><发票号码>26003300000000000002</发票号码></发票>
+</发票列表>"""
+        inv = parse_xml(multi.encode())
+        self.assertTrue(any("发票节点" in w for w in inv.parse_warnings))
+
+    def test_signature_subtree_stripped(self):
+        # 里程碑评审正确性项：XMLDSig 签名子树内同名节点不得污染票面字段
+        with_sig = """<?xml version="1.0" encoding="UTF-8"?>
+<发票 xmlns:ds="http://www.w3.org/2000/09/xmldsig#">
+  <发票号码>26003300000000000001</发票号码>
+  <开票日期>2026-08-15</开票日期>
+  <ds:Signature>
+    <ds:X509Data>
+      <ds:X509SubjectName>
+        <发票号码>99999999999999999999</发票号码>
+        <合计金额>88888888</合计金额>
+      </ds:X509SubjectName>
+    </ds:X509Data>
+  </ds:Signature>
+</发票>"""
+        inv = parse_xml(with_sig.encode())
+        self.assertEqual(inv.invoice_no, "26003300000000000001")
+        self.assertEqual(inv.amount, Decimal("0"))  # 签名内的合计金额被剥离，不会误采
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

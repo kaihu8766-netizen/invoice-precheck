@@ -189,9 +189,14 @@ function render(d) {
 }
 
 function renderMeta(d) {
-  const rules = (d.rules || []).map(r => `${esc(r.rule_id)} ${esc(r.name)}`).join("、");
+  const rules = (d.rules || []).map(r => `${esc(r.rule_id)} ${esc(r.name)}【${esc(r.state)}】`).join("、");
+  const rs = d.rules_summary || {};
+  const stateNote = rs.enabled_count
+    ? `启用 ${esc(rs.enabled_count)} 条 · 命中 ${esc(rs["命中"] ?? 0)} · 未命中 ${esc(rs["未命中"] ?? 0)} · 未执行 ${esc(rs["未执行"] ?? 0)}`
+    : "";
   meta.innerHTML = `批次 ${esc(d.batch_id)} · 生成 ${esc(d.generated_at)}<br>
-    规则版本：${esc(d.ruleset_version)} · 启用规则：${rules || "—"}<br>
+    规则版本：${esc(d.ruleset_version)} · ${esc(stateNote)}<br>
+    规则清单：${rules || "—"}<br>
     ${esc(d.scope_note)}<br>${esc(d.disclaimer)}`;
 }
 </script>

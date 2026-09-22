@@ -85,19 +85,23 @@ def _tail(inv: NormalizedInvoice, n: int) -> int | None:
 # ---------- 规则实现（纯函数，便于独立测试） ----------
 
 def r1_duplicate(invoices: list[NormalizedInvoice]) -> list[Finding]:
-    """重复报销：发票号码+开票日期+价税合计 完全一致 → 组内>1 全部标记；
+    """重复判定：发票号码+开票日期+价税合计 完全一致 → 组内>1 全部标记；
     整文件重复上传（source_hash 相同）也属确定性重复。
 
-    红线保护：票号缺失或价税合计<=0 的票不参与判重（数据缺失≠合规事实），降级为低危提示。
+    红线保护：票号/开票日期缺失或价税合计<=0 的票不参与判重（数据缺失≠合规事实），
+    降级为低危提示（None 短路——里程碑评审：禁止解析失败的票互相撞 key 误判重复）。
     """
     groups: dict[tuple, list[NormalizedInvoice]] = defaultdict(list)
     hash_groups: dict[str, list[NormalizedInvoice]] = defaultdict(list)
     incomplete: list[NormalizedInvoice] = []
     for inv in invoices:
-        if not inv.invoice_no or inv.total <= 0:
+        key_fields = ((inv.invoice_no or "").strip(),
+                      (inv.issue_date or "").strip(),
+                      f"{inv.total:.2f}")
+        if not key_fields[0] or not key_fields[1] or inv.total <= 0:
             incomplete.append(inv)
             continue
-        key = (inv.invoice_no, inv.issue_date, f"{inv.total:.2f}")
+        key = tuple(key_fields)
         groups[key].append(inv)
         if inv.source_hash:
             hash_groups[inv.source_hash].append(inv)
@@ -106,8 +110,8 @@ def r1_duplicate(invoices: list[NormalizedInvoice]) -> list[Finding]:
     for inv in incomplete:
         out.append(_finding(
             "R1", inv, _SEV_LOW, _CONF_MAYBE, "invoice_no",
-            "数据不完整：无法判重（票号缺失或价税合计<=0）",
-            f"票号：{inv.invoice_no or '(空)'}；价税合计：{inv.total}",
+            "数据不完整：无法判重（票号/开票日期缺失或价税合计<=0）",
+            f"票号：{inv.invoice_no or '(空)'}；日期：{inv.issue_date or '(空)'}；价税合计：{inv.total}",
         ))
     for key, group in groups.items():
         if len(group) > 1:
@@ -115,9 +119,9 @@ def r1_duplicate(invoices: list[NormalizedInvoice]) -> list[Finding]:
                 others = "、".join(f"与 {g.invoice_no}" for g in group if g is not inv)
                 out.append(_finding(
                     "R1", inv, _SEV_HIGH, _CONF_SURE, "invoice_no",
-                    "重复报销：相同票号+日期+金额出现多次",
+                    "本批次内存在票号+开票日期+价税合计相同的发票",
                     f"{key[0]} / {key[1]} / 金额 {key[2]}（{others}）",
-                    "核查是否为同一张发票重复报销",
+                    "核查是否为同一张发票重复报销或重复录入",
                 ))
     for h, group in hash_groups.items():
         if len(group) > 1:
@@ -171,14 +175,21 @@ def r2_header(invoices: list[NormalizedInvoice], cfg: RulesConfig) -> list[Findi
 
 
 def r3_serial(invoices: list[NormalizedInvoice], cfg: RulesConfig) -> list[Finding]:
-    """连号异常：同一供应商（名称+税号分组）票号末 N 位连续或间隔极小（窗口内≥3 张）。"""
+    """连号异常（弱信号提示）：同一供应商（名称+税号）**同开票日**票号末 N 位连续/间隔极小
+    （窗口内≥3 张）。里程碑评审口径收敛：
+    - 加"同开票日"约束（同日批量开票才构成拆分嫌疑；跨天连号不再提示，降误报）；
+    - 红冲票排除（红字发票编号规则不同，不参与连号判定）；
+    - 置信度固定"疑似"（弱信号），输出为提示层级。
+    """
     by_seller: dict[tuple, list[NormalizedInvoice]] = defaultdict(list)
     incomplete: list[NormalizedInvoice] = []
     for inv in invoices:
         if not inv.seller_name or _tail(inv, cfg.serial_tail_len) is None:
             incomplete.append(inv)
             continue
-        by_seller[(inv.seller_name, inv.seller_taxid)].append(inv)
+        if "红" in (inv.invoice_type or ""):
+            continue  # 红冲票排除
+        by_seller[(inv.seller_name, inv.seller_taxid, inv.issue_date)].append(inv)
 
     out: list[Finding] = []
     for inv in incomplete:
@@ -187,7 +198,7 @@ def r3_serial(invoices: list[NormalizedInvoice], cfg: RulesConfig) -> list[Findi
             "数据不完整：供应商缺失或票号不可解析，未做连号检查",
             f"供应商：{inv.seller_name or '(空)'}；票号：{inv.invoice_no or '(空)'}",
         ))
-    for (seller, taxid), group in by_seller.items():
+    for (seller, taxid, day), group in by_seller.items():
         if len(group) < cfg.serial_min_count:
             continue
         tails = sorted(int(g.invoice_no[-cfg.serial_tail_len:]) for g in group)
@@ -203,13 +214,14 @@ def r3_serial(invoices: list[NormalizedInvoice], cfg: RulesConfig) -> list[Findi
                         nums = "、".join(sorted(g.invoice_no for g in marked))
                         for g in marked:
                             out.append(_finding(
-                                "R3", g, _SEV_MED, _CONF_MAYBE, "invoice_no",
-                                "连号异常：同一供应商发票号码连续/间隔极小",
-                                f"供应商：{seller}（{_mask_taxid(taxid)}）；票号：{nums}（末{cfg.serial_tail_len}位差值≤{cfg.serial_max_gap}）",
-                                "关注同一商家集中开票是否拆分/凑票",
+                                "R3", g, _SEV_LOW, _CONF_MAYBE, "invoice_no",
+                                "同一供应商同日有发票号码连续/间隔极小",
+                                f"供应商：{seller}（{_mask_taxid(taxid)}）；开票日：{day}；票号：{nums}"
+                                f"（末{cfg.serial_tail_len}位差值≤{cfg.serial_max_gap}）",
+                                "弱信号提示：关注同日集中开票是否拆分/凑票，需人工核实业务合理性",
                             ))
                         found = True
-                        break  # 每供应商只提示一组，避免重复刷屏
+                        break  # 每供应商每日只提示一组，避免重复刷屏
     return out
 
 
@@ -307,14 +319,39 @@ def r7_date_anomaly(invoices: list[NormalizedInvoice], cfg: RulesConfig) -> list
     return out
 
 
+def _state_for(rule_id: str, rs: list[Finding], cfg: RulesConfig,
+               invoices: list[NormalizedInvoice]) -> str:
+    """规则三态（里程碑评审）：命中 / 未命中 / 未执行（数据不足或未配置）。
+
+    原则：因缺数据/未配置而无法判定的规则必须显式标注，禁止用沉默暗示合规。
+    """
+    real = [f for f in rs if not any(k in f.message for k in ("数据不完整", "未执行", "未配置"))]
+    if real:
+        return "命中"
+    if rule_id == "R2" and (not cfg.company_name or not cfg.company_taxid):
+        return "未执行（未配置企业主体）"
+    if rule_id == "R4" and not any(i.category for i in invoices):
+        return "未执行（缺少报销类别）"
+    if rs:  # 有"数据不完整"类提示但无真正命中
+        return "未执行（本次数据不足）"
+    return "未命中"
+
+
 def run_rules(invoices: list[NormalizedInvoice], config: RulesConfig | None = None) -> list[Finding]:
-    """整批执行全部规则（R1/R3/R6 跨票，必须一次入参）。
+    """整批执行全部规则（兼容入口，返回 findings；如需三态用 run_rules_with_states）。"""
+    return run_rules_with_states(invoices, config)[0]
+
+
+def run_rules_with_states(invoices: list[NormalizedInvoice],
+                          config: RulesConfig | None = None) -> tuple[list[Finding], dict[str, str]]:
+    """整批执行全部规则，返回 (findings, rule_states)。
 
     隔离：逐规则 try/except，单条规则异常降级为批次级 Finding，不拖垮整批。
     红线保护：关键字段缺失时只产出低危/疑似提示，不产出"确定"级对外结论。
     """
     cfg = config or RulesConfig()
     findings: list[Finding] = []
+    states: dict[str, str] = {}
     checks = [
         ("R1", lambda: r1_duplicate(invoices)),
         ("R2", lambda: r2_header(invoices, cfg)),
@@ -325,7 +362,9 @@ def run_rules(invoices: list[NormalizedInvoice], config: RulesConfig | None = No
     ]
     for rule_id, fn in checks:
         try:
-            findings.extend(fn())
+            rs = fn()
+            findings.extend(rs)
+            states[rule_id] = _state_for(rule_id, rs, cfg, invoices)
         except Exception as e:  # 规则隔离：异常不拖垮整批
             findings.append(Finding(
                 rule_id=rule_id, severity=_SEV_LOW, confidence=_CONF_MAYBE,
@@ -335,8 +374,9 @@ def run_rules(invoices: list[NormalizedInvoice], config: RulesConfig | None = No
                 suggestion="联系开发者排查；本报告其余规则不受影响",
                 ruleset_version=RULESET_VERSION,
             ))
+            states[rule_id] = "未执行（规则执行异常）"
     # 稳定排序：严重度 高>中>低 → 置信度 确定>疑似 → 规则号 → 票号
     sev_order = {_SEV_HIGH: 0, _SEV_MED: 1, _SEV_LOW: 2}
     findings.sort(key=lambda f: (sev_order.get(f.severity, 3), f.confidence != _CONF_SURE,
                                 f.rule_id, f.invoice_no))
-    return findings
+    return findings, states
