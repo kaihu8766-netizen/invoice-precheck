@@ -1,0 +1,106 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+<!--
+  语料库票样：official-gd-special.xml
+  来源：财政部《电子凭证会计数据标准——全面数字化的电子发票(试行版)》官方公开样例
+       （商业新知转载 https://www.shangyexinzhi.com/article/8265084.html）
+  省份：广东（EInvoiceTag=SWEI4400）｜ 开票系统：标准税局系统 ｜ 场景：蓝字·增值税专用发票·一般纳税人
+  脱敏：公司名/税号/地址/电话/银行账号/开票人已虚构；金额/税率/日期/税务机关/签名结构保留原样
+  结构：EInvoice 英文标签树（官方标准结构）
+-->
+<EInvoice>
+  <Header>
+    <EIid>23440000000000100001</EIid>
+    <EInvoiceTag>SWEI4400</EInvoiceTag>
+    <Version>0.2</Version>
+    <InherentLabel>
+      <InIssuType>
+        <LabelCode>Y</LabelCode>
+        <LabelName>是否蓝字发票标志</LabelName>
+      </InIssuType>
+      <EInvoiceType>
+        <LabelCode>01</LabelCode>
+        <LabelName>电子发票</LabelName>
+      </EInvoiceType>
+      <GeneralOrSpecialVAT>
+        <LabelCode>01</LabelCode>
+        <LabelName>增值税专用发票</LabelName>
+      </GeneralOrSpecialVAT>
+      <TaxpayerType>
+        <LabelCode>1</LabelCode>
+        <LabelName>一般纳税人</LabelName>
+      </TaxpayerType>
+    </InherentLabel>
+    <UndefinedLabel>
+      <Label>
+        <LabelType>企业行业性质类标签</LabelType>
+        <LabelCode>01,20</LabelCode>
+        <LabelName>示例行业,示例类型</LabelName>
+      </Label>
+      <Label>
+        <LabelType>发票开具方式标签</LabelType>
+        <LabelCode>1</LabelCode>
+        <LabelName>网页开票</LabelName>
+      </Label>
+    </UndefinedLabel>
+  </Header>
+  <EInvoiceData>
+    <SellerInformation>
+      <SellerIdNum>91440000000000000X</SellerIdNum>
+      <SellerName>示例制造集团有限公司</SellerName>
+      <SellerAddr>示例市示例区示例路1号（住所申报）</SellerAddr>
+      <SellerTelNum>13800000000</SellerTelNum>
+      <SellerBankName>示例银行股份有限公司示例支行</SellerBankName>
+      <SellerBankAccNum>0000000000000000000</SellerBankAccNum>
+    </SellerInformation>
+    <BuyerInformation>
+      <BuyerIdNum>91440000000000001Y</BuyerIdNum>
+      <BuyerName>示例商贸有限公司</BuyerName>
+      <BuyerAddr></BuyerAddr>
+      <BuyerTelNum></BuyerTelNum>
+      <BuyerBankName></BuyerBankName>
+      <BuyerBankAccNum></BuyerBankAccNum>
+      <BuyerHandlingName></BuyerHandlingName>
+    </BuyerInformation>
+    <BasicInformation>
+      <TotalAmWithoutTax>2.00</TotalAmWithoutTax>
+      <TotalTaxAm>0.12</TotalTaxAm>
+      <TotalTax-includedAmount>2.12</TotalTax-includedAmount>
+      <TotalTax-includedAmountInChinese>贰圆壹角贰分</TotalTax-includedAmountInChinese>
+      <Drawer>示例</Drawer>
+      <RequestTime>2023-02-23</RequestTime>
+    </BasicInformation>
+    <IssuItemInformation>
+      <ItemName>*人力资源服务*劳务</ItemName>
+      <SpecMod></SpecMod>
+      <MeaUnits></MeaUnits>
+      <Quantity>2</Quantity>
+      <UnPrice>1</UnPrice>
+      <Amount>2.00</Amount>
+      <TaxRate>0.060000</TaxRate>
+      <ComTaxAm>0.120000</ComTaxAm>
+      <TotaltaxIncludedAmount>2.120000</TotaltaxIncludedAmount>
+      <TaxClassificationCode>3040803010000000000</TaxClassificationCode>
+    </IssuItemInformation>
+    <SpecificInformation />
+    <AdditionalInformation>
+      <Remark>备注内容描述</Remark>
+    </AdditionalInformation>
+  </EInvoiceData>
+  <SellerAuthentication>
+    <AuthenticationMethods>02</AuthenticationMethods>
+  </SellerAuthentication>
+  <TaxSupervisionInfo>
+    <InvoiceNumber>23440000000000100001</InvoiceNumber>
+    <IssueTime>2023-02-23 10:08:05</IssueTime>
+    <TaxBureauCode>14400000000</TaxBureauCode>
+    <TaxBureauName>国家税务总局广东省税务局</TaxBureauName>
+  </TaxSupervisionInfo>
+  <TaxBureauSignature>
+    <Reference URI="/Einvoice/Header|/Einvoice/EinvoiceData|/Einvoice/SellerAuthentication|/Einvoice/TaxSupervisionInfo|/Einvoice/TaxBureauSignature/SignatureTime" />
+    <SignatureAlgorithm>1.2.156.10197.1.501</SignatureAlgorithm>
+    <SignatureFormat>DETACH</SignatureFormat>
+    <SignatureTime>2023-02-23 10:08:55</SignatureTime>
+    <SignatureValue></SignatureValue>
+    <KeyInfo />
+  </TaxBureauSignature>
+</EInvoice>

@@ -35,25 +35,36 @@ _SIGNATURE_TAGS = {"Signature", "XMLSignature", "Signatures"}
 # 发票根节点（用于多票检测：单 XML 含多个发票 → 显式告警，禁止静默取最后）
 _ROOT_TAGS = {"发票", "Invoice", "EInvoice"}
 
+# 固定标签容器（EInvoice 英文结构）：InherentLabel 下的 LabelCode/LabelName
+# 需按父节点归位（多个 Label* 冲突，扁平化会丢失"专票/普票"语义）
+_LABEL_CONTAINERS = {"InIssuType", "EInvoiceType", "GeneralOrSpecialVAT", "TaxpayerType"}
+
 # 中文标签 → 模型字段（别名映射；金额/税额/合计只用"合计类"明确标签，防歧义）
-# 双规范兼容：数电票 XML 用中文标签（财政部电子凭证会计数据标准），
-# 传统电子发票用国标拼音缩写（GB/T 电子发票业务数据规范：FPHM/HJJE/JSHJXX 等）。
+# 三方言兼容（2026-09-23 语料库调研结论）：
+#  ① 数电票 XML 中文标签（财政部电子凭证会计数据标准）
+#  ② 传统电子发票国标拼音缩写（GB/T 电子发票业务数据规范：FPHM/HJJE/JSHJXX 等）
+#  ③ EInvoice 英文结构（真实数电票 XML 主流：Header/EInvoiceData/TaxSupervisionInfo；
+#     官方标准样例与网约车/打车软件等第三方开票系统均为此结构）
+# 注意：TotalTax-includedAmount（票面合计）与 TotaltaxIncludedAmount（明细行含税金额）
+# 字段名相近但语义不同——total 只映射前者，绝不含后者（否则明细负行会覆盖合计）。
 _ALIAS = {
-    "invoice_no": ["发票号码", "发票代码及号码", "FPHM"],
-    "issue_date": ["开票日期", "发票开具日期", "KPRQ"],
-    "buyer_name": ["购买方名称", "购方名称", "GMFMC"],
-    "buyer_taxid": ["购买方纳税人识别号", "购方税号", "购买方统一社会信用代码", "GMFNSRSBH"],
-    "seller_name": ["销售方名称", "销方名称", "XSFMC"],
-    "seller_taxid": ["销售方纳税人识别号", "销方税号", "销售方统一社会信用代码", "XSFNSRSBH"],
+    "invoice_no": ["发票号码", "发票代码及号码", "FPHM", "InvoiceNumber"],
+    "issue_date": ["开票日期", "发票开具日期", "KPRQ", "IssueTime", "RequestTime"],
+    "buyer_name": ["购买方名称", "购方名称", "GMFMC", "BuyerName"],
+    "buyer_taxid": ["购买方纳税人识别号", "购方税号", "购买方统一社会信用代码", "GMFNSRSBH", "BuyerIdNum"],
+    "seller_name": ["销售方名称", "销方名称", "XSFMC", "SellerName"],
+    "seller_taxid": ["销售方纳税人识别号", "销方税号", "销售方统一社会信用代码", "XSFNSRSBH", "SellerIdNum"],
     "amount": ["合计金额", "TotalAmWithoutTax", "HJJE"],
     "tax": ["合计税额", "TotalTaxAm", "HJSE"],
-    "total": ["价税合计(小写)", "价税合计", "TotalTaxIncludedAm", "合计", "JSHJXX"],
-    "invoice_type": ["发票类型", "票种", "FPZL"],
+    "total": ["价税合计(小写)", "价税合计", "TotalTaxIncludedAm", "合计", "JSHJXX",
+              "TotalTax-includedAmount"],
+    "invoice_type": ["发票类型", "票种", "FPZL",
+                     "GeneralOrSpecialVAT.LabelName", "EInvoiceType.LabelName"],
 }
 
 # 取"最后出现"的字段（合计节点通常在文档尾部，明细行在前；避免采到首行明细金额）
 _LAST_WINS = {"合计金额", "合计税额", "价税合计", "价税合计(小写)", "合计",
-              "TotalAmWithoutTax", "TotalTaxAm", "TotalTaxIncludedAm",
+              "TotalAmWithoutTax", "TotalTaxAm", "TotalTaxIncludedAm", "TotalTax-includedAmount",
               "HJJE", "HJSE", "JSHJXX"}
 
 # raw_fields 白名单（仅保留规则用得到的键，防整张票面外泄）
@@ -62,6 +73,10 @@ _RAW_WHITELIST = {
     "购买方名称", "购买方纳税人识别号",
     "销售方名称", "销售方纳税人识别号",
     "合计金额", "合计税额", "价税合计",
+    # EInvoice 英文结构键（三方言）
+    "InvoiceNumber", "IssueTime",
+    "BuyerName", "BuyerIdNum", "SellerName", "SellerIdNum",
+    "TotalAmWithoutTax", "TotalTaxAm", "TotalTax-includedAmount",
 }
 
 
@@ -82,6 +97,12 @@ def _mask(value: str) -> str:
     if len(value) >= 8:
         return value[:2] + "****" + value[-2:]
     return value
+
+
+def _is_taxid_key(key: str) -> bool:
+    """判断字段名是否税号/识别号类（中文键与 EInvoice 英文键都覆盖）。"""
+    k = key.lower()
+    return any(x in k for x in ("税号", "识别号", "idnum", "taxid"))
 
 
 def _to_decimal(raw: str | None, warnings: list[str], field_name: str) -> Decimal:
@@ -105,9 +126,10 @@ def _to_iso_date(raw: str | None, warnings: list[str]) -> str:
         warnings.append("开票日期缺失")
         return ""
     s = raw.strip()
-    m = re.fullmatch(r"(\d{4})[-/]?(\d{1,2})[-/]?(\d{1,2})", s)
+    # 兼容：20260815 / 2026-08-15 / 2026/08/15 / 2026-08-15 10:08:05（带时间截断取日期）
+    m = re.match(r"(\d{4})([-/]?)(\d{1,2})\2(\d{1,2})(?:[\sT].*)?$", s)
     if m:
-        y, mo, d = m.groups()
+        y, _, mo, d = m.groups()
         return f"{y}-{int(mo):02d}-{int(d):02d}"
     warnings.append(f"开票日期格式未知：{raw!r}")
     return s
@@ -139,6 +161,7 @@ def _collect_fields(data: bytes, warnings: list[str]) -> tuple[dict[str, str], i
     depth = 0
     skip_depth: int | None = None
     elem_count = 0
+    stack: list[str] = []  # 祖先 localname 栈（用于 InherentLabel 下 Label* 按父节点归位）
     try:
         context = DET.iterparse(BytesIO(data), events=("start", "end"))
         for event, elem in context:
@@ -154,23 +177,30 @@ def _collect_fields(data: bytes, warnings: list[str]) -> tuple[dict[str, str], i
                     invoice_node_count += 1
                 if skip_depth is None and name in _SIGNATURE_TAGS:
                     skip_depth = depth  # 进入签名子树：以下节点全部跳过
+                stack.append(name)
                 continue
             # end 事件
             if skip_depth is not None:
                 if depth == skip_depth:
                     skip_depth = None  # 离开签名子树
                 depth -= 1
+                stack.pop()
                 elem.clear()
                 continue
             if elem.text and elem.text.strip():
                 text = elem.text.strip()
                 if len(text) > _MAX_TEXT:
                     text = text[:_MAX_TEXT]
-                if name in _LAST_WINS:
+                parent = stack[-2] if len(stack) >= 2 else None
+                if name in ("LabelCode", "LabelName") and parent in _LABEL_CONTAINERS:
+                    # EInvoice 英文结构：InherentLabel 下多个 Label* 冲突，按父节点归位
+                    fields[f"{parent}.{name}"] = text
+                elif name in _LAST_WINS:
                     fields[name] = text  # 合计类覆盖（文档尾部才是合计）
                 else:
                     fields.setdefault(name, text)
             depth -= 1
+            stack.pop()
             elem.clear()
     except DET.ParseError as e:
         raise ValueError(f"XML 结构损坏：{e}") from e
@@ -223,7 +253,7 @@ def parse_xml(data: bytes) -> NormalizedInvoice:
 
     # raw_fields 白名单 + 税号脱敏
     raw_fields = {
-        k: (_mask(v) if "税号" in k or "识别号" in k else v)
+        k: (_mask(v) if _is_taxid_key(k) else v)
         for k, v in fields.items() if k in _RAW_WHITELIST
     }
 

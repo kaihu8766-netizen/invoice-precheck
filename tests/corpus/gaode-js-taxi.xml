@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+<!--
+  语料库票样：gaode-js-taxi.xml
+  来源：CSDN《批量汇总XML格式的发票信息》公开 dump 的真实高德打车电子发票
+       （https://blog.csdn.net/Mikowoo007/article/details/163025285，2026-08-06）
+  省份：江苏（EInvoiceTag=SWEI3200）｜ 开票系统：网约车平台（高德打车/365约车）｜ 场景：蓝字·普通发票·交通运输服务·3%征收率·含退款负行
+  脱敏：销售方名称/税号/地址/电话/银行账号/开票人已虚构（原博客买方已打码，保留）；金额/税率/日期/税务机关保留原样
+  结构：EInvoice 英文标签树（真实开票系统输出，Version=0.32，含行级负金额）
+-->
+<EInvoice>
+  <Header>
+    <EIid>26320000000000100001</EIid>
+    <EInvoiceTag>SWEI3200</EInvoiceTag>
+    <Version>0.32</Version>
+    <InherentLabel>
+      <InIssuType />
+      <EInvoiceType />
+      <GeneralOrSpecialVAT />
+      <TaxpayerType />
+    </InherentLabel>
+    <UndefinedLabel>
+      <Label />
+      <Label />
+      <Label />
+    </UndefinedLabel>
+  </Header>
+  <EInvoiceData>
+    <SellerInformation>
+      <SellerIdNum>91320000000000000X</SellerIdNum>
+      <SellerName>示例出行服务有限公司示例分公司</SellerName>
+      <SellerAddr>示例市示例区示例路100号</SellerAddr>
+      <SellerTelNum>13800000000</SellerTelNum>
+      <SellerBankName>示例银行股份有限公司示例支行</SellerBankName>
+      <SellerBankAccNum>0000000000000000000</SellerBankAccNum>
+    </SellerInformation>
+    <BuyerInformation>
+      <BuyerIdNum>91xxxxxxxxxxxxxxxx3</BuyerIdNum>
+      <BuyerName>xxxxxx有限责任公司</BuyerName>
+      <BuyerAddr></BuyerAddr>
+      <BuyerTelNum></BuyerTelNum>
+      <BuyerBankName></BuyerBankName>
+      <BuyerBankAccNum></BuyerBankAccNum>
+    </BuyerInformation>
+    <BasicInformation>
+      <TotalAmWithoutTax>38.39</TotalAmWithoutTax>
+      <TotalTaxAm>1.15</TotalTaxAm>
+      <TotalTax-includedAmountInChinese>叁拾玖元伍角肆分</TotalTax-includedAmountInChinese>
+      <TotalTax-includedAmount>39.54</TotalTax-includedAmount>
+      <RequestTime>2026-07-18 23:45:14</RequestTime>
+      <Drawer>示例</Drawer>
+    </BasicInformation>
+    <IssuItemInformation>
+      <ItemName>*交通运输服务*客运服务费</ItemName>
+      <MeaUnits></MeaUnits>
+      <Quantity>1</Quantity>
+      <UnPrice>39.35</UnPrice>
+      <Amount>39.35</Amount>
+      <TaxRate>0.030000</TaxRate>
+      <ComTaxAm>1.18</ComTaxAm>
+      <TotaltaxIncludedAmount>40.53</TotaltaxIncludedAmount>
+      <TaxClassificationCode>3010101020203000000</TaxClassificationCode>
+    </IssuItemInformation>
+    <IssuItemInformation>
+      <ItemName>*交通运输服务*客运服务费</ItemName>
+      <Amount>-0.96</Amount>
+      <TaxRate>0.030000</TaxRate>
+      <ComTaxAm>-0.03</ComTaxAm>
+      <TotaltaxIncludedAmount>-0.99</TotaltaxIncludedAmount>
+      <TaxClassificationCode>3010101020203000000</TaxClassificationCode>
+    </IssuItemInformation>
+    <SpecificInformation />
+    <AdditionalInformation>
+      <Remark></Remark>
+    </AdditionalInformation>
+  </EInvoiceData>
+  <TaxSupervisionInfo>
+    <InvoiceNumber>26320000000000100001</InvoiceNumber>
+    <IssueTime>2026-07-18</IssueTime>
+    <TaxBureauCode>13200000000</TaxBureauCode>
+    <TaxBureauName>国家税务总局江苏省税务局</TaxBureauName>
+  </TaxSupervisionInfo>
+  <ptbh />
+</EInvoice>
