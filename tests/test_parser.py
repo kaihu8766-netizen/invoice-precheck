@@ -37,20 +37,36 @@ BAD_TOTAL_XML = SAMPLE_XML.replace("<价税合计>1130.00</价税合计>", "<价
 class TestParser(unittest.TestCase):
     def test_detect_type(self):
         self.assertEqual(detect_type(b'<?xml version="1.0"?><a/>'), "xml")
+        # UTF-8 BOM + 无 prolog 的合法 XML 都要识别（代码审查 H5）
+        self.assertEqual(detect_type(b"\xef\xbb\xbf<?xml version=\"1.0\"?><a/>"), "xml")
+        self.assertEqual(detect_type("<发票/>".encode()), "xml")
         self.assertEqual(detect_type(b"PK\x03\x04rest"), "ofd")
         self.assertEqual(detect_type(b"%PDF-1.7"), "pdf")
         self.assertEqual(detect_type(b"\x89PNG"), "unknown")
+
+    def test_parse_rejects_non_xml(self):
+        with self.assertRaises(ValueError):
+            parse_xml(b"%PDF-1.7 data")
+        with self.assertRaises(ValueError):
+            parse_xml(b"PK\x03\x04rest")
+
+    def test_parse_rejects_oversize(self):
+        with self.assertRaises(ValueError):
+            parse_xml(b"<?xml?>" + b"a" * (10 * 1024 * 1024))
 
     def test_parse_normal(self):
         inv = parse_xml(SAMPLE_XML.encode())
         self.assertEqual(inv.invoice_no, "04300260031112345678")
         self.assertEqual(inv.issue_date, "2026-08-15")
         self.assertEqual(inv.buyer_name, "示例科技有限公司")
+        self.assertEqual(inv.seller_taxid, "91110108XXXXXXXXXX")
         self.assertEqual(inv.amount, Decimal("1000.00"))
         self.assertEqual(inv.tax, Decimal("130.00"))
         self.assertEqual(inv.total, Decimal("1130.00"))
         self.assertNotIn("勾稽异常", " ".join(inv.parse_warnings))
         self.assertTrue(inv.source_hash)
+        # 税号脱敏（H6）
+        self.assertIn("****", inv.raw_fields["购买方纳税人识别号"])
 
     def test_star_tax(self):
         inv = parse_xml(STAR_TAX_XML.encode())

@@ -31,6 +31,7 @@ class NormalizedInvoice:
     buyer_name: str
     buyer_taxid: str
     seller_name: str                   # 销售方名称（规则 R3 连号按供应商分组）
+    seller_taxid: str = ""             # 销售方税号（分组键 (名称,税号)，防同名不同税号合并）
 
     # 报销侧（可选：CSV 批量导入时携带；单 XML 上传时为空）
     category: Optional[str] = None     # 类别：差旅/招待/办公/交通/其他
@@ -53,7 +54,8 @@ class Finding:
     severity: Severity                 # 严重度：看财务后果
     confidence: Confidence             # 置信度：看证据强度（双标签分离，防单色阶误导）
     invoice_no: str
-    field: str                         # 命中字段（如 total / buyer_name / issue_date）
+    field: str                         # 命中字段（单字段，一条 Finding 只报一个字段）
     message: str                       # 人类可读描述
-    evidence: str                      # 原始证据（票号/金额/供应商等）
+    evidence: str                      # 原始证据（票号/金额/供应商等；敏感字段已脱敏）
     suggestion: str = ""               # 建议动作
+    ruleset_version: str = ""          # 规则版本（报告溯源用，审计要求）
