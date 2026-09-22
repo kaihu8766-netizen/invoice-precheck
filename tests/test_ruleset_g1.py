@@ -33,16 +33,17 @@ def _inv(invoice_no="23440000000000100001", issue_date="2026-01-01",
 
 class TestRulesetMeta(unittest.TestCase):
     def test_ruleset_version_bumped(self):
-        """G1 发布应升级版本（0.1.1 → 0.2.0）并带生效日期。"""
-        self.assertEqual(RULESET_VERSION, "0.2.0")
+        """C1 发布应升级版本（0.2.0 → 0.3.0）并带生效日期。"""
+        self.assertEqual(RULESET_VERSION, "0.3.0")
         self.assertEqual(RULESET_META["version"], RULESET_VERSION)
         self.assertEqual(RULESET_META["effective_date"], "2026-09-23")
 
     def test_ruleset_meta_contains_all_rules_with_basis(self):
-        """规则包必须含 R1-R8（含此前漂移缺失的 R8）且每规则有名称/严重度/政策依据。"""
+        """规则包必须含 R1-R11（含 C1 新增 R9/R10/R11）且每规则有名称/严重度/政策依据。"""
         ids = [r["rule_id"] for r in RULESET_META["rules"]]
-        self.assertEqual(ids, ["R1", "R2", "R3", "R4", "R6", "R7", "R8"],
-                         "规则包应完整列出全部已实现规则（含 R8）")
+        self.assertEqual(ids, ["R1", "R2", "R3", "R4", "R6", "R7", "R8",
+                               "R9", "R10", "R11"],
+                         "规则包应完整列出全部已实现规则（含 R8-R11）")
         for r in RULESET_META["rules"]:
             with self.subTest(rule=r["rule_id"]):
                 self.assertTrue(r["name"], f"{r['rule_id']} 缺名称")
@@ -107,16 +108,17 @@ class TestReportG1(unittest.TestCase):
     def test_report_ruleset_meta(self):
         """报告输出规则包元数据（版本/名称/生效日期/诚实声明）。"""
         rs = self.report["ruleset"]
-        self.assertEqual(rs["version"], "0.2.0")
+        self.assertEqual(rs["version"], "0.3.0")
         self.assertEqual(rs["effective_date"], "2026-09-23")
         self.assertTrue(rs["name"])
         self.assertTrue(rs["scope_note"])
 
     def test_report_rules_include_r8(self):
-        """报告规则清单必须含 R8（修复 RULES_META 漂移：R8 曾缺失）。"""
+        """报告规则清单必须含 R8-R11（修复 RULES_META 漂移：R8 曾缺失）。"""
         ids = [r["rule_id"] for r in self.report["rules"]]
-        self.assertIn("R8", ids)
-        self.assertEqual(len(self.report["rules"]), 7)
+        for rid in ("R8", "R9", "R10", "R11"):
+            self.assertIn(rid, ids, f"规则清单缺 {rid}")
+        self.assertEqual(len(self.report["rules"]), 10)
 
     def test_report_evidence_chain_serialized(self):
         """报告 risk_list 输出结构化证据链（JSON 安全 dict）。"""

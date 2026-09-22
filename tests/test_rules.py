@@ -1,4 +1,4 @@
-"""rules 自测：构造整批 NormalizedInvoice，验证 R1/R2/R3/R4/R6/R7 命中与不误报。"""
+"""rules 自测：构造整批 NormalizedInvoice，验证 R1-R11 命中与不误报。"""
 import sys
 import unittest
 from decimal import Decimal
@@ -6,20 +6,24 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from app.models import NormalizedInvoice
+from app.models import ItemDetail, NormalizedInvoice
 from app.rules import RulesConfig, run_rules
 
 
 def inv(no, date, amount, total, seller="北京华信办公用品有限公司",
         buyer="示例科技有限公司", taxid="91310000MA1FL1XXXX",
         category="办公", reimburse=None, tax=Decimal("0"),
-        invoice_type="专票", is_red_letter=False, is_differential=False):
+        invoice_type="专票", is_red_letter=False, is_differential=False,
+        items=None, differential_deduction=None, red_letter_blue_no="",
+        raw_fields=None):
     return NormalizedInvoice(
         invoice_no=no, invoice_type=invoice_type, issue_date=date,
         amount=amount, tax=tax, total=total,
         buyer_name=buyer, buyer_taxid=taxid, seller_name=seller,
         category=category, reimburse_date=reimburse,
         is_red_letter=is_red_letter, is_differential=is_differential,
+        items=items or [], differential_deduction=differential_deduction,
+        red_letter_blue_no=red_letter_blue_no, raw_fields=raw_fields or {},
     )
 
 
@@ -206,13 +210,15 @@ class TestRules(unittest.TestCase):
         self.assertEqual(len(r8), 0)
 
     def test_r8_differential_pending(self):
-        """差额征税票 → 低危占位声明（不误报为异常，KCE 专项校验 P2 待支持）。"""
+        """差额征税票：R8 不再输出占位声明（C1 移交 R9 专项）；
+        差额票勾稽成立 + KCE 存在 → R8/R9 均不报。"""
         f = run_rules([inv("1001", "2026-08-01", Decimal("800"), Decimal("848"),
-                           tax=Decimal("48"), is_differential=True)], CFG)
-        r8 = [x for x in f if x.rule_id == "R8"]
-        self.assertEqual(len(r8), 1)
-        self.assertEqual(r8[0].severity, "低")
-        self.assertIn("差额征税", r8[0].message)
+                           tax=Decimal("48"), is_differential=True,
+                           differential_deduction=Decimal("200.00"),
+                           raw_fields={"Remark": "差额征税：200.00。"})], CFG)
+        self.assertFalse([x for x in f if x.rule_id == "R8"])
+        self.assertFalse([x for x in f if x.rule_id == "R9"],
+                         "正常差额票（KCE 存在且备注一致）不应命中 R9")
 
     def test_r8_reconcile_defense(self):
         """勾稽不符 → 高危（确定性）（parser 已拦截，规则层独立防御复核）。"""

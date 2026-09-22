@@ -12,15 +12,16 @@
 from __future__ import annotations
 
 import datetime as _dt
+import re
 from collections import defaultdict
 from dataclasses import dataclass, field
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 
 from .models import EvidenceLink, Finding, NormalizedInvoice
 
 # ---------- G1 规则包元数据（单一权威来源；report/前端均引用此处） ----------
 
-RULESET_VERSION = "0.2.0"
+RULESET_VERSION = "0.3.0"
 RULESET_EFFECTIVE_DATE = "2026-09-23"  # 规则包生效日期（报告溯源：按哪版规则判的）
 
 # 政策依据说明（G1）：按主题引用法规/管理办法/业界实践，不编造条款号；
@@ -45,7 +46,15 @@ RULESET_META = {
         {"rule_id": "R7", "name": "日期异常", "severity": "中",
          "basis": "企业所得税税前扣除凭证管理办法（国家税务总局公告2018年第28号）跨期口径"},
         {"rule_id": "R8", "name": "金额异常类型化", "severity": "高",
-         "basis": "数电票会计数据标准（勾稽关系）；差额征税/红冲规则（差额征税与数电票红冲口径）"},
+         "basis": "数电票会计数据标准（勾稽关系）；差额征税与红冲规则（总局公告2024年第11号口径）"},
+        {"rule_id": "R9", "name": "差额征税专项", "severity": "中",
+         "basis": "GB/T《电子发票业务数据规范 第2部分：特定要素》差额征税要素 EI386（KCE 扣除额）；"
+                 "服务商公开文档（金蝶/百望）差额开票口径；真实差额票字段形态待核验"},
+        {"rule_id": "R10", "name": "明细行勾稽（行级一致性）", "severity": "高",
+         "basis": "数电票会计数据标准（明细-合计勾稽关系）；GB/T 电子发票业务数据规范"},
+        {"rule_id": "R11", "name": "红冲关联（占位）", "severity": "中",
+         "basis": "国家税务总局公告2024年第11号（红字数电票开具规则）；EI390/EI391；"
+                 "完整红冲关联需历史发票库（当前单票上传仅票面检查）"},
     ],
 }
 
@@ -421,7 +430,6 @@ def r7_date_anomaly(invoices: list[NormalizedInvoice], cfg: RulesConfig) -> list
 # 金额异常类型（type field 承载，规则 R8 输出类型化 findings，不做一刀切"金额异常"）
 ANOMALY_RECONCILE = "勾稽不符"          # amount+tax ≠ total（防御性复核：parser 已挡，规则层独立验证）
 ANOMALY_NEGATIVE_NON_RED = "负数非红冲"   # 负金额但非红字票（红冲负数合法，非红负数疑似异常）
-ANOMALY_DIFFERENTIAL_PENDING = "差额征税-专项待支持"  # 差额票勾稽按扣除后口径，KCE 专项校验 P2 待支持（占位声明，不误报）
 ANOMALY_ABSURD_TOTAL = "金额超合理阈值"    # 单票价税合计超合理上限（占位阈值，可配置）
 
 
@@ -469,19 +477,7 @@ def r8_amount_anomaly(invoices: list[NormalizedInvoice], cfg: RulesConfig) -> li
             ))
             continue
         if inv.is_differential:
-            out.append(_finding(
-                "R8", inv, _SEV_LOW, _CONF_MAYBE, "total",
-                f"金额说明（{ANOMALY_DIFFERENTIAL_PENDING}）：差额征税票，勾稽按扣除后口径",
-                f"价税合计 {inv.total}；差额扣除额（EI386/KCE）专项校验待 P2 支持",
-                "当前按票面勾稽校验；差额票的扣除额-税额联动核验登记 P2 待办",
-                evidence_chain=[
-                    _link("total", f"{inv.total:.2f}", f"{inv.total:.2f}", note="票面价税合计"),
-                    _link("differential_deduction",
-                          f"{inv.differential_deduction:.2f}" if inv.differential_deduction is not None else "(空)",
-                          f"{inv.differential_deduction}" if inv.differential_deduction is not None else "",
-                          note="差额扣除额 KCE（专项校验待支持）"),
-                ],
-            ))
+            # C1：差额票专项校验移交 R9（存在性/合理性/一致性），R8 不再输出占位声明
             continue
         if abs(inv.total) > cfg.max_plausible_total:
             out.append(_finding(
@@ -493,6 +489,177 @@ def r8_amount_anomaly(invoices: list[NormalizedInvoice], cfg: RulesConfig) -> li
                     _link("total", f"{inv.total:.2f}", f"{inv.total:.2f}", note="票面价税合计"),
                     _link("config.max_plausible_total", f"{cfg.max_plausible_total}",
                           f"{cfg.max_plausible_total}", note="占位阈值（待真实数据校准）"),
+                ],
+            ))
+    return out
+
+
+def _parse_rate(raw: str) -> Decimal | None:
+    """税率原文 → Decimal 比例（"13%"→0.13、"0.06"→0.06、"6"→0.06）；
+    不可解析（"*"/"免税"/"不征税"/空）→ None（C1 R10 行级税率自洽用）。"""
+    s = (raw or "").strip()
+    if not s or s in ("*", "免税", "不征税"):
+        return None
+    try:
+        if s.endswith("%"):
+            return Decimal(s[:-1]) / Decimal("100")
+        v = Decimal(s)
+        if v > 1:  # "6" → 0.06
+            v = v / Decimal("100")
+        return v
+    except InvalidOperation:
+        return None
+
+
+# ---------- C1 规范驱动规则（2026-09-23：差额专项/行级勾稽/红冲关联占位） ----------
+
+def r9_differential(invoices: list[NormalizedInvoice], cfg: RulesConfig) -> list[Finding]:
+    """差额征税专项（C1，取代 R8 的占位声明）。
+
+    触发：is_differential（备注含"差额征税"或存在 KCE 扣除额）。
+    检查：① 差额票必须携带扣除额（KCE 缺失 → 中/疑似）
+         ② 扣除额 ≤ 价税合计（KCE>total → 高/疑似，数据错误）
+         ③ 备注"差额征税：XX。"金额与 KCE 一致（可解析时比对；不一致 → 中/疑似）
+    口径登记：差额票计税基础 = 销售额 - 扣除额（合成依据 EI386 + 金蝶差额开票口径）；
+    完整"扣除额-税额联动核验"待真实差额票核验（真实字段形态未核验，诚实声明）。
+    """
+    out: list[Finding] = []
+    for inv in invoices:
+        if not inv.is_differential:
+            continue
+        remark = inv.raw_fields.get("Remark") or inv.raw_fields.get("备注") or ""
+        kce = inv.differential_deduction
+        if kce is None:
+            out.append(_finding(
+                "R9", inv, _SEV_MED, _CONF_MAYBE, "differential_deduction",
+                "差额征税票缺少扣除额（KCE）字段，无法核验差额口径",
+                f"备注：{remark or '(空)'}；票种：{inv.invoice_type or '未知'}",
+                "差额征税票应携带扣除额（EI386/KCE）；真实票字段布局待核验",
+                evidence_chain=[
+                    _link("Remark", remark or "(空)", note="备注原文"),
+                    _link("differential_deduction", "(空)", note="KCE 扣除额缺失"),
+                ],
+            ))
+            continue
+        if kce > inv.total:
+            out.append(_finding(
+                "R9", inv, _SEV_HIGH, _CONF_MAYBE, "differential_deduction",
+                "差额征税票扣除额大于价税合计（数据错误）",
+                f"扣除额 {kce} > 价税合计 {inv.total}",
+                "扣除额不能大于票面合计，核对票面与扣除额字段",
+                evidence_chain=[
+                    _link("differential_deduction", f"{kce:.2f}", f"{kce:.2f}", note="扣除额 KCE"),
+                    _link("total", f"{inv.total:.2f}", f"{inv.total:.2f}", note="票面价税合计"),
+                ],
+            ))
+            continue
+        if remark:
+            m = re.search(r"差额征税[:：]\s*([\d.]+)", remark)
+            if m:
+                try:
+                    remark_kce = Decimal(m.group(1))
+                except InvalidOperation:
+                    remark_kce = None
+                if remark_kce is not None and remark_kce != kce:
+                    out.append(_finding(
+                        "R9", inv, _SEV_MED, _CONF_MAYBE, "Remark",
+                        "差额征税备注金额与扣除额（KCE）不一致",
+                        f"备注：{remark}；扣除额：{kce}",
+                        "备注申报口径与扣除额字段应一致；真实票备注格式多样，人工复核",
+                        evidence_chain=[
+                            _link("Remark", remark, note="备注原文"),
+                            _link("differential_deduction", f"{kce:.2f}", f"{kce:.2f}",
+                                  note="KCE 扣除额（备注解析值 {remark_kce}）"),
+                        ],
+                    ))
+    return out
+
+
+def r10_item_reconciliation(invoices: list[NormalizedInvoice],
+                            cfg: RulesConfig) -> list[Finding]:
+    """明细行勾稽（C1，行级一致性）。
+
+    检查（items 非空时）：
+    ① Σ行金额 ≠ 票面金额（容差 ±0.01）→ 高/疑似（金额口径不一致）
+    ② Σ行税额 ≠ 票面税额 → 高/疑似
+    ③ 行级税率自洽：amount×rate ≈ tax_amount（税率原文可解析为数值时；"*"/免税跳过）
+    items 空（无行容器方言/单行汇总票）→ 不产出（三态=未执行：数据不足）。
+    """
+    out: list[Finding] = []
+    for inv in invoices:
+        if not inv.items:
+            continue
+        sum_amount = sum((i.amount for i in inv.items), Decimal("0"))
+        sum_tax = sum((i.tax_amount for i in inv.items), Decimal("0"))
+        if abs(sum_amount - inv.amount) > Decimal("0.01"):
+            out.append(_finding(
+                "R10", inv, _SEV_HIGH, _CONF_MAYBE, "items",
+                "明细行金额合计与票面金额不符",
+                f"Σ行 {sum_amount} ≠ 票面金额 {inv.amount}（{len(inv.items)} 行）",
+                "行级与票面金额口径不一致，核对解析与票面",
+                evidence_chain=[
+                    _link("items", f"{len(inv.items)} 行", f"Σ{sum_amount:.2f}",
+                          note="Σ行金额合计"),
+                    _link("amount", f"{inv.amount:.2f}", f"{inv.amount:.2f}", note="票面金额"),
+                ],
+            ))
+        if abs(sum_tax - inv.tax) > Decimal("0.01"):
+            out.append(_finding(
+                "R10", inv, _SEV_HIGH, _CONF_MAYBE, "items",
+                "明细行税额合计与票面税额不符",
+                f"Σ行 {sum_tax} ≠ 票面税额 {inv.tax}（{len(inv.items)} 行）",
+                "行级与票面税额口径不一致，核对解析与票面",
+                evidence_chain=[
+                    _link("items", f"{len(inv.items)} 行", f"Σ{sum_tax:.2f}",
+                          note="Σ行税额合计"),
+                    _link("tax", f"{inv.tax:.2f}", f"{inv.tax:.2f}", note="票面税额"),
+                ],
+            ))
+        for idx, it in enumerate(inv.items, start=1):
+            rate = _parse_rate(it.tax_rate)
+            if rate is None:
+                continue  # 税率不可解析（"*"/"免税"/"不征税"）→ 跳过
+            expected = (it.amount * rate).quantize(Decimal("0.01"))
+            if abs(expected - it.tax_amount) > Decimal("0.01"):
+                out.append(_finding(
+                    "R10", inv, _SEV_MED, _CONF_MAYBE, "items",
+                    f"明细行第 {idx} 行税额与税率不符",
+                    f"行 {idx}：{it.name or '(未命名)'} 金额 {it.amount} × 税率 {it.tax_rate} = "
+                    f"{expected} ≠ 税额 {it.tax_amount}",
+                    "行级税额与票面税率口径不一致，核对票面",
+                    evidence_chain=[
+                        _link("items", f"行{idx}.{it.name or '(未命名)'}",
+                              f"{it.amount}×{it.tax_rate}", row=idx,
+                              note=f"期望税额 {expected}"),
+                        _link("items", f"{it.tax_amount:.2f}", f"{it.tax_amount:.2f}", row=idx,
+                              note="行级实际税额"),
+                    ],
+                ))
+    return out
+
+
+def r11_red_letter_link(invoices: list[NormalizedInvoice],
+                        cfg: RulesConfig) -> list[Finding]:
+    """红冲关联（C1 占位）。
+
+    红字票必须携带被冲蓝字发票号码（EI390）；缺失 → 低/疑似（无法关联校验）。
+    完整红冲关联（蓝票存在性/金额匹配/跨期状态）需历史发票库——当前单票上传仅票面检查（诚实声明）。
+    真实红冲 EInvoice 的被冲蓝票号字段布局待真实票核验（中文方言已确认字段）。
+    """
+    out: list[Finding] = []
+    for inv in invoices:
+        if not inv.is_red_letter:
+            continue
+        if not inv.red_letter_blue_no:
+            out.append(_finding(
+                "R11", inv, _SEV_LOW, _CONF_MAYBE, "red_letter_blue_no",
+                "红字发票未携带被冲蓝字发票号码，无法做红冲关联校验",
+                f"票种：{inv.invoice_type or '未知'}；票号：{inv.invoice_no or '(空)'}",
+                "红冲票应能关联被冲蓝票（EI390 被红冲蓝字电子发票号码）；真实红冲 EInvoice 字段布局待核验；"
+                "完整红冲关联需历史发票库（当前仅票面检查）",
+                evidence_chain=[
+                    _link("is_red_letter", str(inv.is_red_letter), note="红冲标志=True"),
+                    _link("red_letter_blue_no", "(空)", note="被红冲蓝字发票号码缺失"),
                 ],
             ))
     return out
@@ -511,6 +678,12 @@ def _state_for(rule_id: str, rs: list[Finding], cfg: RulesConfig,
         return "未执行（未配置企业主体）"
     if rule_id == "R4" and not any(i.category for i in invoices):
         return "未执行（缺少报销类别）"
+    if rule_id == "R10" and not any(i.items for i in invoices):
+        return "未执行（无明细行数据）"
+    if rule_id == "R9" and not any(i.is_differential for i in invoices):
+        return "未执行（本批次无差额征税票）"
+    if rule_id == "R11" and not any(i.is_red_letter for i in invoices):
+        return "未执行（本批次无红字票）"
     if rs:  # 有"数据不完整"类提示但无真正命中
         return "未执行（本次数据不足）"
     return "未命中"
@@ -539,6 +712,9 @@ def run_rules_with_states(invoices: list[NormalizedInvoice],
         ("R6", lambda: r6_concentrated(invoices, cfg)),
         ("R7", lambda: r7_date_anomaly(invoices, cfg)),
         ("R8", lambda: r8_amount_anomaly(invoices, cfg)),
+        ("R9", lambda: r9_differential(invoices, cfg)),
+        ("R10", lambda: r10_item_reconciliation(invoices, cfg)),
+        ("R11", lambda: r11_red_letter_link(invoices, cfg)),
     ]
     for rule_id, fn in checks:
         try:
