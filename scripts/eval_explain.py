@@ -15,6 +15,7 @@
 import argparse
 import json
 import os
+import re
 import sys
 import time
 from pathlib import Path
@@ -23,6 +24,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from app import llm_explain  # noqa: E402
+from app.llm_explain import PROMPT_VERSION  # noqa: E402
 from app.rules import RULESET_META  # noqa: E402
 from scripts.explain_eval_cases import EXPLAIN_CASES  # noqa: E402
 
@@ -72,9 +74,32 @@ def _input_fields(contract: dict) -> set:
     return {e["field"] for e in contract["evidence_chain"]} | set(contract.keys())
 
 
-def run_eval(mode: str, rules_meta: dict) -> dict:
+def _rubric_proxy(exp: dict) -> dict:
+    """P3 半自动 rubric 代理指标（真实人工 rubric 需双盲，代理指标仅辅助初筛）。
+
+    actionable：action 含分步标记（1）2）…）或高信息动词
+    readable：what 平均句长 ≤ 45 字（通俗性代理）
+    """
+    action = exp.get("action", "")
+    step_marks = len(re.findall(r"\d[）)]|[（(]\d", action)) if isinstance(action, str) else 0
+    verbs = sum(1 for v in ("核对", "确认", "联系", "补充", "修正", "检查", "查看", "提供", "重开", "作废", "红冲", "入账", "复核", "记录")
+                if v in action)
+    what = exp.get("what", "")
+    avg_len = len(what) / max(1, len(re.findall(r"[。！？；\n]", what)) + 1) if isinstance(what, str) else 999
+    return {
+        "actionable": bool(step_marks >= 2 or verbs >= 2),
+        "readable": avg_len <= 45,
+        "avg_sentence_len": round(avg_len, 1),
+        "action_verbs": verbs,
+        "action_steps": step_marks,
+    }
+
+
+def run_eval(mode: str, rules_meta: dict, model: str | None = None,
+             prompt_version: str = PROMPT_VERSION) -> dict:
     results = []
     stats = {k: 0 for k in HARD_CHECKS}
+    rubric = {"actionable": 0, "readable": 0}
     for case in EXPLAIN_CASES:
         f = {k: case[k] for k in ("rule_id", "severity", "confidence", "invoice_no",
                                   "field", "message", "evidence", "suggestion",
@@ -85,10 +110,11 @@ def run_eval(mode: str, rules_meta: dict) -> dict:
 
         if mode == "llm":
             llm_explain.LLM_ENABLED = True
-            raw = llm_explain._call_llm(contract)
+            raw = llm_explain._call_llm(contract, prompt_version=prompt_version, model=model)
             exp = None
             if raw:
-                exp = llm_explain._validate_llm_output(raw, contract)
+                exp = llm_explain._validate_llm_output(raw, contract,
+                                                       prompt_version=prompt_version, model=model)
             if exp is None:
                 exp = llm_explain._template_explain(f, 0)
         else:
@@ -99,14 +125,21 @@ def run_eval(mode: str, rules_meta: dict) -> dict:
         for k in HARD_CHECKS:
             if flags[k]:
                 stats[k] += 1
+        rp = _rubric_proxy(exp)
+        for k in ("actionable", "readable"):
+            if rp[k]:
+                rubric[k] += 1
         results.append({"id": case["id"], "rule_id": case["rule_id"],
-                        "mode": mode, "source": exp.get("source"),
+                        "mode": mode, "model": model, "prompt_version": prompt_version,
+                        "source": exp.get("source"),
                         "pass": not fails and flags["length"],
-                        "flags": flags, "failures": fails})
+                        "flags": flags, "failures": fails,
+                        "rubric": rp})
     total = len(EXPLAIN_CASES)
     return {
-        "mode": mode, "total": total,
+        "mode": mode, "model": model, "prompt_version": prompt_version, "total": total,
         "metrics": {k: round(stats[k] / total, 4) for k in HARD_CHECKS},
+        "rubric_proxy": {k: round(rubric[k] / total, 4) for k in rubric},
         "passed": sum(1 for r in results if r["pass"]),
         "results": results,
     }
@@ -116,7 +149,9 @@ def main() -> int:
     ap = argparse.ArgumentParser(description="F-P2 受控 LLM 解释评测")
     ap.add_argument("--mode", choices=("deterministic", "llm"), default="deterministic")
     ap.add_argument("--report", type=Path, default=None, help="报告 JSON 输出路径")
-    ap.add_argument("--threshold", type=float, default=1.0 if True else 0.95)
+    ap.add_argument("--model", default=None, help="LLM 模型（默认 deepseek-v4-flash）")
+    ap.add_argument("--prompt-version", default=PROMPT_VERSION,
+                    choices=llm_explain.PROMPT_VERSIONS, help="prompt 版本（P3 对比）")
     args = ap.parse_args()
     if args.mode == "llm" and not (os.environ.get("INVOICE_LLM_ENABLED") == "1"
                                    and os.environ.get("DEEPSEEK_API_KEY")):
@@ -126,7 +161,8 @@ def main() -> int:
     rules_meta = {m["rule_id"]: m for m in RULESET_META["rules"]}
     llm_explain._cache.clear()
     t0 = time.time()
-    report = run_eval(args.mode, rules_meta)
+    report = run_eval(args.mode, rules_meta, model=args.model,
+                      prompt_version=args.prompt_version)
     report["elapsed_s"] = round(time.time() - t0, 1)
 
     # 控制台汇总
@@ -134,6 +170,8 @@ def main() -> int:
           f"{report['passed']}/{report['total']} · 耗时 {report['elapsed_s']}s")
     for k, v in report["metrics"].items():
         print(f"  {k}: {v:.1%}")
+    if "rubric_proxy" in report:
+        print("  rubric(代理): " + " · ".join(f"{k}={v:.0%}" for k, v in report["rubric_proxy"].items()))
     bad = [r for r in report["results"] if not r["pass"]]
     if bad:
         print("\n未通过样本：")
