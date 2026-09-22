@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# 密钥与敏感文件（密钥安全规范 v1.0）
+.env
+.env.*
+*.key
+*.pem
+*.p12
+secrets/
+!*.example
+
+# 本地数据与产物
+data/
+*.csv
+!tests/data/*.csv
+
+# 系统
+.DS_Store
+.idea/
+.vscode/
