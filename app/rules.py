@@ -57,6 +57,8 @@ class RulesConfig:
     serial_min_count: int = 3         # 窗口内最少票数（≥3 才提示）
     concentrate_threshold: int = 6    # 同供应商同日票数阈值
     max_carry_days: int = 365         # 开票距报销最长天数
+    # P0-8 金额异常阈值（占位口径：待真实数据校准，见 manifest.governance.required_for_v1 P0-8）
+    max_plausible_total: Decimal = Decimal("1000000")  # 单票价税合计合理上限（占位）
 
 
 def _finding(rule_id: str, inv: NormalizedInvoice, severity: str, confidence: str,
@@ -319,6 +321,63 @@ def r7_date_anomaly(invoices: list[NormalizedInvoice], cfg: RulesConfig) -> list
     return out
 
 
+# ---------- P0-8 金额异常类型化（DeepSeek 评审 required_for_v1；2026-09-23 落地） ----------
+
+# 金额异常类型（type field 承载，规则 R8 输出类型化 findings，不做一刀切"金额异常"）
+ANOMALY_RECONCILE = "勾稽不符"          # amount+tax ≠ total（防御性复核：parser 已挡，规则层独立验证）
+ANOMALY_NEGATIVE_NON_RED = "负数非红冲"   # 负金额但非红字票（红冲负数合法，非红负数疑似异常）
+ANOMALY_DIFFERENTIAL_PENDING = "差额征税-专项待支持"  # 差额票勾稽按扣除后口径，KCE 专项校验 P2 待支持（占位声明，不误报）
+ANOMALY_ABSURD_TOTAL = "金额超合理阈值"    # 单票价税合计超合理上限（占位阈值，可配置）
+
+
+def r8_amount_anomaly(invoices: list[NormalizedInvoice], cfg: RulesConfig) -> list[Finding]:
+    """金额异常类型化（P0-8 落地 + EI386 差额占位）。
+
+    判定（红字/差额优先豁免误报）：
+    - 勾稽不符（|amount+tax-total|>0.01）→ 高危（确定性）；parser 已拦截，此为独立防御复核
+    - 负数金额且非红冲 → 高危（疑似异常）
+    - 负数金额且红冲 → 通过（红冲负数合法）
+    - 差额征税票 → 低危提示：勾稽按扣除后口径，KCE 专项校验 P2 待支持（占位，不误报为异常）
+    - 单票价税合计绝对值超 max_plausible_total → 疑似（占位阈值，待真实数据校准）
+    """
+    out: list[Finding] = []
+    for inv in invoices:
+        if abs((inv.amount + inv.tax) - inv.total) > Decimal("0.01"):
+            out.append(_finding(
+                "R8", inv, _SEV_HIGH, _CONF_SURE, "total",
+                f"金额异常（{ANOMALY_RECONCILE}）：金额+税额≠价税合计",
+                f"{inv.amount}+{inv.tax}={inv.amount + inv.tax} ≠ {inv.total}（差 {inv.amount + inv.tax - inv.total}）",
+                "金额字段可能缺失/被篡改，人工核对票面",
+            ))
+            continue
+        if inv.total < 0:
+            if inv.is_red_letter:
+                continue  # 红冲负数合法
+            out.append(_finding(
+                "R8", inv, _SEV_HIGH, _CONF_MAYBE, "total",
+                f"金额异常（{ANOMALY_NEGATIVE_NON_RED}）：负金额但非红字发票",
+                f"价税合计 {inv.total}（票种：{inv.invoice_type or '未知'}）",
+                "负数金额通常仅红冲/退款出现，核实票面与业务",
+            ))
+            continue
+        if inv.is_differential:
+            out.append(_finding(
+                "R8", inv, _SEV_LOW, _CONF_MAYBE, "total",
+                f"金额说明（{ANOMALY_DIFFERENTIAL_PENDING}）：差额征税票，勾稽按扣除后口径",
+                f"价税合计 {inv.total}；差额扣除额（EI386/KCE）专项校验待 P2 支持",
+                "当前按票面勾稽校验；差额票的扣除额-税额联动核验登记 P2 待办",
+            ))
+            continue
+        if abs(inv.total) > cfg.max_plausible_total:
+            out.append(_finding(
+                "R8", inv, _SEV_LOW, _CONF_MAYBE, "total",
+                f"金额异常（{ANOMALY_ABSURD_TOTAL}）：单票价税合计超出合理阈值",
+                f"价税合计 {inv.total} 元 > 阈值 {cfg.max_plausible_total} 元（占位阈值，可配置）",
+                "大额票需人工复核业务合理性；阈值待真实数据校准",
+            ))
+    return out
+
+
 def _state_for(rule_id: str, rs: list[Finding], cfg: RulesConfig,
                invoices: list[NormalizedInvoice]) -> str:
     """规则三态（里程碑评审）：命中 / 未命中 / 未执行（数据不足或未配置）。
@@ -359,6 +418,7 @@ def run_rules_with_states(invoices: list[NormalizedInvoice],
         ("R4", lambda: r4_overlimit(invoices, cfg)),
         ("R6", lambda: r6_concentrated(invoices, cfg)),
         ("R7", lambda: r7_date_anomaly(invoices, cfg)),
+        ("R8", lambda: r8_amount_anomaly(invoices, cfg)),
     ]
     for rule_id, fn in checks:
         try:

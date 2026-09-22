@@ -272,6 +272,12 @@ def parse_xml(data: bytes) -> NormalizedInvoice:
         for k, v in fields.items() if k in _RAW_WHITELIST
     }
 
+    # 票面语义标志（P0-8：红冲/差额的类型化识别，供 R8 金额异常规则消费）
+    remark = fields.get("备注") or fields.get("Remark") or ""
+    invoice_type_raw = pick("invoice_type") or "未知"
+    is_red_letter = ("红" in invoice_type_raw) or ("红冲" in remark) or ("红字" in remark)
+    is_differential = ("差额征税" in remark) or bool(fields.get("KCE"))
+
     return NormalizedInvoice(
         invoice_no=invoice_no,
         invoice_type=pick("invoice_type") or "未知",
@@ -286,4 +292,6 @@ def parse_xml(data: bytes) -> NormalizedInvoice:
         source_hash=hashlib.sha256(data).hexdigest()[:32],
         parse_warnings=warnings,
         raw_fields=raw_fields,
+        is_red_letter=is_red_letter,
+        is_differential=is_differential,
     )

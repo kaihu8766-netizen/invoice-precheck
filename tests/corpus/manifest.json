@@ -4,16 +4,44 @@
   "description": "真实结构数电票 XML 票样（脱敏）——parser 第三方言（EInvoice 英文结构）回归语料",
   "governance": {
     "policy": "不采集他人发票；公开样例二次脱敏；合成样本与真实票样分目录；manifest 与票样 SHA256 绑定",
-    "required_for_v1": [
-      "省份 >= 3",
-      "开票系统 >= 3",
-      "XBRL 实例文档",
-      "红冲发票",
-      "差额征税",
-      "多税率明细",
-      "中文标签方言",
-      "拼音缩写方言"
-    ],
+    "required_for_v1": {
+      "省份 >= 3": {
+        "status": "met",
+        "note": "真实票样 3 省（广东/江苏/北京）"
+      },
+      "开票系统 >= 3": {
+        "status": "partial",
+        "note": "3 系统；北京系统类型 inferred 不计入硬结论"
+      },
+      "XBRL 实例文档": {
+        "status": "met_official",
+        "note": "财政部推广应用版附件3 官方实例×2（归档）"
+      },
+      "红冲发票": {
+        "status": "met_synthetic",
+        "note": "合成样本（中文方言·负数·EI390/391）；真实 EInvoice 红冲结构待真实票核验"
+      },
+      "差额征税": {
+        "status": "met_synthetic",
+        "note": "合成样本（KCE=200.00/备注格式/EI386）；真实票面布局待核验"
+      },
+      "多税率明细": {
+        "status": "met_synthetic",
+        "note": "合成样本（6/9/13% 三行）；真实票待补"
+      },
+      "中文标签方言": {
+        "status": "met_synthetic",
+        "note": "合成样本（红字中文方言）"
+      },
+      "拼音缩写方言": {
+        "status": "met_synthetic",
+        "note": "合成样本（FPHM/HJJE/JSHJXX）"
+      },
+      "每省 >= 2 份真实票": {
+        "status": "open",
+        "note": "v1 硬门；合成不计入真实票门槛；路径=用户自有票/授权票/沙箱（中期）"
+      }
+    },
     "m1_status": "partial",
     "coverage_matrix": {
       "province": {
@@ -82,7 +110,41 @@
       "XBRL 实例文档解析（parser 未支持 xbrli 结构，样本仅归档）"
     ],
     "corpus_version_note": "v0.3：+官方 XBRL 实例×2 + 合成样本×4（红冲/差额/多税率/中文/拼音方言覆盖项以 synthetic+official 达成，真实票样待补）",
-    "m1_status_note": "覆盖项（XBRL/红冲/差额/多税率/方言）以官方实例与合成样本达成；真实票样仍 3 省×1 份，每省≥2 份未达成（v1 硬门保持 open）"
+    "m1_status_note": "P0 治理八项全闭环；P1 覆盖项以 official+synthetic 达成；残余硬门：每省≥2 份真实票（open）",
+    "p0_closure": {
+      "P0-1_manifest_治理修正": {
+        "status": "closed",
+        "at": "2026-09-23 v0.2 评审闭环"
+      },
+      "P0-2_来源授权审计": {
+        "status": "closed",
+        "at": "2026-09-23 v0.2 评审闭环（source_tier/authority/license/redistribution/verification 全样本标注）"
+      },
+      "P0-3_脱敏流水线脚本化+CI": {
+        "status": "closed",
+        "at": "2026-09-23 scripts/redact.py + tests/test_redact.py（幂等/税号打码/签名清理）+ CI 冒烟"
+      },
+      "P0-4_北京降级标注": {
+        "status": "closed",
+        "at": "2026-09-23 v0.2 评审闭环（community_public_secondary_redacted/inferred）"
+      },
+      "P0-5_manifest_schema校验": {
+        "status": "closed",
+        "at": "2026-09-23 scripts/validate_manifest.py + tests（AUTO 拒绝/合成标注强制/SHA256 绑定/集合一致性）"
+      },
+      "P0-6_CI测试基线": {
+        "status": "closed",
+        "at": "2026-09-23 .github/workflows/ci.yml（unittest+manifest 校验+合成可复现，py3.11/3.12 矩阵）"
+      },
+      "P0-7_能力声明与禁用规则": {
+        "status": "closed",
+        "at": "2026-09-23 v0.2 README 能力声明 + 本版 P0-8 差额占位不误报"
+      },
+      "P0-8_金额异常类型化占位": {
+        "status": "closed",
+        "at": "2026-09-23 R8 金额异常规则（勾稽/负数非红冲/差额占位 EI386/超阈值类型化）+ 6 测试"
+      }
+    }
   },
   "samples": [
     {
@@ -365,7 +427,7 @@
     {
       "file": "synthetic/synthetic-red-letter-cn.xml",
       "format": "invoice_xml",
-      "sha256": "244265fdef392c4fed9eeea05fc7e2a7c3b32d10974cc090419660e73ac8f173",
+      "sha256": "76901a092752fd7db4e0c3f80e17d398a9fc8e141618d59df26ef1a7a15681b7",
       "province": "北京",
       "tax_region_code": "1100",
       "issuing_system": "合成（中文标签结构）",
@@ -407,7 +469,7 @@
     {
       "file": "synthetic/synthetic-differential-einv.xml",
       "format": "invoice_xml",
-      "sha256": "8d30710febb57a88f5dcc26bf4d3f6114eaed711a369bcbdf10de0c1027d2dd0",
+      "sha256": "dfabe6a72f336c9f82644a23e43510b31a129a25b50c7e62737b7086e1d6675e",
       "province": "广东",
       "tax_region_code": "4400",
       "issuing_system": "合成（EInvoice 结构，同构 gaode-js-taxi）",
@@ -450,7 +512,7 @@
     {
       "file": "synthetic/synthetic-multirate-einv.xml",
       "format": "invoice_xml",
-      "sha256": "a6783ae4c61a9e3140ee5dfa093a4486cfe8a485f284aabd142ab59157933f47",
+      "sha256": "e0a7d9292b42a579d0787d4045f4df558e1e2fa791fe312640868e1d473476a3",
       "province": "江苏",
       "tax_region_code": "3200",
       "issuing_system": "合成（EInvoice 结构，同构 gaode-js-taxi）",
@@ -492,7 +554,7 @@
     {
       "file": "synthetic/synthetic-pinyin-abbrev.xml",
       "format": "invoice_xml",
-      "sha256": "39ede2abdcd5f13ad0afec53c8f604b9127ef3fdff69d0beeb19fe70348741eb",
+      "sha256": "a7097d39d9ca03a66a38604a1b9cd709e112f33a50bbae884acfda678f0af569",
       "province": "江苏",
       "tax_region_code": "3200",
       "issuing_system": "合成（国标拼音缩写结构）",

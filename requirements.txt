@@ -1,0 +1,5 @@
+# invoice-precheck 运行时与测试依赖（P0-6 CI 基线）
+fastapi>=0.110
+uvicorn>=0.29
+python-multipart>=0.0.9
+defusedxml>=0.7

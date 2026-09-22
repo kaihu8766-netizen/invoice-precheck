@@ -13,12 +13,13 @@ from app.rules import RulesConfig, run_rules
 def inv(no, date, amount, total, seller="北京华信办公用品有限公司",
         buyer="示例科技有限公司", taxid="91310000MA1FL1XXXX",
         category="办公", reimburse=None, tax=Decimal("0"),
-        invoice_type="专票"):
+        invoice_type="专票", is_red_letter=False, is_differential=False):
     return NormalizedInvoice(
         invoice_no=no, invoice_type=invoice_type, issue_date=date,
         amount=amount, tax=tax, total=total,
         buyer_name=buyer, buyer_taxid=taxid, seller_name=seller,
         category=category, reimburse_date=reimburse,
+        is_red_letter=is_red_letter, is_differential=is_differential,
     )
 
 
@@ -185,6 +186,58 @@ class TestRules(unittest.TestCase):
         ]
         f = run_rules(batch, CFG)
         self.assertEqual(f[0].rule_id, "R1")  # 高严重度排最前
+
+    # ---------- P0-8 金额异常类型化（R8） ----------
+
+    def test_r8_negative_non_red(self):
+        """负数金额且非红冲 → 高危（疑似异常）。"""
+        f = run_rules([inv("1001", "2026-08-01", Decimal("-100"), Decimal("-113"),
+                           tax=Decimal("-13"), is_red_letter=False)], CFG)
+        r8 = [x for x in f if x.rule_id == "R8"]
+        self.assertEqual(len(r8), 1)
+        self.assertEqual(r8[0].severity, "高")
+        self.assertIn("负数非红冲", r8[0].message)
+
+    def test_r8_red_letter_negative_passes(self):
+        """红字发票负数 → 不报（红冲负数合法，避免误报）。"""
+        f = run_rules([inv("1001", "2026-08-01", Decimal("-2500"), Decimal("-2650"),
+                           tax=Decimal("-150"), is_red_letter=True)], CFG)
+        r8 = [x for x in f if x.rule_id == "R8"]
+        self.assertEqual(len(r8), 0)
+
+    def test_r8_differential_pending(self):
+        """差额征税票 → 低危占位声明（不误报为异常，KCE 专项校验 P2 待支持）。"""
+        f = run_rules([inv("1001", "2026-08-01", Decimal("800"), Decimal("848"),
+                           tax=Decimal("48"), is_differential=True)], CFG)
+        r8 = [x for x in f if x.rule_id == "R8"]
+        self.assertEqual(len(r8), 1)
+        self.assertEqual(r8[0].severity, "低")
+        self.assertIn("差额征税", r8[0].message)
+
+    def test_r8_reconcile_defense(self):
+        """勾稽不符 → 高危（确定性）（parser 已拦截，规则层独立防御复核）。"""
+        f = run_rules([inv("1001", "2026-08-01", Decimal("100"), Decimal("120"),
+                           tax=Decimal("13"))], CFG)
+        r8 = [x for x in f if x.rule_id == "R8"]
+        self.assertEqual(len(r8), 1)
+        self.assertEqual(r8[0].severity, "高")
+        self.assertEqual(r8[0].confidence, "确定")
+        self.assertIn("勾稽不符", r8[0].message)
+
+    def test_r8_absurd_total(self):
+        """单票超合理阈值 → 低危疑似（占位阈值，可配置）。"""
+        f = run_rules([inv("1001", "2026-08-01", Decimal("999999"), Decimal("1130000"),
+                           tax=Decimal("130001"))], CFG)
+        r8 = [x for x in f if x.rule_id == "R8"]
+        self.assertEqual(len(r8), 1)
+        self.assertEqual(r8[0].severity, "低")
+        self.assertIn("合理阈值", r8[0].message)
+
+    def test_r8_normal_passes(self):
+        """正常票：勾稽成立 + 正数 + 非差额 + 未超阈值 → 无 R8 finding。"""
+        f = run_rules([inv("1001", "2026-08-01", Decimal("100"), Decimal("113"),
+                           tax=Decimal("13"))], CFG)
+        self.assertFalse([x for x in f if x.rule_id == "R8"])
 
 
 if __name__ == "__main__":

@@ -6,6 +6,7 @@
   - 业务口径：旅游服务差额征税，销售额 1000.00，扣除额 200.00，计税基础 800.00 × 6% = 税额 48.00
   - 构造：基于语料库真实票样（gaode-js-taxi.xml）EInvoice 结构同构扩展
   - 未通过官方验证工具校验（工具仅 Win10 64 位）；结构级校验=与真实票样同构 + 勾稽测试
+  - 由 scripts/generate_synthetic.py 生成（seq=5）
 -->
 <EInvoice>
   <Header>

@@ -45,6 +45,10 @@ class NormalizedInvoice:
     # 原始证据（报告展示用）
     raw_fields: dict = field(default_factory=dict)
 
+    # 票面语义标志（P0-8 金额异常类型化基础；parser 提取，规则 R8 消费）
+    is_red_letter: bool = False    # 红字发票（票种含"红"或备注含红冲/红字）
+    is_differential: bool = False  # 差额征税票（备注含"差额征税"或存在 KCE 扣除额字段）
+
 
 @dataclass
 class Finding:

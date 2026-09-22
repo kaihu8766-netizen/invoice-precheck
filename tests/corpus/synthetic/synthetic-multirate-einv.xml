@@ -4,6 +4,7 @@
   - 业务口径：一票三明细行，税率分别为 6% / 9% / 13%（一般纳税人多税率场景）
   - 构造：基于语料库真实票样（gaode-js-taxi.xml）EInvoice 结构同构扩展（3 明细行）
   - 未通过官方验证工具校验（工具仅 Win10 64 位）；结构级校验=与真实票样同构 + 勾稽测试
+  - 由 scripts/generate_synthetic.py 生成（seq=6）
 -->
 <EInvoice>
   <Header>

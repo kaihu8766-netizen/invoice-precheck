@@ -34,15 +34,25 @@ invoice-precheck/
 | 阶段 | 内容 | 状态 |
 |---|---|---|
 | P1 | XML 上传→解析→规则→报告页面 | ✅ 闭环完成 |
+| P2 前置 | 语料库 v0.3（3省真实票样 + 官方 XBRL×2 + 合成×4）+ P0 治理八项闭环 | ✅ 完成（69 测试） |
 | P2 | OFD + PDF（打印版）+ 图片；LLM 辅助 | 后置 |
 | P3 | 批量、导出 PDF/Excel、企业标准配置 | 后置 |
 | P4 | 部署上线 | 待用户提供资源 |
+
+## 语料库与工具链（P2 前置 · 2026-09-23）
+
+- **语料库**：`tests/corpus/`（真实票样脱敏 3 省 3 系统 + 官方 XBRL 实例 + `synthetic/` 合成样本），元数据见 `manifest.json`（SHA256 绑定、来源分级、合成标注），构造规范见 `tests/corpus/SYNTHETIC.md`。
+- **`scripts/generate_synthetic.py`**（P2-1）：确定性合成样本生成器（默认参数逐字节复现现有样本；可参数化生成变体；`--verify` 校验可复现性）。
+- **`scripts/redact.py`**（P0-3）：数电票 XML 脱敏流水线（税号打码/票号替换/名称映射/签名清理，幂等）。
+- **`scripts/validate_manifest.py`**（P0-5）：manifest schema 校验（AUTO 哈希拒绝/合成标注强制/SHA256 绑定/集合一致性）。
+- **CI**（P0-6）：`.github/workflows/ci.yml`——push/PR 自动跑全量测试 + manifest 校验 + 合成样本可复现校验（Python 3.11/3.12）。
+- 规则 R8（P0-8）：金额异常类型化（勾稽不符/负数非红冲/差额征税占位 EI386/超阈值）。
 
 ## 本地运行
 
 ```bash
 cd invoice-precheck
-pip install fastapi uvicorn httpx defusedxml
+pip install -r requirements.txt
 uvicorn app.main:app --reload     # 浏览器打开 http://127.0.0.1:8000
 ```
 
