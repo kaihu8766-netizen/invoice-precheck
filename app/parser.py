@@ -22,7 +22,7 @@ from io import BytesIO
 from defusedxml import ElementTree as DET
 from defusedxml.common import DefusedXmlException
 
-from .models import NormalizedInvoice
+from .models import ItemDetail, NormalizedInvoice
 
 MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
 MAX_ELEMENTS = 50_000  # XML 元素数上限（防深度嵌套/事件膨胀 DoS）
@@ -34,6 +34,26 @@ _SIGNATURE_TAGS = {"Signature", "XMLSignature", "Signatures"}
 
 # 发票根节点（用于多票检测：单 XML 含多个发票 → 显式告警，禁止静默取最后）
 _ROOT_TAGS = {"发票", "Invoice", "EInvoice"}
+
+# G0 行级中间表示：明细行容器（EInvoice 英文结构）。
+# 真实数电票（官方/网约车/第三方开票系统）：IssuItemInformation 每行一个；
+# 合成样例：IssuItemInformation 包裹 + ItemDetail 逐行。
+# 中文标签/国标拼音方言的明细行容器（明细/FPHXX 等）待真实票核验（SYNTHETIC.md 诚实声明）。
+_ITEM_ROOTS = {"IssuItemInformation", "ItemDetail"}
+
+# 行内字段别名（仅行上下文存在时归入当前行，不进票面 fields，防污染汇总字段）
+_ITEM_ALIAS = {
+    "name": ["ItemName", "SPMC", "货物或应税劳务名称", "项目名称", "服务名称", "商品名称"],
+    "amount": ["Amount", "FPHXJE"],
+    "tax_rate": ["TaxRate", "SL", "税率"],
+    "tax_amount": ["ComTaxAm", "TaxAm", "SE", "税额"],
+    "total_incl": ["TotaltaxIncludedAmount", "HSJE", "含税金额"],
+}
+_ITEM_KEYS = {a for aliases in _ITEM_ALIAS.values() for a in aliases}
+
+# 被红冲蓝字发票号码（红冲关联占位；中文方言已确认字段，EInvoice 英文候选待真实票核验）
+_RED_BLUE_NO_KEYS = ["被红冲蓝字发票号码", "BlueInvoiceNo", "BlueInvoiceNumber",
+                     "BInvoiceNo", "RedInvoiceForBlueNo"]
 
 # 固定标签容器（EInvoice 英文结构）：InherentLabel 下的 LabelCode/LabelName
 # 需按父节点归位（多个 Label* 冲突，扁平化会丢失"专票/普票"语义）
@@ -161,10 +181,12 @@ def detect_type(data: bytes) -> str:
     return "unknown"
 
 
-def _collect_fields(data: bytes, warnings: list[str]) -> tuple[dict[str, str], int]:
-    """扁平化收集字段：普通字段取首个，金额/合计类取最后出现。
+def _collect_fields(data: bytes, warnings: list[str]) -> tuple[dict[str, str], int, list[dict]]:
+    """扁平化收集字段：普通字段取首个，金额/合计类取最后出现；G0 并行提取明细行。
 
-    返回 (fields, invoice_node_count)；count>1 表示单 XML 含多个发票节点。
+    返回 (fields, invoice_node_count, items_raw)；
+    count>1 表示单 XML 含多个发票节点。
+    items_raw：行容器（IssuItemInformation/ItemDetail）内字段按行归组，空行丢弃。
     安全：defusedxml（禁 DTD/外部实体/膨胀）；签名子树剥离；元素数上限。
     """
     fields: dict[str, str] = {}
@@ -173,6 +195,8 @@ def _collect_fields(data: bytes, warnings: list[str]) -> tuple[dict[str, str], i
     skip_depth: int | None = None
     elem_count = 0
     stack: list[str] = []  # 祖先 localname 栈（用于 InherentLabel 下 Label* 按父节点归位）
+    item_stack: list[dict] = []  # G0：行级提取（行容器嵌套时保持：IssuItemInformation 包裹 + ItemDetail 行）
+    items_raw: list[dict] = []
     try:
         context = DET.iterparse(BytesIO(data), events=("start", "end"))
         for event, elem in context:
@@ -188,6 +212,8 @@ def _collect_fields(data: bytes, warnings: list[str]) -> tuple[dict[str, str], i
                     invoice_node_count += 1
                 if skip_depth is None and name in _SIGNATURE_TAGS:
                     skip_depth = depth  # 进入签名子树：以下节点全部跳过
+                if skip_depth is None and name in _ITEM_ROOTS:
+                    item_stack.append({})
                 stack.append(name)
                 continue
             # end 事件
@@ -198,6 +224,11 @@ def _collect_fields(data: bytes, warnings: list[str]) -> tuple[dict[str, str], i
                 stack.pop()
                 elem.clear()
                 continue
+            if name in _ITEM_ROOTS and item_stack:
+                # 行容器结束：flush 当前行（无任何字段的空行丢弃）
+                row = item_stack.pop()
+                if row:
+                    items_raw.append(row)
             if elem.text and elem.text.strip():
                 text = elem.text.strip()
                 if len(text) > _MAX_TEXT:
@@ -210,6 +241,12 @@ def _collect_fields(data: bytes, warnings: list[str]) -> tuple[dict[str, str], i
                 elif name in ("LabelCode", "LabelName") and parent in _LABEL_CONTAINERS:
                     # EInvoice 英文结构：InherentLabel 下多个 Label* 冲突，按父节点归位
                     fields[f"{parent}.{name}"] = text
+                elif item_stack and name in _ITEM_KEYS:
+                    # G0：行内字段归入当前行（仅行上下文存在时；不污染票面 fields）
+                    for fk, aliases in _ITEM_ALIAS.items():
+                        if name in aliases:
+                            item_stack[-1][fk] = text
+                            break
                 elif name in _LAST_WINS:
                     fields[name] = text  # 合计类覆盖（文档尾部才是合计）
                 else:
@@ -221,7 +258,7 @@ def _collect_fields(data: bytes, warnings: list[str]) -> tuple[dict[str, str], i
         raise ValueError(f"XML 结构损坏：{e}") from e
     except DefusedXmlException as e:
         raise ValueError("XML 含被禁止的实体/DTD（外部实体与内部实体膨胀已拒绝）") from e
-    return fields, invoice_node_count
+    return fields, invoice_node_count, items_raw
 
 
 def parse_xml(data: bytes) -> NormalizedInvoice:
@@ -237,7 +274,7 @@ def parse_xml(data: bytes) -> NormalizedInvoice:
         raise ValueError(f"不支持的输入类型：{dtype}（仅支持数电票 XML，请转 XML 后上传）")
 
     warnings: list[str] = []
-    fields, invoice_node_count = _collect_fields(data, warnings)
+    fields, invoice_node_count, items_raw = _collect_fields(data, warnings)
 
     if invoice_node_count > 1:
         warnings.append(
@@ -267,9 +304,10 @@ def parse_xml(data: bytes) -> NormalizedInvoice:
         warnings.append(f"发票号码位数/格式异常（数电票应为 20 位数字）：{invoice_no}")
 
     # raw_fields 白名单 + 税号脱敏
+    _RAW_WHITELIST_EXT = _RAW_WHITELIST | {"KCE", "被红冲蓝字发票号码", "Remark", "备注"}
     raw_fields = {
         k: (_mask(v) if _is_taxid_key(k) else v)
-        for k, v in fields.items() if k in _RAW_WHITELIST
+        for k, v in fields.items() if k in _RAW_WHITELIST_EXT
     }
 
     # 票面语义标志（P0-8：红冲/差额的类型化识别，供 R8 金额异常规则消费）
@@ -277,6 +315,31 @@ def parse_xml(data: bytes) -> NormalizedInvoice:
     invoice_type_raw = pick("invoice_type") or "未知"
     is_red_letter = ("红" in invoice_type_raw) or ("红冲" in remark) or ("红字" in remark)
     is_differential = ("差额征税" in remark) or bool(fields.get("KCE"))
+
+    # G0：行级明细组装（金额 Decimal 化；行级含税金额缺省=0）
+    items = [
+        ItemDetail(
+            name=row.get("name", ""),
+            amount=_to_decimal(row.get("amount"), warnings, "明细行金额"),
+            tax_rate=row.get("tax_rate", ""),
+            tax_amount=_to_decimal(row.get("tax_amount"), warnings, "明细行税额"),
+            total_incl=_to_decimal(row.get("total_incl"), warnings, "明细行含税金额"),
+        )
+        for row in items_raw
+    ]
+
+    # G0：票面语义字段
+    # KCE（差额征税扣除额）：合成差异票 EI386 字段；真实差额票字段布局待真实票核验
+    differential_deduction = None
+    if fields.get("KCE") and fields["KCE"].strip():
+        differential_deduction = _to_decimal(fields["KCE"], warnings, "差额扣除额KCE")
+    # 被红冲蓝字发票号码（红冲关联占位：当前单票上传只做票面提取与负票提示，
+    # 完整红冲关联需历史发票库——DeepSeek 下一步讨论 G 项明确此边界）
+    red_letter_blue_no = ""
+    for k in _RED_BLUE_NO_KEYS:
+        if fields.get(k):
+            red_letter_blue_no = fields[k]
+            break
 
     return NormalizedInvoice(
         invoice_no=invoice_no,
@@ -294,4 +357,7 @@ def parse_xml(data: bytes) -> NormalizedInvoice:
         raw_fields=raw_fields,
         is_red_letter=is_red_letter,
         is_differential=is_differential,
+        items=items,
+        differential_deduction=differential_deduction,
+        red_letter_blue_no=red_letter_blue_no,
     )

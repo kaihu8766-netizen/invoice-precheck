@@ -1,7 +1,8 @@
-"""数据契约（P1 技术方案第 2 节 · DeepSeek 评审采纳）。
+"""数据契约（P1 技术方案第 2 节 · DeepSeek 评审采纳；G0 行级中间表示升级 2026-09-23）。
 
 规则引擎只依赖 NormalizedInvoice，不触碰 XML 树；解析层产出后立即映射为统一模型。
 金额全链路 Decimal（禁 float）；字段缺失进 parse_warnings，不中断整批。
+G0：增加行级明细 ItemDetail（多税率勾稽/差额 KCE/红冲关联的前置）+ 票面语义字段。
 """
 from __future__ import annotations
 
@@ -11,6 +12,17 @@ from typing import Literal, Optional
 
 Severity = Literal["高", "中", "低"]
 Confidence = Literal["确定", "疑似"]
+
+
+@dataclass
+class ItemDetail:
+    """发票明细行（G0 行级中间表示；多税率勾稽/行级税率一致性校验的前置）。"""
+
+    name: str = ""                          # 商品/服务名称
+    amount: Decimal = Decimal("0")          # 金额（不含税）
+    tax_rate: str = ""                      # 税率原文（"13%"/"6%"/"9%"/"0%"/"免税"/"*"等，保留原样）
+    tax_amount: Decimal = Decimal("0")      # 税额
+    total_incl: Decimal = Decimal("0")      # 含税金额（行级价税合计；可缺省=0）
 
 
 @dataclass
@@ -49,12 +61,17 @@ class NormalizedInvoice:
     is_red_letter: bool = False    # 红字发票（票种含"红"或备注含红冲/红字）
     is_differential: bool = False  # 差额征税票（备注含"差额征税"或存在 KCE 扣除额字段）
 
+    # G0 行级中间表示 + 票面语义字段（2026-09-23）
+    items: list[ItemDetail] = field(default_factory=list)  # 明细行（EInvoice 英文结构行级；中文/拼音方言待真实票核验）
+    differential_deduction: Optional[Decimal] = None       # 差额征税扣除额 KCE（Decimal；无则 None）
+    red_letter_blue_no: str = ""      # 被红冲蓝字发票号码（红冲关联占位；中文方言字段，EInvoice 布局待真实票核验）
+
 
 @dataclass
 class Finding:
     """单条风险发现（规则引擎输出）。"""
 
-    rule_id: str                       # R1/R2/R3/R4/R6/R7
+    rule_id: str                       # R1/R2/R3/R4/R6/R7/R8
     severity: Severity                 # 严重度：看财务后果
     confidence: Confidence             # 置信度：看证据强度（双标签分离，防单色阶误导）
     invoice_no: str

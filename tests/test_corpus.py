@@ -299,5 +299,78 @@ class TestCorpusRealSamples(unittest.TestCase):
         self.assertFalse(any("勾稽异常" in w for w in inv.parse_warnings))
 
 
+class TestG0ItemLevelExtraction(unittest.TestCase):
+    """G0 行级中间表示升级（2026-09-23）：明细行提取/票面语义字段。
+
+    结构依据（实测三方言票样）：
+    - EInvoice 英文结构行容器 = IssuItemInformation（真实票每行一个）/ ItemDetail（合成样例逐行，
+      外层 IssuItemInformation 包裹）；行内字段 ItemName/Amount/TaxRate/ComTaxAm|TaxAm/TotaltaxIncludedAmount。
+    - 中文标签/国标拼音方言无行容器（合成样本未含明细行）→ items 为空，诚实标注，
+      明细行标签待真实票核验（SYNTHETIC.md 未核验项）。
+    """
+
+    def test_multirate_item_lines_and_reconciliation(self):
+        """多税率合成样本：3 行明细，行税率原文集合 {0.06,0.09,0.13}（EInvoice 结构小数字面量；
+        口径统一/一致性判定属 G1 规则层），Σ行金额=票面金额、Σ行税额=票面税额。"""
+        inv = parse_xml((CORPUS_DIR / "synthetic/synthetic-multirate-einv.xml").read_bytes())
+        self.assertEqual(len(inv.items), 3, f"应提取 3 行明细，实为 {len(inv.items)}")
+        self.assertEqual(sorted({it.tax_rate for it in inv.items}), ["0.06", "0.09", "0.13"])
+        self.assertEqual(sum(it.amount for it in inv.items), inv.amount,
+                         "Σ明细行金额 ≠ 票面金额")
+        self.assertEqual(sum(it.tax_amount for it in inv.items), inv.tax,
+                         "Σ明细行税额 ≠ 票面税额")
+        self.assertTrue(all(it.name for it in inv.items), "明细行应有名称")
+        self.assertFalse(any("勾稽异常" in w for w in inv.parse_warnings))
+
+    def test_differential_kce_extracted(self):
+        """差额征税合成样本：KCE 扣除额 200.00 提取；行级 1 行（计税基础 800.00×0.06）。"""
+        inv = parse_xml((CORPUS_DIR / "synthetic/synthetic-differential-einv.xml").read_bytes())
+        self.assertTrue(inv.is_differential)
+        self.assertEqual(inv.differential_deduction, Decimal("200.00"))
+        self.assertEqual(len(inv.items), 1)
+        self.assertEqual(str(inv.items[0].amount), "800.00")
+        self.assertEqual(inv.items[0].tax_rate, "0.06")
+        self.assertEqual(str(inv.items[0].tax_amount), "48.00")
+
+    def test_red_letter_blue_no_extracted(self):
+        """红冲中文方言：被红冲蓝字发票号码提取（红冲关联占位：单票上传只做票面提取）。"""
+        inv = parse_xml((CORPUS_DIR / "synthetic/synthetic-red-letter-cn.xml").read_bytes())
+        self.assertTrue(inv.is_red_letter)
+        self.assertTrue(inv.red_letter_blue_no,
+                        "应提取被红冲蓝字发票号码（中文方言字段）")
+
+    def test_no_item_container_dialects_empty_items(self):
+        """无明细行容器的方言（拼音缩写/中文标签单行票）：items 为空且不引入告警。"""
+        for fname in ("synthetic/synthetic-pinyin-abbrev.xml",
+                      "synthetic/synthetic-red-letter-cn.xml"):
+            with self.subTest(fname=fname):
+                inv = parse_xml((CORPUS_DIR / fname).read_bytes())
+                self.assertEqual(inv.items, [], f"[{fname}] 无行容器应 items 为空")
+
+    def test_real_samples_item_lines(self):
+        """真实票样行级：广东专票 1 行（ItemName）、高德网约车 2 行（退款负行场景）、北京专票 1 行。"""
+        expectations = {
+            "official-gd-special.xml": 1,
+            "gaode-js-taxi.xml": 2,     # IssuItemInformation×2（含退款负行）
+            "bj-platform-it.xml": 1,
+        }
+        for fname, n in expectations.items():
+            with self.subTest(fname=fname):
+                inv = parse_xml((CORPUS_DIR / fname).read_bytes())
+                self.assertEqual(len(inv.items), n, f"[{fname}] 行级条数不符")
+                self.assertTrue(all(it.name for it in inv.items),
+                                f"[{fname}] 行级应有名称")
+                self.assertTrue(any(it.amount != 0 or it.tax_amount != 0 for it in inv.items),
+                                f"[{fname}] 行级应有金额/税额")
+                # 行级金额不应污染票面：Σ行金额≠票面金额时也不影响票面合计（负行场景允许不等）
+                self.assertFalse(any("勾稽异常" in w for w in inv.parse_warnings))
+
+    def test_item_fields_not_leak_to_raw_fields(self):
+        """行内字段（Amount/TaxRate 等）不得泄漏进票面 raw_fields（防 PII/字段污染）。"""
+        inv = parse_xml((CORPUS_DIR / "synthetic/synthetic-multirate-einv.xml").read_bytes())
+        for k in ("Amount", "TaxRate", "TaxAm"):
+            self.assertNotIn(k, inv.raw_fields, f"行内字段 {k} 不应出现在票面 raw_fields")
+
+
 if __name__ == "__main__":
     unittest.main()
