@@ -107,7 +107,7 @@
   .tools{ display:flex; gap:6px; }
   .tools .btn-ghost{ padding:4px 10px; font-size:12px; }
   .finding{ border:1px solid var(--line); border-radius:var(--r-md); background:#fff; margin-bottom:5px; }
-  .finding summary{ list-style:none; display:flex; align-items:center; gap:10px; padding:7px 10px; cursor:pointer; border-radius:var(--r-md); }
+  .finding summary{ list-style:none; display:flex; align-items:center; gap:8px; padding:7px 10px; cursor:pointer; border-radius:var(--r-md); flex-wrap:wrap; }
   .finding summary::-webkit-details-marker{ display:none; }
   .finding summary:hover{ background:#fafbfc; }
   .finding[open] summary{ background:#fafbfc; border-bottom:1px solid var(--line-soft); }
@@ -115,8 +115,9 @@
   .bar.high{ background:var(--high); } .bar.mid{ background:var(--mid); } .bar.low{ background:var(--weak); }
   .finding .sev{ font-size:11px; font-weight:800; padding:1px 8px; border-radius:10px; letter-spacing:.2px; white-space:nowrap; }
   .sev.high{ background:var(--high-bg); color:var(--high); } .sev.mid{ background:var(--mid-bg); color:var(--mid); } .sev.low{ background:var(--line-soft); color:var(--sub); }
-  .finding .rname{ font-size:13px; font-weight:600; white-space:nowrap; }
-  .finding .ticket{ font-size:12px; color:var(--sub); font-family:ui-monospace,Menlo,Consolas,monospace; }
+  .finding .rname{ font-size:13px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0; flex:0 1 auto; }
+  .finding .ticket{ font-size:12px; color:var(--sub); font-family:ui-monospace,Menlo,Consolas,monospace; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0; flex:0 1 auto; }
+  @media (max-width:480px){ .finding .ticket{ flex-basis:100%; padding-left:11px; } }
   .finding .amt{ font-size:12.5px; font-weight:600; margin-left:auto; white-space:nowrap; }
   .finding .caret{ color:var(--weak); font-size:11px; flex-shrink:0; }
   .finding[open] .caret{ transform:rotate(90deg); }
@@ -340,6 +341,12 @@ function explainBlock(f) {
     <b>该谁处理：</b>${esc(e.who)}</div>`;
 }
 
+/* 票号缩略：长票号行内只显示前4…后8（防手机窄屏溢出），完整票号在展开区 */
+function shortNo(n) {
+  n = String(n ?? "");
+  return n.length > 14 ? n.slice(0,4) + "…" + n.slice(-8) : n;
+}
+
 /* 导出 CSV（DeepSeek 评审 P0：财务需留痕/导出） */
 function exportCSV(findings) {
   const rows = [["规则", "规则名", "严重度", "置信度", "票号", "字段", "问题", "建议"]];
@@ -388,13 +395,13 @@ function render(d) {
           <span class="bar ${sevCls}"></span>
           <span class="sev ${sevCls}">${sev === "高" ? "▲" : sev === "中" ? "●" : "·"} ${esc(f.rule_id)} ${esc(sev)}</span>
           <span class="rname">${esc(ruleName(f.rule_id))}</span>
-          <span class="ticket">${esc(f.invoice_no)}</span>
+          <span class="ticket">${esc(shortNo(f.invoice_no))}</span>
           ${amt ? `<span class="amt">${amt}</span>` : ""}
           <span class="caret">▸</span>
         </summary>
         <div class="body">
           <div class="msg">${esc(f.message)}</div>
-          <div class="meta">字段 <code>${esc(f.field)}</code> · 原文「${esc(f.evidence)}」 · 置信度 ${esc(conf)}</div>
+          <div class="meta">票号 <code>${esc(f.invoice_no)}</code> · 字段 <code>${esc(f.field)}</code> · 原文「${esc(f.evidence)}」 · 置信度 ${esc(conf)}</div>
           ${chain ? `<ul class="chain"><b>证据链：</b>${chain}</ul>` : ""}
           <div class="sug"><b>建议：</b>${esc(f.suggestion)}</div>
           ${explainBlock(f)}
