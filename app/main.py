@@ -32,6 +32,7 @@ from fastapi import FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 
+from .llm_explain import LLM_ENABLED, explain_findings
 from .parser import parse_document
 from .report import DISCLAIMER, build_report, invoice_to_dict
 from .rules import RULESET_VERSION, run_rules_with_states
@@ -176,3 +177,35 @@ async def review(files: list[UploadFile] = File(...)):
         (time.time() - t0) * 1000, RULESET_VERSION,
     )
     return report
+
+
+@app.post("/v1/findings/explain")
+async def explain(request: Request):
+    """受控 LLM 解释（F）：对 review 响应中的 findings 生成财务人员可读的通俗解释。
+
+    请求体：{"findings": [review 响应里的 finding dict, ...]}
+    响应：{"explanations": [...与输入对齐...], "engine": "llm|template", "llm_enabled": bool}
+    受控边界：LLM 只解释不判定；失败/超时/校验不过 → 模板解释（不阻塞、不报错）。
+    """
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(400, "请求体必须是 JSON")
+    findings = body.get("findings")
+    if not isinstance(findings, list) or len(findings) > 50:
+        raise HTTPException(400, "findings 必须是不超过 50 条的列表")
+    for f in findings:
+        if not isinstance(f, dict):
+            raise HTTPException(400, "findings 每项必须是对象")
+
+    from .rules import RULESET_META
+    rules_meta = {m["rule_id"]: m for m in RULESET_META["rules"]}
+    explanations = explain_findings(findings, rules_meta)
+    engine = "llm" if any(e.get("source", "").startswith("llm:") for e in explanations) else "template"
+    return {
+        "explanations": explanations,
+        "engine": engine,
+        "llm_enabled": LLM_ENABLED,
+        "prompt_version": "explain-v1",
+        "count": len(explanations),
+    }
