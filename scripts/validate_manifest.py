@@ -6,6 +6,8 @@
    dialect/features/source_tier/authority/license/redistribution/verification）；
 3. 合成样本强制标注：synthetic=true → source_tier=synthetic_schema_based + construction_basis；
 4. XBRL 归档样本：format=xbrl_instance → verification=official_sample；
+4b. OFD 容器样本：format=ofd_container → synthetic=true + source_tier=synthetic_schema_based
+    + construction_basis（A1 合成容器：内嵌官方票样，容器骨架为构造）；
 5. SHA256：禁止 AUTO 占位，且与磁盘文件匹配；
 6. 集合一致性：manifest 文件清单 == 目录实际 XML 文件（含 synthetic/ 子目录）；
 7. 文件名唯一性。
@@ -28,7 +30,7 @@ REQUIRED_SAMPLE_FIELDS = (
     "scenario", "dialect", "features", "source", "masking",
     "source_tier", "authority", "license", "redistribution", "verification",
 )
-ALLOWED_FORMATS = ("invoice_xml", "xbrl_instance")
+ALLOWED_FORMATS = ("invoice_xml", "xbrl_instance", "ofd_container")
 
 
 def validate_manifest(corpus_dir: Path) -> list[str]:
@@ -94,10 +96,10 @@ def validate_manifest(corpus_dir: Path) -> list[str]:
                 if actual != sha:
                     errors.append(f"{fname}: SHA256 与磁盘不一致（文件被改动？）")
 
-    # 集合一致性：manifest 清单 == 磁盘 XML 文件（递归含 synthetic/）
+    # 集合一致性：manifest 清单 == 磁盘文件（XML + OFD 容器，递归含 synthetic/）
     on_disk = sorted(
         str(p.relative_to(corpus_dir)).replace("\\", "/")
-        for p in corpus_dir.rglob("*.xml")
+        for p in list(corpus_dir.rglob("*.xml")) + list(corpus_dir.rglob("*.ofd"))
     )
     in_manifest = sorted(seen)
     if in_manifest != on_disk:

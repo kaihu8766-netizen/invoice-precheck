@@ -35,5 +35,8 @@ jobs:
       - name: Verify synthetic samples reproducible (P2-1)
         run: python scripts/generate_synthetic.py --verify
 
+      - name: Verify OFD sample reproducible (A1)
+        run: python scripts/generate_ofd_sample.py --verify
+
       - name: Smoke redact pipeline (P0-3)
         run: python scripts/redact.py --help >/dev/null

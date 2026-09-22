@@ -1,5 +1,5 @@
 {
-  "corpus_version": "v0.3",
+  "corpus_version": "v0.4",
   "created": "2026-09-23",
   "description": "真实结构数电票 XML 票样（脱敏）——parser 第三方言（EInvoice 英文结构）回归语料",
   "governance": {
@@ -591,6 +591,40 @@
       "license": "自构造（合成标注），无版权问题",
       "redistribution": "permitted",
       "verification": "structural_same_as_corpus"
+    },
+    {
+      "file": "ofd/ofd-container-gd-sample.ofd",
+      "format": "ofd_container",
+      "province": "广东",
+      "issuing_system": "合成容器（GB/T 33190 骨架，官方票样封装）",
+      "taxpayer_type": "一般纳税人",
+      "tax_region_code": "4400",
+      "invoice_type": "增值税专用发票",
+      "dialect": "ofd_container",
+      "scenario": "合成 OFD 容器样本·内嵌官方公开票样（EInvoice 结构）·验证 OFD 解包链路",
+      "version": "0.32",
+      "source": "合成构造：内嵌=财政部官方公开样例（official-gd-special.xml，已脱敏）；容器骨架=GB/T 33190-2016 最小结构",
+      "source_tier": "synthetic_schema_based",
+      "synthetic": true,
+      "construction_basis": "基于官方公开票样 official-gd-special.xml 封装为合成 OFD 容器（OFD.xml+Document.xml 骨架+发票.xml 内嵌）；真实数电票 OFD 内部布局（内嵌 XML 命名/位置/多重数据文件）待真实 OFD 核验",
+      "authority": "财政部电子凭证会计数据标准（内嵌数据）；GB/T 33190-2016（容器格式）",
+      "license": "内嵌数据继承官方公开样例许可（同 official-gd-special.xml）",
+      "redistribution": "permitted",
+      "masking": "内嵌数据继承官方票样脱敏（税号/票号/名称已脱敏）",
+      "features": [
+        "ofd_container",
+        "einv_english",
+        "official_sample_inner"
+      ],
+      "verification": "synthetic_container",
+      "sha256": "2784d04c06d7f86216983a5a3d199200b22a498c7da250598a138929dc5d9fa0"
     }
-  ]
+  ],
+  "coverage_matrix": {
+    "formats": [
+      "invoice_xml",
+      "ofd_container",
+      "xbrl_instance"
+    ]
+  }
 }

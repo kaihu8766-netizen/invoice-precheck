@@ -21,9 +21,17 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from app.parser import parse_xml
+from app.parser import parse_document, parse_xml
 
 CORPUS_DIR = Path(__file__).resolve().parent / "corpus"
+
+
+def _parse(fname: str):
+    """按样本格式选择解析入口：ofd_container → parse_document（解包内嵌 XML），其余 → parse_xml。"""
+    data = (CORPUS_DIR / fname).read_bytes()
+    if fname.endswith(".ofd"):
+        return parse_document(data)
+    return parse_xml(data)
 
 
 def _load_manifest() -> dict:
@@ -33,7 +41,8 @@ def _load_manifest() -> dict:
 
 # (文件名, 省份, 开票系统, 场景, 格式, 期望字段断言)
 # format=invoice_xml：真实/合成票面 XML，断言完整字段；
-# format=xbrl_instance：官方入账信息结构化数据，断言结构安全（parser 未支持 xbrli 解析，仅归档）。
+# format=xbrl_instance：官方入账信息结构化数据，断言结构安全（parser 未支持 xbrli 解析，仅归档）；
+# format=ofd_container：合成 OFD 容器（内嵌官方票样），断言解包后字段（A1）。
 CASES = [
     (
         "official-gd-special.xml",
@@ -162,6 +171,21 @@ CASES = [
             "seller_name": "示例生活服务（无锡）有限公司",
         },
     ),
+    (
+        "ofd/ofd-container-gd-sample.ofd",
+        "广东",
+        "合成容器（GB/T 33190 骨架，官方票样封装）",
+        "合成 OFD 容器·内嵌官方公开票样（EInvoice 结构）·验证 OFD 解包链路（A1）",
+        "ofd_container",
+        {
+            "invoice_no": "23440000000000100001",
+            "issue_date": "2023-02-23",
+            "amount": "2.00",
+            "tax": "0.12",
+            "total": "2.12",
+            "seller_name": "示例制造集团有限公司",
+        },
+    ),
 ]
 
 
@@ -208,8 +232,7 @@ class TestCorpusRealSamples(unittest.TestCase):
             if fmt != "invoice_xml":
                 continue
             with self.subTest(fname=fname):
-                data = (CORPUS_DIR / fname).read_bytes()
-                inv = parse_xml(data)
+                inv = _parse(fname)
                 for key, want in expected.items():
                     got = getattr(inv, key)
                     if key in ("amount", "tax", "total"):
@@ -223,8 +246,7 @@ class TestCorpusRealSamples(unittest.TestCase):
         """勾稽校验：金额+税额=价税合计（票面 XML 均应勾稽成立，无告警级异常）。"""
         for fname, *_ in CASES:
             with self.subTest(fname=fname):
-                data = (CORPUS_DIR / fname).read_bytes()
-                inv = parse_xml(data)
+                inv = _parse(fname)
                 self.assertLessEqual(abs(inv.amount + inv.tax - inv.total),
                                      Decimal("0.01"),
                                      f"[{fname}] 勾稽异常：{inv.amount}+{inv.tax}≠{inv.total}")
@@ -237,8 +259,7 @@ class TestCorpusRealSamples(unittest.TestCase):
         """样本发票号码 20 位数字（数电票票号规则）。"""
         for fname, *_ in CASES:
             with self.subTest(fname=fname):
-                data = (CORPUS_DIR / fname).read_bytes()
-                inv = parse_xml(data)
+                inv = _parse(fname)
                 self.assertTrue(inv.invoice_no.isdigit() and len(inv.invoice_no) == 20,
                                 f"[{fname}] 票号应 20 位数字：{inv.invoice_no}")
                 self.assertFalse(any("发票号码位数" in w for w in inv.parse_warnings))
@@ -247,8 +268,7 @@ class TestCorpusRealSamples(unittest.TestCase):
         """raw_fields 税号必须脱敏（防 PII 外泄：中英文键都覆盖）。"""
         for fname, *_ in CASES:
             with self.subTest(fname=fname):
-                data = (CORPUS_DIR / fname).read_bytes()
-                inv = parse_xml(data)
+                inv = _parse(fname)
                 for k, v in inv.raw_fields.items():
                     if "IdNum" in k or "识别号" in k or "税号" in k:
                         self.assertIn("****", v, f"[{fname}] {k} 未脱敏：{v}")
@@ -284,8 +304,7 @@ class TestCorpusRealSamples(unittest.TestCase):
                 self.assertEqual(sample["format"], "xbrl_instance")
                 self.assertEqual(sample["verification"], "official_sample")
                 self.assertEqual(sample["source_tier"], "official_public_sample")
-                data = (CORPUS_DIR / fname).read_bytes()
-                inv = parse_xml(data)  # 不抛异常（结构安全）
+                inv = _parse(fname)  # 不抛异常（结构安全）
                 self.assertTrue(inv.invoice_no, f"[{fname}] 应至少解析出发票号码")
 
     def test_red_letter_negative_reconciliation(self):

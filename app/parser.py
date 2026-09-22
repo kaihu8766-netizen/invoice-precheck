@@ -23,6 +23,7 @@ from defusedxml import ElementTree as DET
 from defusedxml.common import DefusedXmlException
 
 from .models import ItemDetail, NormalizedInvoice
+from .ofd import extract_invoice_xml
 
 MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
 MAX_ELEMENTS = 50_000  # XML 元素数上限（防深度嵌套/事件膨胀 DoS）
@@ -361,3 +362,17 @@ def parse_xml(data: bytes) -> NormalizedInvoice:
         differential_deduction=differential_deduction,
         red_letter_blue_no=red_letter_blue_no,
     )
+
+
+def parse_document(data: bytes) -> NormalizedInvoice:
+    """统一文档解析入口（A1 2026-09-23）：xml → parse_xml；ofd → 解包提取内嵌 XML → parse_xml；
+    其他类型 → 明确报错。
+
+    约定：调用方（main 端点/测试）统一走本入口，单文件失败由调用方 try/except 隔离。
+    source_hash 基于提取出的 XML 内容（OFD 场景下与内嵌 XML 直接上传一致，去重口径统一）。
+    """
+    dtype = detect_type(data)
+    if dtype == "ofd":
+        inner = extract_invoice_xml(data)
+        return parse_xml(inner)
+    return parse_xml(data)

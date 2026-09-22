@@ -6,7 +6,8 @@
 - POST /review  整批解析+规则 → 一页风险报告（主流程）
 
 安全边界（二轮审查 P0）：
-- 文件数/单文件/总大小上限（防内存 DoS）；类型前置校验（parse_xml 内 detect_type）
+- 文件数/单文件/总大小上限（防内存 DoS）；类型前置校验（parse_document 内 detect_type：
+    xml 直接解析 / ofd 解包提取内嵌 XML / 其他类型明确报错）
 - 文件级失败隔离：读取+解析全链路 try/except，坏文件不拖垮整批
 - 对外错误文案白名单：业务 ValueError 透出，其余统一安全文案（不泄漏内部细节/输入片段）
 - 安全响应头：nosniff / frame DENY / referrer
@@ -21,7 +22,7 @@ from pathlib import Path
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 
-from .parser import parse_xml
+from .parser import parse_document
 from .report import DISCLAIMER, build_report, invoice_to_dict
 from .rules import RULESET_VERSION, run_rules_with_states
 
@@ -83,7 +84,7 @@ async def parse(file: UploadFile = File(...)):
     if len(data) > MAX_FILE_BYTES:
         raise HTTPException(413, f"文件超过 {MAX_FILE_BYTES // 1024 // 1024}MB 上限")
     try:
-        inv = parse_xml(data)
+        inv = parse_document(data)
     except ValueError as e:
         raise HTTPException(400, str(e)) from e
     return invoice_to_dict(inv)
@@ -109,7 +110,7 @@ async def review(files: list[UploadFile] = File(...)):
             total_bytes += len(data)
             if total_bytes > MAX_TOTAL_BYTES:
                 raise HTTPException(413, "本批总大小超限，请分批上传")
-            invoices.append(parse_xml(data))
+            invoices.append(parse_document(data))
         except HTTPException:
             raise
         except Exception as e:  # 隔离边界：读取+解析全链路，坏文件不拖垮整批
