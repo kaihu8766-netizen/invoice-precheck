@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  合成样本（synthetic）：差额征税 · EInvoice 英文结构
+  - 字段依据：GB/T《电子发票业务数据规范 第2部分：特定要素》差额征税要素 EI386 扣除额（拼音缩写 KCE）；
+    金蝶发票云差额征税注意事项（备注格式："差额征税：XX 元。"）
+  - 业务口径：旅游服务差额征税，销售额 1000.00，扣除额 200.00，计税基础 800.00 × 6% = 税额 48.00
+  - 构造：基于语料库真实票样（gaode-js-taxi.xml）EInvoice 结构同构扩展
+  - 未通过官方验证工具校验（工具仅 Win10 64 位）；结构级校验=与真实票样同构 + 勾稽测试
+-->
+<EInvoice>
+  <Header>
+    <EIid>26440000000000100005</EIid>
+    <EInvoiceTag>SWEI4400</EInvoiceTag>
+    <Version>0.32</Version>
+  </Header>
+  <EInvoiceData>
+    <SellerInformation>
+      <SellerName>示例旅行社（广东）有限公司</SellerName>
+      <SellerIdNum>91440101MAXXXXXX1C</SellerIdNum>
+      <SellerAddr>广东省广州市示例区示例路 1 号</SellerAddr>
+      <SellerTelNum>020-XXXXXXXX</SellerTelNum>
+    </SellerInformation>
+    <BuyerInformation>
+      <BuyerName>示例集团（深圳）有限公司</BuyerName>
+      <BuyerIdNum>91440300MAXXXXXX1D</BuyerIdNum>
+    </BuyerInformation>
+    <BasicInformation>
+      <TotalAmWithoutTax>800.00</TotalAmWithoutTax>
+      <TotalTaxAm>48.00</TotalTaxAm>
+      <TotalTax-includedAmount>848.00</TotalTax-includedAmount>
+      <RequestTime>2026-09-10 09:30:00</RequestTime>
+      <KCE>200.00</KCE>
+      <Remark>差额征税：200.00。</Remark>
+    </BasicInformation>
+    <IssuItemInformation>
+      <ItemDetail>
+        <ItemName>旅游服务</ItemName>
+        <Amount>800.00</Amount>
+        <TaxRate>0.06</TaxRate>
+        <TaxAm>48.00</TaxAm>
+      </ItemDetail>
+    </IssuItemInformation>
+  </EInvoiceData>
+  <TaxSupervisionInfo>
+    <InvoiceNumber>26440000000000100005</InvoiceNumber>
+    <IssueTime>2026-09-10 09:30:00</IssueTime>
+    <TaxBureauCode>14400000000</TaxBureauCode>
+    <TaxBureauName>国家税务总局广东省税务局</TaxBureauName>
+  </TaxSupervisionInfo>
+</EInvoice>
