@@ -12,18 +12,30 @@
 | gaode-js-taxi.xml | 江苏（SWEI3200） | 网约车平台（高德打车/365约车） | 蓝字·普通发票·交通运输服务·3%征收率·两明细行·**含退款负行**（Amount=-0.96 不含税 / TotaltaxIncludedAmount=-0.99 含税） | EInvoice 英文结构（Version=0.32，含 ptbh 节点） | CSDN 公开 dump 真实发票（https://blog.csdn.net/Mikowoo007/article/details/163025285） | 已脱敏（销售方虚构；买方沿用原博客打码） |
 | bj-platform-it.xml | 北京（SWEI1100） | 电子发票服务平台·网页开票 | 蓝字·增值税专用发票·一般纳税人·信息技术服务·6%·大额票（25万）·单明细行·含完整签名子树 | EInvoice 英文结构（Version=0.33，SellerAuthentication=01） | 影刀RPA社区公开源码示例（https://www.yingdao.com/community/detaildiscuss?id=735785349741531136） | 已脱敏（身份字段虚构/沿用原帖打码；SignatureValue 清空） |
 
-## 验收覆盖（DeepSeek 6 条）
+## 验收覆盖（DeepSeek 评审：M1 = partial，2026-09-23 v0.2 增量评审）
 
-| 要求 | 覆盖状态 |
-|---|---|
-| ≥3 省份 | ✅ 3 省（广东/江苏/北京） |
-| ≥3 开票系统 | ✅ 3 系统（标准税局系统/网约车平台/电子发票服务平台·网页开票） |
-| 版本分叉 | ✅ 0.2 / 0.32 / 0.33 |
-| 票种覆盖 | ✅ 专票×2 + 普票×1（含负行） |
-| XBRL | 官方讲解含 XBRL 实例文档结构（xbrli 根 + einv 命名空间），待建样例 |
-| 红冲 | gaode-js-taxi.xml 含退款负行（非红冲票）；真红字票待收集 |
-| 差额征税 | 待真实票样（GB/T 第2部分 EI386 字段字典已备） |
-| 多税率 | 待收集（公开渠道暂无完整 XML，需用户自有或工具包） |
+| 要求 | 覆盖状态 | 评审状态 |
+|---|---|---|
+| ≥3 省份 | ✅ 3 省（广东/江苏/北京） | 成立（北京由 SWEI1100 + TaxBureauCode=11100000000 支撑） |
+| ≥3 开票系统 | ⚠️ 3 系统（标准税局/网约车平台/服务平台·网页开票） | 北京系统类型为 inferred/unknown（UndefinedLabel 上下文），不计入硬结论 |
+| 版本分叉 | ✅ 0.2 / 0.32 / 0.33 | 成立 |
+| 票种覆盖 | ✅ 专票×2 + 普票×1（含负行） | 成立 |
+| 每省 ≥2 份 | ❌ 每省 1 份 | v1 硬门（P1-1） |
+| XBRL | ❌ 待建 | v1 硬门（P1-3） |
+| 红冲 | ❌ 待真实票样 | v1 硬门（P1-2） |
+| 差额征税 | ❌ 待票样（EI386 字典已备） | v1 硬门（P1-2） |
+| 多税率 | ❌ 待收集 | v1 硬门（P1-2） |
+| 中文标签/拼音方言 | ❌ 待建 | v1 硬门（P1-3） |
+
+**P2 能力声明（DeepSeek P0-7）**：本仓库 P2 阶段**不支持**红冲、差额征税、多税率、XBRL、中文标签方言、拼音缩写方言；parser/API 对这些场景不得静默通过，须返回 unsupported/confidence low。
+
+**来源分级（DeepSeek P0-2/P0-4）**：
+
+| 文件 | source_tier | authority | license / redistribution |
+|---|---|---|---|
+| official-gd-special.xml | official_public_sample | high | 官方公开样例，可引用 / permitted |
+| gaode-js-taxi.xml | public_blog_secondary_redacted | medium | 公开可见内容已二次脱敏，再分发需审计 / restricted |
+| bj-platform-it.xml | community_public_secondary_redacted | low | unknown/需审计，默认版权保留 / restricted；系统类型 inferred/unknown，待官方/沙箱验证或替换 |
 
 ## 使用规则
 

@@ -13,6 +13,54 @@
       "多税率明细",
       "中文标签方言",
       "拼音缩写方言"
+    ],
+    "m1_status": "partial",
+    "coverage_matrix": {
+      "province": {
+        "count": 3,
+        "provinces": [
+          "广东",
+          "江苏",
+          "北京"
+        ],
+        "threshold_met": true
+      },
+      "issuing_system": {
+        "count": 3,
+        "systems": [
+          "标准税局系统",
+          "网约车平台",
+          "电子发票服务平台·网页开票"
+        ],
+        "threshold_met": true,
+        "note": "北京系统类型来自 UndefinedLabel.LabelName='网页开票'（原帖上下文，inferred/unknown 级别，未对官方核验）"
+      },
+      "per_province_min_2": {
+        "met": false,
+        "note": "每省 1 份，未达 DeepSeek 建议的每省≥2 份"
+      },
+      "version_fork": {
+        "versions": [
+          "0.2",
+          "0.32",
+          "0.33"
+        ],
+        "count": 3
+      },
+      "xbrl": false,
+      "red_letter": false,
+      "differential_taxation": false,
+      "multi_tax_rate": false,
+      "chinese_label_dialect": false,
+      "pinyin_abbrev_dialect": false
+    },
+    "unsupported_cases": [
+      "红冲发票",
+      "差额征税",
+      "多税率明细",
+      "XBRL 实例文档",
+      "中文标签方言",
+      "拼音缩写方言"
     ]
   },
   "samples": [
@@ -65,7 +113,12 @@
           "签名算法",
           "结构"
         ]
-      }
+      },
+      "source_tier": "official_public_sample",
+      "authority": "high",
+      "license": "官方公开样例（财政部财会便函〔2023〕18号附件），可引用",
+      "redistribution": "permitted",
+      "verification": "official_sample"
     },
     {
       "file": "gaode-js-taxi.xml",
@@ -113,7 +166,12 @@
           "结构",
           "原博客已打码的买方(91xxx.../xxxxxx)"
         ]
-      }
+      },
+      "source_tier": "public_blog_secondary_redacted",
+      "authority": "medium",
+      "license": "公开可见内容，已二次脱敏；再分发范围需审计",
+      "redistribution": "restricted",
+      "verification": "unverified_against_official"
     },
     {
       "file": "bj-platform-it.xml",
@@ -172,7 +230,15 @@
           "结构",
           "UnPrice小数位"
         ]
-      }
+      },
+      "source_tier": "community_public_secondary_redacted",
+      "authority": "low",
+      "license": "unknown/需审计（公开可见≠可再分发，默认版权保留）",
+      "redistribution": "restricted",
+      "verification": "unverified_against_official",
+      "system_evidence": "UndefinedLabel.LabelName='网页开票'（原帖上下文，inferred/unknown 级别）",
+      "signature_stripped": true,
+      "signature_valid": false
     }
   ]
 }
