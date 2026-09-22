@@ -39,6 +39,14 @@ _ROOT_TAGS = {"发票", "Invoice", "EInvoice"}
 # 需按父节点归位（多个 Label* 冲突，扁平化会丢失"专票/普票"语义）
 _LABEL_CONTAINERS = {"InIssuType", "EInvoiceType", "GeneralOrSpecialVAT", "TaxpayerType"}
 
+# 金额合计路径注册表（DeepSeek 评审 M4）：票面合计按全路径锁定，不靠大小写/拼写。
+# 路径键优先于扁平别名——同名字段出现在不同路径（如明细行 TotaltaxIncludedAmount）不混入。
+_PATH_KEYS = {
+    "EInvoice/EInvoiceData/BasicInformation/TotalAmWithoutTax": "TotalAmWithoutTax#basic",
+    "EInvoice/EInvoiceData/BasicInformation/TotalTaxAm": "TotalTaxAm#basic",
+    "EInvoice/EInvoiceData/BasicInformation/TotalTax-includedAmount": "TotalTax-includedAmount#basic",
+}
+
 # 中文标签 → 模型字段（别名映射；金额/税额/合计只用"合计类"明确标签，防歧义）
 # 三方言兼容（2026-09-23 语料库调研结论）：
 #  ① 数电票 XML 中文标签（财政部电子凭证会计数据标准）
@@ -47,17 +55,19 @@ _LABEL_CONTAINERS = {"InIssuType", "EInvoiceType", "GeneralOrSpecialVAT", "Taxpa
 #     官方标准样例与网约车/打车软件等第三方开票系统均为此结构）
 # 注意：TotalTax-includedAmount（票面合计）与 TotaltaxIncludedAmount（明细行含税金额）
 # 字段名相近但语义不同——total 只映射前者，绝不含后者（否则明细负行会覆盖合计）。
+# 开票日期语义（财政部元素清单）：对应"开票请求时间 RequestTime"（IssueTime 是发票生成时间，
+# 两者日期一致但语义不同；数电票标准以 RequestTime 为开票日期）。
 _ALIAS = {
     "invoice_no": ["发票号码", "发票代码及号码", "FPHM", "InvoiceNumber"],
-    "issue_date": ["开票日期", "发票开具日期", "KPRQ", "IssueTime", "RequestTime"],
+    "issue_date": ["开票日期", "发票开具日期", "KPRQ", "RequestTime", "IssueTime"],
     "buyer_name": ["购买方名称", "购方名称", "GMFMC", "BuyerName"],
     "buyer_taxid": ["购买方纳税人识别号", "购方税号", "购买方统一社会信用代码", "GMFNSRSBH", "BuyerIdNum"],
     "seller_name": ["销售方名称", "销方名称", "XSFMC", "SellerName"],
     "seller_taxid": ["销售方纳税人识别号", "销方税号", "销售方统一社会信用代码", "XSFNSRSBH", "SellerIdNum"],
-    "amount": ["合计金额", "TotalAmWithoutTax", "HJJE"],
-    "tax": ["合计税额", "TotalTaxAm", "HJSE"],
-    "total": ["价税合计(小写)", "价税合计", "TotalTaxIncludedAm", "合计", "JSHJXX",
-              "TotalTax-includedAmount"],
+    "amount": ["TotalAmWithoutTax#basic", "合计金额", "TotalAmWithoutTax", "HJJE"],
+    "tax": ["TotalTaxAm#basic", "合计税额", "TotalTaxAm", "HJSE"],
+    "total": ["TotalTax-includedAmount#basic", "价税合计(小写)", "价税合计",
+              "TotalTaxIncludedAm", "合计", "JSHJXX", "TotalTax-includedAmount"],
     "invoice_type": ["发票类型", "票种", "FPZL",
                      "GeneralOrSpecialVAT.LabelName", "EInvoiceType.LabelName"],
 }
@@ -65,6 +75,7 @@ _ALIAS = {
 # 取"最后出现"的字段（合计节点通常在文档尾部，明细行在前；避免采到首行明细金额）
 _LAST_WINS = {"合计金额", "合计税额", "价税合计", "价税合计(小写)", "合计",
               "TotalAmWithoutTax", "TotalTaxAm", "TotalTaxIncludedAm", "TotalTax-includedAmount",
+              "TotalAmWithoutTax#basic", "TotalTaxAm#basic", "TotalTax-includedAmount#basic",
               "HJJE", "HJSE", "JSHJXX"}
 
 # raw_fields 白名单（仅保留规则用得到的键，防整张票面外泄）
@@ -192,7 +203,11 @@ def _collect_fields(data: bytes, warnings: list[str]) -> tuple[dict[str, str], i
                 if len(text) > _MAX_TEXT:
                     text = text[:_MAX_TEXT]
                 parent = stack[-2] if len(stack) >= 2 else None
-                if name in ("LabelCode", "LabelName") and parent in _LABEL_CONTAINERS:
+                path = "/".join(stack)
+                if path in _PATH_KEYS:
+                    # 金额合计路径注册表：全路径锁定（DeepSeek 评审 M4）
+                    fields[_PATH_KEYS[path]] = text
+                elif name in ("LabelCode", "LabelName") and parent in _LABEL_CONTAINERS:
                     # EInvoice 英文结构：InherentLabel 下多个 Label* 冲突，按父节点归位
                     fields[f"{parent}.{name}"] = text
                 elif name in _LAST_WINS:

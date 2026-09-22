@@ -1,0 +1,119 @@
+{
+  "corpus_version": "v0.1",
+  "created": "2026-09-23",
+  "description": "真实结构数电票 XML 票样（脱敏）——parser 第三方言（EInvoice 英文结构）回归语料",
+  "governance": {
+    "policy": "不采集他人发票；公开样例二次脱敏；合成样本与真实票样分目录；manifest 与票样 SHA256 绑定",
+    "required_for_v1": [
+      "省份 >= 3",
+      "开票系统 >= 3",
+      "XBRL 实例文档",
+      "红冲发票",
+      "差额征税",
+      "多税率明细",
+      "中文标签方言",
+      "拼音缩写方言"
+    ]
+  },
+  "samples": [
+    {
+      "file": "official-gd-special.xml",
+      "sha256": "3888c6d6e5cb2f4154f953aa639c764d835b43f96f14bdee21158ce79e48b415",
+      "province": "广东",
+      "tax_region_code": "4400",
+      "issuing_system": "标准税局系统",
+      "version": "0.2",
+      "invoice_type": "增值税专用发票",
+      "taxpayer_type": "一般纳税人",
+      "scenario": "蓝字专票·人力资源服务·6%税率·单明细行",
+      "dialect": "EInvoice英文结构",
+      "features": {
+        "negative_line": false,
+        "red_letter": false,
+        "differential_taxation": false,
+        "multi_tax_rate": false
+      },
+      "source": {
+        "type": "官方标准公开样例",
+        "url": "https://www.shangyexinzhi.com/article/8265084.html",
+        "authority": "财政部会计司《电子凭证会计数据标准——全面数字化的电子发票(试行版)》(财会便函〔2023〕18号)",
+        "accessed": "2026-09-23",
+        "license": "官方公开样例，可引用"
+      },
+      "masking": {
+        "status": "已脱敏",
+        "replaced": [
+          "SellerName",
+          "SellerIdNum",
+          "SellerAddr",
+          "SellerTelNum",
+          "SellerBankName",
+          "SellerBankAccNum",
+          "BuyerName",
+          "BuyerIdNum",
+          "Drawer",
+          "EIid",
+          "InvoiceNumber",
+          "LabelName(行业)"
+        ],
+        "kept": [
+          "金额",
+          "税额",
+          "税率",
+          "日期",
+          "税务机关代码/名称",
+          "签名算法",
+          "结构"
+        ]
+      }
+    },
+    {
+      "file": "gaode-js-taxi.xml",
+      "sha256": "1477fb9448515bfaa85bd01de03b37baaf39b09229fe91ff7ba9bb29e80e1136",
+      "province": "江苏",
+      "tax_region_code": "3200",
+      "issuing_system": "网约车平台（高德打车/365约车）",
+      "version": "0.32",
+      "invoice_type": "增值税普通发票",
+      "taxpayer_type": "未标注（真实样例 InherentLabel 为空）",
+      "scenario": "蓝字普票·交通运输服务·3%征收率·两明细行·含退款负行（Amount=-0.96 不含税 / TotaltaxIncludedAmount=-0.99 含税）",
+      "dialect": "EInvoice英文结构（含 ptbh 节点，无 BuyerHandlingName）",
+      "features": {
+        "negative_line": true,
+        "red_letter": false,
+        "differential_taxation": false,
+        "multi_tax_rate": false
+      },
+      "source": {
+        "type": "公开博客 dump 真实发票（二次脱敏）",
+        "url": "https://blog.csdn.net/Mikowoo007/article/details/163025285",
+        "authority": "CSDN 博客《批量汇总XML格式的发票信息》(2026-08-06 发布，73 阅读)",
+        "accessed": "2026-09-23",
+        "license": "公开可见内容，已二次脱敏后引用"
+      },
+      "masking": {
+        "status": "已脱敏",
+        "replaced": [
+          "SellerName",
+          "SellerIdNum",
+          "SellerAddr",
+          "SellerTelNum",
+          "SellerBankName",
+          "SellerBankAccNum",
+          "Drawer",
+          "EIid",
+          "InvoiceNumber"
+        ],
+        "kept": [
+          "金额",
+          "税额",
+          "税率",
+          "日期",
+          "税务机关代码/名称",
+          "结构",
+          "原博客已打码的买方(91xxx.../xxxxxx)"
+        ]
+      }
+    }
+  ]
+}
