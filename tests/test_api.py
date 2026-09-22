@@ -49,10 +49,10 @@ class TestAPI(unittest.TestCase):
         self.assertIn(DISCLAIMER, r.text)
 
     def test_parse_single(self):
-        r = client.post("/parse", files=[("file", ("a.xml", xml("1001", "20260801", "100.00", "13.00", "113.00"), "application/xml"))])
+        r = client.post("/parse", files=[("file", ("a.xml", xml("26003300000000000001", "20260801", "100.00", "13.00", "113.00"), "application/xml"))])
         self.assertEqual(r.status_code, 200)
         d = r.json()
-        self.assertEqual(d["invoice_no"], "1001")
+        self.assertEqual(d["invoice_no"], "26003300000000000001")
         self.assertEqual(d["total"], "113.00")
 
     def test_parse_rejects_pdf(self):
@@ -62,19 +62,19 @@ class TestAPI(unittest.TestCase):
 
     def test_review_full_flow(self):
         resp = client.post("/review", files=files(
-            ("normal.xml", xml("1001", "20260801", "100.00", "13.00", "113.00")),
-            ("dup.xml", xml("1001", "20260801", "100.00", "13.00", "113.00")),          # R1 重复
-            ("serial1.xml", xml("20260801_0001", "20260802", "50.00", "6.50", "56.50", seller="连号供应商")),
-            ("serial2.xml", xml("20260801_0002", "20260802", "60.00", "7.80", "67.80", seller="连号供应商")),
-            ("serial3.xml", xml("20260801_0003", "20260802", "70.00", "9.10", "79.10", seller="连号供应商")),
-            ("over.xml", xml("2001", "20260803", "6000.00", "780.00", "6780.00", category="差旅")),
+            ("normal.xml", xml("26003300000000008801", "20260801", "100.00", "13.00", "113.00", seller="普通供应商")),
+            ("dup.xml", xml("26003300000000008801", "20260801", "100.00", "13.00", "113.00", seller="普通供应商")),   # R1 重复
+            ("serial1.xml", xml("26004410000000000001", "20260802", "50.00", "6.50", "56.50", seller="连号供应商")),
+            ("serial2.xml", xml("26004410000000000002", "20260802", "60.00", "7.80", "67.80", seller="连号供应商")),
+            ("serial3.xml", xml("26004410000000000003", "20260802", "70.00", "9.10", "79.10", seller="连号供应商")),
+            ("over.xml", xml("26003300000000009902", "20260803", "6000.00", "780.00", "6780.00", seller="普通供应商", category="差旅")),
             ("bad.pdf", b"%PDF-1.7 junk", ),
         ))
         self.assertEqual(resp.status_code, 200)
         d = resp.json()
         self.assertEqual(d["summary"]["total_count"], 6)
         self.assertEqual(d["summary"]["failed_count"], 1)
-        self.assertEqual(d["summary"]["review_count"], 5)  # 1001×2 重复 + 连号×3
+        self.assertEqual(d["summary"]["review_count"], 5)  # 重复×2 + 连号×3（票号 20 位，无格式告警）
         self.assertEqual(d["summary"]["no_finding_count"], 1)  # 差旅票（类别未提供，R4 不误报）→ 未见规则命中
         self.assertIn("batch_id", d)
         self.assertIn("generated_at", d)
@@ -112,7 +112,7 @@ class TestAPI(unittest.TestCase):
     def test_review_bad_file_does_not_kill_batch(self):
         # 坏文件混入正常批次 → 200，正常票出报告（H-4 隔离）
         resp = client.post("/review", files=files(
-            ("normal.xml", xml("1001", "20260801", "100.00", "13.00", "113.00")),
+            ("normal.xml", xml("26003300000000000001", "20260801", "100.00", "13.00", "113.00")),
             ("garbage.xml", b"\xff\xfe not xml at all \x00\x01"),
             ("pdf.pdf", b"%PDF-1.7 junk"),
         ))
@@ -121,7 +121,7 @@ class TestAPI(unittest.TestCase):
         self.assertEqual(d["summary"]["total_count"], 1)
         self.assertEqual(d["summary"]["failed_count"], 2)
         # 正常票仍出报告
-        self.assertEqual(d["invoices"][0]["invoice_no"], "1001")
+        self.assertEqual(d["invoices"][0]["invoice_no"], "26003300000000000001")
 
     def test_parse_injection_string_survives(self):
         # 恶意/特殊字符票号（经 XML 实体转义进入，解析后还原为攻击串）：

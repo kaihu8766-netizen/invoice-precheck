@@ -33,6 +33,22 @@ STAR_TAX_XML = SAMPLE_XML.replace("<合计税额>130.00</合计税额>", "<合�
 
 BAD_TOTAL_XML = SAMPLE_XML.replace("<价税合计>1130.00</价税合计>", "<价税合计>1135.00</价税合计>")
 
+# 国标拼音缩写版（传统电子发票 XML：GB/T 电子发票业务数据规范）
+GB_XML = """<?xml version="1.0" encoding="UTF-8"?>
+<EInvoice xmlns="http://example.com/gb">
+  <FPHM>04300260031112345678</FPHM>
+  <KPRQ>2026-08-15</KPRQ>
+  <FPZL>增值税专用发票</FPZL>
+  <GMFMC>示例科技有限公司</GMFMC>
+  <GMFNSRSBH>91310000MA1FL1XXXX</GMFNSRSBH>
+  <XSFMC>北京华信办公用品有限公司</XSFMC>
+  <XSFNSRSBH>91110108XXXXXXXXXX</XSFNSRSBH>
+  <HJJE>1000.00</HJJE>
+  <HJSE>130.00</HJSE>
+  <JSHJXX>1130.00</JSHJXX>
+</EInvoice>
+"""
+
 
 class TestParser(unittest.TestCase):
     def test_detect_type(self):
@@ -76,6 +92,23 @@ class TestParser(unittest.TestCase):
     def test_bad_total_flagged(self):
         inv = parse_xml(BAD_TOTAL_XML.encode())
         self.assertTrue(any("勾稽异常" in w for w in inv.parse_warnings))
+
+
+    def test_gb_abbrev_xml(self):
+        # 国标拼音缩写 XML（GB/T 规范）兼容
+        inv = parse_xml(GB_XML.encode())
+        self.assertEqual(inv.invoice_no, "04300260031112345678")
+        self.assertEqual(inv.issue_date, "2026-08-15")
+        self.assertEqual(inv.buyer_name, "示例科技有限公司")
+        self.assertEqual(inv.seller_name, "北京华信办公用品有限公司")
+        self.assertEqual(inv.amount, Decimal("1000.00"))
+        self.assertEqual(inv.total, Decimal("1130.00"))
+
+    def test_invoice_no_length_warning(self):
+        # 数电票号码应为 20 位：位数异常记告警（不致命）
+        bad = SAMPLE_XML.replace("04300260031112345678", "123")
+        inv = parse_xml(bad.encode())
+        self.assertTrue(any("20 位" in w for w in inv.parse_warnings))
 
 
 if __name__ == "__main__":

@@ -23,22 +23,25 @@ from .models import NormalizedInvoice
 MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
 
 # 中文标签 → 模型字段（别名映射；金额/税额/合计只用"合计类"明确标签，防歧义）
+# 双规范兼容：数电票 XML 用中文标签（财政部电子凭证会计数据标准），
+# 传统电子发票用国标拼音缩写（GB/T 电子发票业务数据规范：FPHM/HJJE/JSHJXX 等）。
 _ALIAS = {
-    "invoice_no": ["发票号码", "发票代码及号码"],
-    "issue_date": ["开票日期", "发票开具日期"],
-    "buyer_name": ["购买方名称", "购方名称"],
-    "buyer_taxid": ["购买方纳税人识别号", "购方税号", "购买方统一社会信用代码"],
-    "seller_name": ["销售方名称", "销方名称"],
-    "seller_taxid": ["销售方纳税人识别号", "销方税号", "销售方统一社会信用代码"],
-    "amount": ["合计金额", "TotalAmWithoutTax"],
-    "tax": ["合计税额", "TotalTaxAm"],
-    "total": ["价税合计(小写)", "价税合计", "TotalTaxIncludedAm", "合计"],
-    "invoice_type": ["发票类型", "票种"],
+    "invoice_no": ["发票号码", "发票代码及号码", "FPHM"],
+    "issue_date": ["开票日期", "发票开具日期", "KPRQ"],
+    "buyer_name": ["购买方名称", "购方名称", "GMFMC"],
+    "buyer_taxid": ["购买方纳税人识别号", "购方税号", "购买方统一社会信用代码", "GMFNSRSBH"],
+    "seller_name": ["销售方名称", "销方名称", "XSFMC"],
+    "seller_taxid": ["销售方纳税人识别号", "销方税号", "销售方统一社会信用代码", "XSFNSRSBH"],
+    "amount": ["合计金额", "TotalAmWithoutTax", "HJJE"],
+    "tax": ["合计税额", "TotalTaxAm", "HJSE"],
+    "total": ["价税合计(小写)", "价税合计", "TotalTaxIncludedAm", "合计", "JSHJXX"],
+    "invoice_type": ["发票类型", "票种", "FPZL"],
 }
 
 # 取"最后出现"的字段（合计节点通常在文档尾部，明细行在前；避免采到首行明细金额）
 _LAST_WINS = {"合计金额", "合计税额", "价税合计", "价税合计(小写)", "合计",
-              "TotalAmWithoutTax", "TotalTaxAm", "TotalTaxIncludedAm"}
+              "TotalAmWithoutTax", "TotalTaxAm", "TotalTaxIncludedAm",
+              "HJJE", "HJSE", "JSHJXX"}
 
 # raw_fields 白名单（仅保留规则用得到的键，防整张票面外泄）
 _RAW_WHITELIST = {
@@ -163,6 +166,9 @@ def parse_xml(data: bytes) -> NormalizedInvoice:
 
     if not invoice_no:
         warnings.append("发票号码缺失")
+    elif not (len(invoice_no) == 20 and invoice_no.isdigit()):
+        # 数电票号码 20 位（年度2+区划2+渠道1+顺序15）；异常记告警，不判为致命
+        warnings.append(f"发票号码位数/格式异常（数电票应为 20 位数字）：{invoice_no}")
 
     # raw_fields 白名单 + 税号脱敏
     raw_fields = {
