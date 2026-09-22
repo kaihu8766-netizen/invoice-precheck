@@ -38,5 +38,8 @@ jobs:
       - name: Verify OFD sample reproducible (A1)
         run: python scripts/generate_ofd_sample.py --verify
 
+      - name: Explain eval gate (F-P2 deterministic)
+        run: python scripts/eval_explain.py --mode deterministic
+
       - name: Smoke redact pipeline (P0-3)
         run: python scripts/redact.py --help >/dev/null

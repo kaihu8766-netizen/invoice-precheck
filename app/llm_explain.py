@@ -70,13 +70,13 @@ _cache: dict[str, dict] = {}
 
 
 def _template_explain(f: dict, idx: int) -> dict:
-    """模板解释（无 LLM / LLM 失败兜底）：结构完整、专业、可审计。"""
-    chain = [e.get("field", "") for e in (f.get("evidence_chain") or [])]
+    """模板解释（无 LLM / LLM 失败兜底）：结构完整、专业、可审计；与 LLM 路径同口径脱敏。"""
+    chain = [_mask(str(e.get("field", ""))) for e in (f.get("evidence_chain") or [])]
     return {
-        "what": f.get("message", ""),
+        "what": _mask(str(f.get("message", ""))),
         "impact": f"命中规则 {f.get('rule_id')}（{f.get('severity', '中')}），"
-                  f"涉及字段 {f.get('field')}；该票需人工复核后处理。",
-        "action": f.get("suggestion") or "核对原始凭证与相关单据，确认后处理。",
+                  f"涉及字段 {_mask(str(f.get('field', '')))}；该票需人工复核后处理。",
+        "action": _mask(str(f.get("suggestion") or "核对原始凭证与相关单据，确认后处理。")),
         "who": "财务复核岗",
         "evidence_refs": chain,
         "source": "template",
