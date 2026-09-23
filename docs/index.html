@@ -95,10 +95,29 @@
   .hint.okc{ color:var(--ok); }
 
   /* 输出区 */
-  #empty{ text-align:center; padding:64px 20px; color:var(--sub); }
-  #empty .ic{ font-size:40px; margin-bottom:12px; }
-  #empty .t{ font-size:15px; font-weight:600; color:var(--ink); }
-  #empty .s{ font-size:13px; margin-top:6px; }
+  #empty{ text-align:left; padding:40px 24px; color:var(--sub); }
+  .guide{ max-width:640px; margin:0 auto; background:#fff; border:1px solid var(--line); border-radius:var(--r-lg); padding:28px 26px; }
+  .guide-head{ display:flex; gap:14px; align-items:flex-start; }
+  .guide-head .g-ic{ font-size:30px; line-height:1; }
+  .guide-head .t{ font-size:17px; font-weight:700; color:var(--ink); }
+  .guide-head .s{ font-size:13px; margin-top:4px; line-height:1.6; }
+  .guide-steps{ display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:20px; }
+  @media (max-width:560px){ .guide-steps{ grid-template-columns:1fr; } }
+  .guide-steps .step{ display:flex; gap:10px; background:#fafbfc; border:1px solid var(--line-soft); border-radius:var(--r-md); padding:10px 12px; }
+  .step .n{ width:22px; height:22px; border-radius:50%; background:var(--brand); color:#fff; font-size:12px; font-weight:700; display:flex; align-items:center; justify-content:center; flex-shrink:0; margin-top:1px; }
+  .step b{ display:block; font-size:13px; color:var(--ink); }
+  .step span{ font-size:12px; line-height:1.5; display:block; margin-top:2px; }
+  .guide-note{ font-size:12px; color:var(--weak); margin-top:18px; padding-top:14px; border-top:1px dashed var(--line); line-height:1.6; }
+
+  /* 骨架屏（自动渲染前，避免初始空白） */
+  .skeleton{ padding:16px; }
+  .sk-line{ height:14px; border-radius:4px; background:linear-gradient(90deg,#eef0f3 25%,#f6f7f9 50%,#eef0f3 75%); background-size:200% 100%; animation:sk 1.2s infinite; margin:8px 0; }
+  .sk-line.w40{ width:40%; } .sk-line.w60{ width:60%; } .sk-line.w70{ width:70%; } .sk-line.w80{ width:80%; }
+  .sk-grid{ display:grid; grid-template-columns:repeat(5,1fr); gap:10px; margin:12px 0; }
+  @media (max-width:720px){ .sk-grid{ grid-template-columns:repeat(3,1fr); } }
+  .sk-card{ border:1px solid var(--line-soft); border-radius:var(--r-md); padding:12px; }
+  @keyframes sk{ 0%{background-position:200% 0} 100%{background-position:-200% 0} }
+  @media (prefers-reduced-motion:reduce){ .sk-line{ animation:none; } }
 
   /* KPI 摘要 */
   .kpis{ display:grid; grid-template-columns:repeat(5,1fr); gap:10px; padding:14px 16px 4px; }
@@ -348,10 +367,23 @@
 
     <!-- 右栏：输出区 -->
     <section class="output-panel">
-      <div id="empty" style="display:none;">
-        <div class="ic">🔍</div>
-        <div class="t">上传发票，运行预审</div>
-        <div class="s">左侧选择发票文件后点击「运行预审」，合规报告将显示在这里。</div>
+      <div id="empty">
+        <div class="guide">
+          <div class="guide-head">
+            <div class="g-ic">🔍</div>
+            <div>
+              <div class="t">上传发票，运行预审</div>
+              <div class="s">数电票自动识别 + 规则引擎合规预审，四步完成发票风险核查</div>
+            </div>
+          </div>
+          <div class="guide-steps">
+            <div class="step"><div class="n">1</div><div><b>上传发票</b><span>拖拽或选择数电票 XML/OFD/PDF，可多选，可拍照</span></div></div>
+            <div class="step"><div class="n">2</div><div><b>自动解析</b><span>结构化识别票面字段，图片版发票走本地 OCR</span></div></div>
+            <div class="step"><div class="n">3</div><div><b>规则预审</b><span>重复票 / 差额征税 / 行级勾稽 / 红冲关联等规则</span></div></div>
+            <div class="step"><div class="n">4</div><div><b>处置与导出</b><span>复核工作台确认修正，导出 CSV / Excel 记账表</span></div></div>
+          </div>
+          <div class="guide-note">文件仅发往你配置的后端，不发送第三方；真实数据本地处理、验完可删</div>
+        </div>
       </div>
       <div id="result" role="status" aria-live="polite" tabindex="-1"></div>
     </section>
@@ -1036,6 +1068,7 @@ function updatePrintHead(v) {
 
 function __origRender(d) {
   const el = $("result");
+  if (el.innerHTML === "") el.innerHTML = `<div class="skeleton"><div class="sk-line w60"></div><div class="sk-grid">${Array(5).fill('<div class="sk-card"><div class="sk-line w40"></div><div class="sk-line w70"></div></div>').join("")}</div><div class="sk-line w80"></div></div>`;
   $("empty").style.display = "none";
   if (!d || d.error) { el.innerHTML = `<div class="card card-pad high">${esc(d?.error || "无响应")}</div>`; return; }
   const s = d.summary || {};
@@ -1120,9 +1153,10 @@ function setMode(live) {
   if (live) {
     $("backendUrl").value = localStorage.getItem("ipc_backend") || "http://localhost:8000";
     $("apiKey").value = localStorage.getItem("ipc_key") || "";
-    $("empty").style.display = "";
-    $("result").innerHTML = "";
   }
+  // 空状态引导：无报告时右侧显示引导区（演示/真实模式初始页均可见，RV-37 空状态）
+  $("empty").style.display = "";
+  $("result").innerHTML = "";
 }
 
 /* ---------- 真实模式：连接 + 预审 ---------- */
