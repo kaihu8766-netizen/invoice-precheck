@@ -3,6 +3,12 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#3370ff">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="apple-touch-icon" href="assets/icon-192.png">
 <title>发票合规预审 · 演示</title>
 <style>
   :root{
@@ -353,9 +359,9 @@
         <div class="drop" id="dropZone" tabindex="0" role="button" aria-label="上传发票文件">
           <div class="ic">📄</div>
           <div class="t"><span class="desk">拖拽文件到此处，或点击选择</span><span class="mob">点击选择发票文件</span></div>
-          <div class="s">支持数电票 XML/OFD/PDF · 可多选 · <span class="kbd">或粘贴 Ctrl+V</span></div>
+          <div class="s">支持数电票 XML/OFD/PDF · 图片拍照（PNG/JPG）· 可多选</div>
         </div>
-        <input id="fileInput" type="file" multiple accept=".xml,.ofd,.zip,.pdf" style="display:none">
+        <input id="fileInput" type="file" multiple accept=".xml,.ofd,.zip,.pdf,.png,.jpg,.jpeg" capture="environment" style="display:none">
         <button id="btnCamera" class="btn btn-ghost camera-btn" type="button" style="margin-top:10px;width:100%;justify-content:center;align-items:center;gap:6px;">📷 拍照识别发票</button>
         <div class="filelist" id="fileList"></div>
         <button id="btnReview" class="btn btn-primary" style="margin-top:12px;">运行预审</button>
@@ -387,6 +393,28 @@
         </div>
         <button id="btnSaveCfg" class="btn btn-ghost" style="margin-top:10px;">保存企业主体</button>
         <div class="hint" id="cfgHint">保存后 R2 将校验每张票购买方税号是否本公司：不一致 → 高风险；税号一致但名称差异 → 低风险提示。首版仅支持单主体（集团多法人/代开场景暂不覆盖）。</div>
+        <details id="rulesCfg" style="margin-top:14px;border:1px dashed var(--line);border-radius:8px;padding:10px 12px;">
+          <summary style="cursor:pointer;font-size:12.5px;font-weight:600;color:var(--sub);">规则阈值校准（R3/R4/R6/R8 · 默认值见各输入框占位符）</summary>
+          <div style="margin-top:8px;font-size:12.5px;font-weight:600;color:var(--brand);">R3 连号</div>
+          <div class="fld"><label for="rcSerialTail">连号取票号末 N 位（2-8）</label><input id="rcSerialTail" type="number" min="2" max="8" placeholder="4" style="font-size:16px;"></div>
+          <div class="fld"><label for="rcSerialGap">窗口内相邻最大差值（0-10）</label><input id="rcSerialGap" type="number" min="0" max="10" placeholder="2" style="font-size:16px;"></div>
+          <div class="fld"><label for="rcSerialMin">窗口内最少票数（2-100）</label><input id="rcSerialMin" type="number" min="2" max="100" placeholder="3" style="font-size:16px;"></div>
+          <div style="margin-top:8px;font-size:12.5px;font-weight:600;color:var(--brand);">R4 类别限额（元，100-1 亿）</div>
+          <div class="fld"><label for="rcLimitTravel">差旅</label><input id="rcLimitTravel" type="number" min="100" placeholder="5000" style="font-size:16px;"></div>
+          <div class="fld"><label for="rcLimitEntertain">招待</label><input id="rcLimitEntertain" type="number" min="100" placeholder="3000" style="font-size:16px;"></div>
+          <div class="fld"><label for="rcLimitOffice">办公</label><input id="rcLimitOffice" type="number" min="100" placeholder="2000" style="font-size:16px;"></div>
+          <div class="fld"><label for="rcLimitTransport">交通</label><input id="rcLimitTransport" type="number" min="100" placeholder="1000" style="font-size:16px;"></div>
+          <div class="fld"><label for="rcLimitOther">其他</label><input id="rcLimitOther" type="number" min="100" placeholder="5000" style="font-size:16px;"></div>
+          <div class="fld"><label for="rcDefaultLimit">类别不在表内时的默认限额（元）</label><input id="rcDefaultLimit" type="number" min="100" placeholder="5000" style="font-size:16px;"></div>
+          <div style="margin-top:8px;font-size:12.5px;font-weight:600;color:var(--brand);">R6 / R8</div>
+          <div class="fld"><label for="rcConcentrate">同供应商同日票数阈值（2-100）</label><input id="rcConcentrate" type="number" min="2" max="100" placeholder="6" style="font-size:16px;"></div>
+          <div class="fld"><label for="rcMaxTotal">单票金额上限（元，1 万-10 亿）</label><input id="rcMaxTotal" type="number" min="10000" placeholder="30000000" style="font-size:16px;"></div>
+          <div style="display:flex;gap:8px;margin-top:10px;">
+            <button id="btnSaveRules" class="btn btn-ghost" style="flex:1;">保存规则阈值</button>
+            <button id="btnResetRules" class="btn btn-ghost" style="flex:1;">恢复默认</button>
+          </div>
+          <div class="hint" id="rulesHint">阈值保存到本地后端 data/config.json（不入 Git）。变更会记录生效时间与配置哈希，报告中标注"阈值来自自定义配置"。</div>
+        </details>
       </section>
 
       <section class="card card-pad demo-only">
@@ -432,6 +460,10 @@
 
 <script>
 "use strict";
+// F-06 PWA：放脚本最前（不依赖后续代码执行；secure context 才注册，HTTP 局域网自动跳过）
+if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost" || location.hostname === "127.0.0.1")) {
+  navigator.serviceWorker.register("service-worker.js").catch(function () {});
+}
 var __defProp = Object.defineProperty;
 var __defProps = Object.defineProperties;
 var __getOwnPropDescs = Object.getOwnPropertyDescriptors;
@@ -1387,6 +1419,7 @@ async function loadCompanyCfg() {
     if (ents[0].name) $("coName").value = ents[0].name;
     if (ents[0].tax_id) $("coTaxId").value = ents[0].tax_id;
   }
+  if (j.rules) fillRulesPanel(j.rules);
 }
 $("btnSaveCfg").onclick = async () => {
   const url = $("backendUrl").value.trim().replace(/\/+$/, "");
@@ -1409,6 +1442,67 @@ $("btnSaveCfg").onclick = async () => {
   } catch (e) {
     $("cfgHint").textContent = "保存失败：" + e.message;
     $("cfgHint").className = "hint err";
+  }
+};
+function fillRulesPanel(rules) {
+  if (!rules) return;
+  var set = function (id, v) { if (v !== undefined && v !== null) { var el = $(id); if (el) el.value = v; } };
+  set("rcSerialTail", rules.serial_tail_len);
+  set("rcSerialGap", rules.serial_max_gap);
+  set("rcSerialMin", rules.serial_min_count);
+  if (rules.category_limits) {
+    set("rcLimitTravel", rules.category_limits.travel);
+    set("rcLimitEntertain", rules.category_limits.entertain);
+    set("rcLimitOffice", rules.category_limits.office);
+    set("rcLimitTransport", rules.category_limits.transport);
+    set("rcLimitOther", rules.category_limits.other);
+  }
+  set("rcDefaultLimit", rules.default_limit);
+  set("rcConcentrate", rules.concentrate_threshold);
+  set("rcMaxTotal", rules.max_plausible_total);
+}
+function collectRules() {
+  var num = function (id) { var v = $(id).value.trim(); return v === "" ? undefined : Number(v); };
+  var out = {};
+  var a = num("rcSerialTail"); if (a !== undefined) out.serial_tail_len = a;
+  var b = num("rcSerialGap"); if (b !== undefined) out.serial_max_gap = b;
+  var c = num("rcSerialMin"); if (c !== undefined) out.serial_min_count = c;
+  var cl = {};
+  var t = num("rcLimitTravel"); if (t !== undefined) cl.travel = t;
+  var e = num("rcLimitEntertain"); if (e !== undefined) cl.entertain = e;
+  var o = num("rcLimitOffice"); if (o !== undefined) cl.office = o;
+  var tr = num("rcLimitTransport"); if (tr !== undefined) cl.transport = tr;
+  var ot = num("rcLimitOther"); if (ot !== undefined) cl.other = ot;
+  if (Object.keys(cl).length) out.category_limits = cl;
+  var d = num("rcDefaultLimit"); if (d !== undefined) out.default_limit = d;
+  var cc = num("rcConcentrate"); if (cc !== undefined) out.concentrate_threshold = cc;
+  var m = num("rcMaxTotal"); if (m !== undefined) out.max_plausible_total = m;
+  return out;
+}
+function resetRulesPanel() {
+  var defs = { rcSerialTail: 4, rcSerialGap: 2, rcSerialMin: 3, rcLimitTravel: 5000, rcLimitEntertain: 3000, rcLimitOffice: 2000, rcLimitTransport: 1000, rcLimitOther: 5000, rcDefaultLimit: 5000, rcConcentrate: 6, rcMaxTotal: 30000000 };
+  Object.keys(defs).forEach(function (id) { var el = $(id); if (el) el.value = defs[id]; });
+  $("rulesHint").textContent = "已恢复默认值，点击「保存规则阈值」生效";
+}
+$("btnResetRules").onclick = resetRulesPanel;
+$("btnSaveRules").onclick = async () => {
+  const url = $("backendUrl").value.trim().replace(/\/+$/, "");
+  const key = $("apiKey").value.trim();
+  if (!url) { $("rulesHint").textContent = "请先填写后端地址"; $("rulesHint").className = "hint err"; return; }
+  if (!key) { $("rulesHint").textContent = "请先填写 API Key"; $("rulesHint").className = "hint err"; return; }
+  try {
+    const r = await fetch(url + "/api/config", {
+      method: "PUT",
+      headers: { "X-API-Key": key, "Content-Type": "application/json" },
+      body: JSON.stringify({ rules: collectRules() })
+    });
+    const j = await r.json();
+    if (!r.ok) { $("rulesHint").textContent = "保存失败：" + (j.detail || r.status); $("rulesHint").className = "hint err"; return; }
+    $("rulesHint").textContent = "已保存（rules_hash " + (j.rules_hash || "?") + "），规则阈值已生效，报告将标注自定义来源";
+    $("rulesHint").className = "hint okc";
+  } catch (e2) {
+    $("rulesHint").textContent = "保存失败：" + e2.message;
+    $("rulesHint").className = "hint err";
   }
 };
 async function runReview() {
@@ -1537,8 +1631,10 @@ function syncFiles() {
 }
 $("fileInput").onchange = syncFiles;
 $("btnCamera").onclick = () => {
-  $("runHint").textContent = "拍照识别（OCR）在真实模式后端接入后可用（本地 OCR 已支持图片版 PDF）。演示版请上传 PDF/XML/OFD 文件。";
-  $("runHint").className = "hint err";
+  // F-06：capture="environment" 直接调起手机后置相机；图片走本地 OCR（数据不出本机）
+  $("runHint").textContent = "已调起相机：请正拍发票（避免反光/歪斜），每张照片对应一张发票；拍完自动加入列表，点击「运行预审」识别";
+  $("runHint").className = "hint";
+  $("fileInput").click();
 };
 $("btnDemo").onclick = () => {
   setMode(false);

@@ -1,8 +1,10 @@
-"""企业主体配置存储（RV-42 落地，F-20260923-04）。
+"""配置存储（F-04 主体配置 + F-05 规则校准）。
 
 - 本地 data/config.json 为主入口（不入 Git；前端设置面板写入）
-- 环境变量 INVOICE_COMPANY_NAME / INVOICE_COMPANY_TAXID 高级覆盖（Docker/批量用）
-- 首版单主体；company_entities 保持数组结构，后续多主体/角色扩展不换协议
+- 环境变量 INVOICE_COMPANY_NAME / INVOICE_COMPANY_TAXID 高级覆盖（Docker/批量用；必须成套）
+- rules 段：R3/R4/R6/R8 阈值白名单校准（RV-48）；叶子字段白名单，未知字段拒绝；缺失回退默认
+- 优先级：默认值 < 本地文件 < 环境变量（env 只覆盖主体，不参与规则）
+- 首版单主体单实例；company_entities 保持数组结构，后续多主体/角色扩展不换协议
 """
 from __future__ import annotations
 
@@ -13,6 +15,40 @@ from pathlib import Path
 DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 CONFIG_PATH = DATA_DIR / "config.json"
 
+# 规则阈值白名单（RV-48 校验区间表 + RV-50 复核放宽）：叶子字段级，禁止提交任意 rules 对象
+# RV-50 语义说明：serial_max_gap 是"相邻票号最大差值"；0 = 完全同号聚合（重复检测），建议业务配置 ≥1
+RULES_WHITELIST: dict[str, dict] = {
+    "serial_tail_len": {"type": "int", "min": 2, "max": 8, "default": 4},
+    "serial_max_gap": {"type": "int", "min": 0, "max": 10, "default": 2},
+    "serial_min_count": {"type": "int", "min": 2, "max": 500, "default": 3},
+    "category_limits.travel": {"type": "money", "min": 1, "max": 100_000_000, "default": 5000},
+    "category_limits.entertain": {"type": "money", "min": 1, "max": 100_000_000, "default": 3000},
+    "category_limits.office": {"type": "money", "min": 1, "max": 100_000_000, "default": 2000},
+    "category_limits.transport": {"type": "money", "min": 1, "max": 100_000_000, "default": 1000},
+    "category_limits.other": {"type": "money", "min": 1, "max": 100_000_000, "default": 5000},
+    "default_limit": {"type": "money", "min": 1, "max": 100_000_000, "default": 5000},
+    "concentrate_threshold": {"type": "int", "min": 2, "max": 100, "default": 6},
+    "max_plausible_total": {"type": "money", "min": 1_000, "max": 1_000_000_000, "default": 30_000_000},
+}
+
+# 中文类别 → 稳定英文 key（前端展示中文，存储/规则用英文枚举）
+CATEGORY_KEYS = {"差旅": "travel", "招待": "entertain", "办公": "office", "交通": "transport", "其他": "other"}
+
+DEFAULT_RULES: dict = {
+    "serial_tail_len": 4,
+    "serial_max_gap": 2,
+    "serial_min_count": 3,
+    "category_limits": {"travel": 5000, "entertain": 3000, "office": 2000, "transport": 1000, "other": 5000},
+    "default_limit": 5000,
+    "concentrate_threshold": 6,
+    "max_plausible_total": 30_000_000,
+}
+
+
+def _deep_copy(obj):
+    return json.loads(json.dumps(obj, ensure_ascii=False))
+
+
 DEFAULT_CONFIG: dict = {
     "company_entities": [
         {"id": "default", "name": "", "tax_id": "", "enabled": True},
@@ -22,11 +58,47 @@ DEFAULT_CONFIG: dict = {
         "name_mismatch_level": "low",
         "missing_field_level": "low",
     },
+    "rules": _deep_copy(DEFAULT_RULES),
+    "meta": {"rules_updated_at": "", "rules_hash": ""},
 }
 
 
-def _deep_copy(obj):
-    return json.loads(json.dumps(obj, ensure_ascii=False))
+def rules_hash(cfg: dict) -> str:
+    """当前 rules 段内容哈希（审计快照：报告标注/前端回显/变更留痕）。"""
+    import hashlib
+    return hashlib.sha256(json.dumps(cfg.get("rules", {}), sort_keys=True,
+                                     ensure_ascii=False).encode("utf-8")).hexdigest()[:16]
+
+
+def rules_sha256_full(cfg: dict) -> str:
+    """完整 SHA256（RV-50 审计加强：rules_hash 前 16 位之外可还原全量摘要）。"""
+    import hashlib
+    return hashlib.sha256(json.dumps(cfg.get("rules", {}), sort_keys=True,
+                                     ensure_ascii=False).encode("utf-8")).hexdigest()
+
+
+def is_default_rules(cfg: dict) -> bool:
+    """RV-50 意见 7：逐叶子比较生效值，全部等于默认才算"未自定义"（防部分字段/空对象误标 custom）。"""
+    r = cfg.get("rules") or {}
+    for key, spec in RULES_WHITELIST.items():
+        if key.startswith("category_limits."):
+            cat = key.split(".", 1)[1]
+            cl = r.get("category_limits") or {}
+            val = cl.get(cat)
+            if val is None:
+                val = DEFAULT_RULES["category_limits"].get(cat)
+        else:
+            val = r.get(key)
+            if val is None:
+                val = DEFAULT_RULES.get(key)
+        if val is None:
+            continue
+        if isinstance(spec.get("default"), str):
+            if str(val) != str(spec["default"]):
+                return False
+        elif val != spec["default"]:
+            return False
+    return True
 
 
 def load_config() -> dict:
@@ -35,8 +107,8 @@ def load_config() -> dict:
     try:
         if CONFIG_PATH.exists():
             d = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
-            for k in ("company_entities", "r2"):
-                if isinstance(d.get(k), type(cfg[k])):
+            for k in ("company_entities", "r2", "rules", "meta"):
+                if k in d and isinstance(d[k], type(cfg[k])):
                     cfg[k] = d[k]
     except Exception:  # 文件损坏/格式异常 → 用默认并保持可写
         pass
@@ -188,8 +260,64 @@ def active_entity(cfg: dict) -> dict | None:
     return None
 
 
+def validate_rules_payload(rules: dict) -> tuple[dict | None, str]:
+    """校验前端提交的 rules 段（RV-48）：叶子白名单 + 区间；整包原子，任一非法整体拒绝。
+
+    返回 (清洗后的 rules, None) 或 (None, 错误文案)。允许只提交部分字段（缺失回退默认）。
+    """
+    if not isinstance(rules, dict):
+        return None, "规则配置必须是对象"
+    out = _deep_copy(DEFAULT_RULES)
+    for key, spec in RULES_WHITELIST.items():
+        # 支持 category_limits.travel 点路径
+        if "." in key:
+            section, sub = key.split(".")
+            if section not in out or not isinstance(out.get(section), dict):
+                continue
+            if sub in rules.get(section, {}):
+                val = rules[section][sub]
+                ok, err = _check_one(val, spec, key)
+                if not ok:
+                    return None, err
+                out[section][sub] = val
+        else:
+            if key in rules:
+                val = rules[key]
+                ok, err = _check_one(val, spec, key)
+                if not ok:
+                    return None, err
+                out[key] = val
+    # 未知字段：拒绝并报错（防拼写错误静默失效）
+    known = set(RULES_WHITELIST) | {"category_limits"}
+    for k in rules:
+        if k not in known:
+            return None, f"未知规则字段：{k}"
+    if "category_limits" in rules:
+        for k in rules["category_limits"]:
+            if f"category_limits.{k}" not in RULES_WHITELIST:
+                return None, f"未知类别字段：{k}"
+    return out, None
+
+
+def _check_one(val, spec: dict, key: str) -> tuple[bool, str]:
+    try:
+        if spec["type"] == "int":
+            v = int(val)
+            if not (spec["min"] <= v <= spec["max"]):
+                return False, f"{key} 应在 {spec['min']}-{spec['max']} 之间"
+            return True, ""
+        # money：支持数字或字符串数字（前端可传 "30000000"），拒绝 float 语义混淆
+        v = int(str(val).strip())
+        if not (spec["min"] <= v <= spec["max"]):
+            return False, f"{key} 应在 {spec['min']}-{spec['max']} 元之间"
+        return True, ""
+    except (ValueError, TypeError):
+        return False, f"{key} 必须是整数（{spec['min']}-{spec['max']}）"
+
+
 def to_rules_config(cfg: dict):
-    """把存储配置映射为 rules.RulesConfig（延迟 import 避免循环）。"""
+    """把存储配置映射为 rules.RulesConfig（延迟 import 避免循环）。含规则阈值覆盖（RV-48）。"""
+    from decimal import Decimal as _D
     from .rules import RulesConfig
 
     rc = RulesConfig()
@@ -197,4 +325,18 @@ def to_rules_config(cfg: dict):
     if ent and (ent.get("name") or ent.get("tax_id")):
         rc.company_name = normalize_name(ent.get("name") or "")
         rc.company_taxid = normalize_tax_id(ent.get("tax_id") or "")
+    # 规则阈值覆盖（白名单已验证入库；缺失回退默认）
+    r = cfg.get("rules") or {}
+    rc.serial_tail_len = int(r.get("serial_tail_len", DEFAULT_RULES["serial_tail_len"]))
+    rc.serial_max_gap = int(r.get("serial_max_gap", DEFAULT_RULES["serial_max_gap"]))
+    rc.serial_min_count = int(r.get("serial_min_count", DEFAULT_RULES["serial_min_count"]))
+    rc.concentrate_threshold = int(r.get("concentrate_threshold", DEFAULT_RULES["concentrate_threshold"]))
+    rc.max_plausible_total = _D(str(r.get("max_plausible_total", DEFAULT_RULES["max_plausible_total"])))
+    rc.default_limit = _D(str(r.get("default_limit", DEFAULT_RULES["default_limit"])))
+    cl = r.get("category_limits") or {}
+    zh2en = {v: k for k, v in CATEGORY_KEYS.items()}
+    rc.category_limits = {
+        zh2en.get(en, en): _D(str(cl.get(en, DEFAULT_RULES["category_limits"].get(en, 5000))))
+        for en in ("travel", "entertain", "office", "transport", "other")
+    }
     return rc

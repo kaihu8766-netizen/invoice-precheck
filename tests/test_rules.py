@@ -405,6 +405,92 @@ class TestRules(unittest.TestCase):
                            tax=Decimal("13"))], CFG)
         self.assertFalse([x for x in f if x.rule_id == "R8"])
 
+    # ---------- F-05 规则校准（RV-48） ----------
+
+    def test_rules_payload_valid_partial(self):
+        from app.config_store import validate_rules_payload
+        ok, err = validate_rules_payload({"serial_tail_len": 6, "category_limits": {"travel": 8000}})
+        self.assertIsNone(err)
+        self.assertEqual(ok["serial_tail_len"], 6)
+        self.assertEqual(ok["category_limits"]["travel"], 8000)
+        self.assertEqual(ok["category_limits"]["other"], 5000, "未提交字段回退默认")
+
+    def test_rules_payload_invalid_rejected(self):
+        from app.config_store import validate_rules_payload
+        for bad in ({"serial_tail_len": 99}, {"default_limit": -5}, {"max_plausible_total": 3000.5}):
+            ok, err = validate_rules_payload(bad)
+            self.assertIsNone(ok, f"应拒绝 {bad}")
+            self.assertTrue(err)
+        # 原子性：部分合法+部分非法 → 整体拒绝
+        ok, err = validate_rules_payload({"serial_tail_len": 6, "serial_max_gap": 99})
+        self.assertIsNone(ok)
+        # 未知字段拒绝
+        ok, err = validate_rules_payload({"bad_key": 1})
+        self.assertIsNone(ok)
+        self.assertIn("未知", err)
+
+    def test_rules_config_override_effective(self):
+        from app.config_store import to_rules_config
+        cfg = {"company_entities": [{"name": "示例", "tax_id": "91310000MA1FL1XXXX", "enabled": True}],
+               "rules": {"serial_tail_len": 7, "category_limits": {"travel": 8000}, "max_plausible_total": 50000000}}
+        rc = to_rules_config(cfg)
+        self.assertEqual(rc.serial_tail_len, 7)
+        self.assertEqual(rc.category_limits["差旅"], 8000)  # 英文存储 → 中文规则 key
+        self.assertEqual(rc.category_limits["办公"], 2000)
+        self.assertEqual(rc.max_plausible_total, Decimal("50000000"))
+
+    def test_rules_threshold_changes_rule_hit(self):
+        # 自定义连号阈值生效：tail_len=2 时 1001/1002 触发 R3
+        from app.config_store import to_rules_config
+        cfg = {"company_entities": [], "rules": {"serial_tail_len": 2, "serial_max_gap": 2, "serial_min_count": 2}}
+        cfg2 = to_rules_config(cfg)
+        batch = [inv(f"20260100{t:04d}", "2026-08-01", Decimal("100"), Decimal("113"),
+                     seller="连号供应商", tax=Decimal("13")) for t in (1001, 1002)]
+        r3 = [x for x in run_rules(batch, cfg2) if x.rule_id == "R3"]
+        self.assertEqual(len(r3), 2, "自定义 tail_len=2 应命中连号")
+
+    # ---------- RV-50 复核修复（阈值区间放宽/custom 精确判定/gap 语义） ----------
+
+    def test_rules_payload_lower_bounds_relaxed(self):
+        """RV-50：类别限额下限放宽到 1（出租车/定额票可配置），serial_min_count 上限 500。"""
+        from app.config_store import validate_rules_payload, RULES_WHITELIST
+        ok, err = validate_rules_payload({"category_limits": {"transport": 1}})
+        self.assertIsNone(err)
+        ok, err = validate_rules_payload({"serial_min_count": 500})
+        self.assertIsNone(err)
+        ok, err = validate_rules_payload({"category_limits": {"transport": 0}})
+        self.assertIsNotNone(err, "0 限额应被拒绝（下限 1）")
+
+    def test_is_default_rules_partial_default_not_custom(self):
+        """RV-50 意见7：提交的值全部等于默认（含空对象/部分字段）→ 不算自定义。"""
+        from app.config_store import is_default_rules, DEFAULT_RULES
+        self.assertTrue(is_default_rules({}), "空 rules 应视为默认")
+        self.assertTrue(is_default_rules({"rules": {}}), "空对象不误标 custom")
+        self.assertTrue(is_default_rules({"rules": {"serial_tail_len": DEFAULT_RULES["serial_tail_len"]}}))
+        self.assertFalse(is_default_rules({"rules": {"serial_tail_len": 6}}))
+
+    def test_serial_gap_zero_semantics(self):
+        """RV-50 意见3：gap=0 聚合完全同号票（差=0），不误伤差 1 的连续票。"""
+        f = run_rules([inv("1001", "2026-08-01", Decimal("100"), Decimal("113"),
+                           tax=Decimal("13"), seller="北京华信办公用品有限公司"),
+                       inv("1001", "2026-08-01", Decimal("80"), Decimal("90.4"),
+                           tax=Decimal("10.4"), seller="北京华信办公用品有限公司"),
+                       inv("1001", "2026-08-01", Decimal("60"), Decimal("67.8"),
+                           tax=Decimal("7.8"), seller="北京华信办公用品有限公司")],
+                      RulesConfig(serial_tail_len=4, serial_max_gap=0, serial_min_count=3))
+        r3 = [x for x in f if x.rule_id == "R3"]
+        self.assertEqual(len(r3), 3, "同号 3 张窗口内全标（同号聚合）")
+        # 差 1 的连续票在 gap=0 下不应聚合（不是同号）
+        f2 = run_rules([inv("1001", "2026-08-01", Decimal("100"), Decimal("113"),
+                            tax=Decimal("13"), seller="北京华信办公用品有限公司"),
+                        inv("1002", "2026-08-01", Decimal("80"), Decimal("90.4"),
+                            tax=Decimal("10.4"), seller="北京华信办公用品有限公司"),
+                        inv("1003", "2026-08-01", Decimal("60"), Decimal("67.8"),
+                            tax=Decimal("7.8"), seller="北京华信办公用品有限公司")],
+                       RulesConfig(serial_tail_len=4, serial_max_gap=0, serial_min_count=3))
+        r3b = [x for x in f2 if x.rule_id == "R3"]
+        self.assertEqual(len(r3b), 0, "gap=0 下连续票（差1）不应命中连号")
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

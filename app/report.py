@@ -62,6 +62,8 @@ def build_report(
     ruleset_version: str,
     file_count: int | None = None,
     rule_states: dict[str, str] | None = None,
+    rules_config_note: str = "",
+    rules_hash: str = "",
 ) -> dict:
     """组装一页风险报告 JSON。rule_states：{rule_id: 命中/未命中/未执行（…）} 三态。
 
@@ -149,6 +151,11 @@ def build_report(
             "enabled_count": len(rules),
             **state_counts,
             "note": "未执行的规则因数据不足或未配置未判定，不计入命中；仅列出已启用规则",
+        },
+        "rules_config": {
+            "custom": bool(rules_config_note),
+            "note": rules_config_note,
+            "rules_hash": rules_hash,
         },
         "generated_at": _dt.datetime.now(_dt.timezone.utc).isoformat(timespec="seconds"),
         "batch_id": uuid.uuid4().hex[:12],

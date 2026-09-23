@@ -179,6 +179,10 @@ def detect_type(data: bytes) -> str:
         return "ofd"  # OFD/zip 容器
     if data[:4] == b"%PDF":
         return "pdf"
+    if data[:8] == b"\x89PNG\r\n\x1a\n":
+        return "image"  # F-06：PNG（含手机拍照）
+    if data[:3] == b"\xff\xd8\xff":
+        return "image"  # F-06：JPEG（手机相机默认格式）
     return "unknown"
 
 
@@ -387,4 +391,7 @@ def parse_document(data: bytes) -> NormalizedInvoice:
             if isinstance(e, FileDataError) or "open stream" in str(e) or "no objects" in str(e):
                 raise ValueError("文件无法解析（格式或编码不支持）") from e
             raise
+    if dtype == "image":
+        from .image_ocr import parse_image  # F-06：手机拍照（EXIF 转正+长边限制+本机 OCR）
+        return parse_image(data)
     return parse_xml(data)

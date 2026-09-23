@@ -31,7 +31,6 @@ from pathlib import Path
 from fastapi import FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
-
 from .config_store import load_config, save_config, to_rules_config
 from .llm_explain import LLM_ENABLED, explain_findings
 from .parser import parse_document
@@ -71,9 +70,16 @@ app.add_middleware(
 # 产品前端统一用 docs/index.html（完整版：演示模式+实时模式+复核工作台+导出）；
 # 旧 frontend/index.html（204 行精简版）废弃保留，不参与服务。
 FRONTEND = Path(__file__).resolve().parent.parent / "docs" / "index.html"
+_DOCS = FRONTEND.parent  # docs/：仅显式白名单文件对外（PWA 资源），不整目录挂载
+_PWA_STATIC = {
+    "/manifest.json": _DOCS / "manifest.json",
+    "/service-worker.js": _DOCS / "service-worker.js",
+    "/assets/icon-192.png": _DOCS / "assets" / "icon-192.png",
+    "/assets/icon-512.png": _DOCS / "assets" / "icon-512.png",
+}
 
 # 无需鉴权的公开路径（仅静态页面与探活，无业务数据）
-PUBLIC_PATHS = {"/", "/healthz"}
+PUBLIC_PATHS = {"/", "/healthz", *(_PWA_STATIC.keys())}
 
 
 @app.exception_handler(Exception)
@@ -147,7 +153,7 @@ async def index() -> HTMLResponse:
 
 @app.get("/api/config")
 async def get_config():
-    """读取当前企业主体配置（需 X-API-Key）。税号脱敏返回，避免前端全量回显。"""
+    """读取当前配置（需 X-API-Key）：企业主体（税号脱敏）+ 规则阈值 + 审计 meta。"""
     global _APP_CONFIG
     ents = []
     for e in _APP_CONFIG.get("company_entities", []):
@@ -155,15 +161,23 @@ async def get_config():
         tid = str(row.get("tax_id") or "")
         row["tax_id"] = (tid[:4] + "****" + tid[-4:]) if len(tid) >= 8 else ""
         ents.append(row)
-    return {"company_entities": ents, "r2": _APP_CONFIG.get("r2", {})}
-
+    return {
+        "company_entities": ents,
+        "r2": _APP_CONFIG.get("r2", {}),
+        "rules": _APP_CONFIG.get("rules", {}),
+        "meta": _APP_CONFIG.get("meta", {"rules_updated_at": "", "rules_hash": ""}),
+    }
 
 @app.put("/api/config")
 async def put_config(request: Request):
-    """保存企业主体配置（需 X-API-Key）。校验后写本地 data/config.json 并热生效。
+    """保存配置（需 X-API-Key）：企业主体 + 规则阈值。校验后写本地 data/config.json 并热生效。
 
-    入参：{"company_name": str, "tax_id": str}
+    入参：{"company_name": str, "tax_id": str, "rules": {白名单字段可选}}
+    rules 段整包原子校验（RV-48：任一字段非法整体拒绝；未知字段拒绝）。
     """
+    import time as _time
+    from .config_store import rules_hash, rules_sha256_full, validate_rules_payload
+
     global _APP_CONFIG
     try:
         body = await request.json()
@@ -171,19 +185,36 @@ async def put_config(request: Request):
         raise HTTPException(400, "请求体不是合法 JSON")
     name = str(body.get("company_name") or "").strip()
     taxid = str(body.get("tax_id") or "").strip().replace(" ", "")
-    if not name and not taxid:
+    if not name and not taxid and "rules" not in body:
         raise HTTPException(400, "企业名称与税号不能同时为空")
     if taxid and not (8 <= len(taxid) <= 20 and taxid.isalnum()):
         raise HTTPException(400, "税号应为 8-20 位字母数字（统一社会信用代码 18 位）")
-    ent = _APP_CONFIG["company_entities"][0]
-    ent["name"] = name
-    ent["tax_id"] = taxid
+    if "rules" in body:
+        cleaned, err = validate_rules_payload(body.get("rules"))
+        if err:
+            raise HTTPException(400, f"规则配置无效：{err}")
+        _APP_CONFIG["rules"] = cleaned
+    if name or taxid:
+        ent = _APP_CONFIG["company_entities"][0]
+        ent["name"] = name
+        ent["tax_id"] = taxid
+    # 审计 meta（RV-48：变更留痕，不含税号明文；RV-50：追加完整 SHA256 可还原全量摘要）
+    _APP_CONFIG["meta"] = {
+        "rules_updated_at": _time.strftime("%Y-%m-%dT%H:%M:%S%z"),
+        "rules_hash": rules_hash(_APP_CONFIG),
+        "rules_sha256": rules_sha256_full(_APP_CONFIG),
+    }
     try:
         save_config(_APP_CONFIG)
     except ValueError as e:
         raise HTTPException(500, str(e)) from e
     _APP_CONFIG = load_config()  # 重载（含环境变量覆盖语义）
-    return {"status": "ok", "message": "企业主体配置已保存", "tax_id_masked": (taxid[:4] + "****" + taxid[-4:]) if len(taxid) >= 8 else ""}
+    return {
+        "status": "ok",
+        "message": "配置已保存",
+        "tax_id_masked": (taxid[:4] + "****" + taxid[-4:]) if len(taxid) >= 8 else "",
+        "rules_hash": rules_hash(_APP_CONFIG),
+    }
 
 
 @app.post("/parse")
@@ -227,8 +258,15 @@ async def review(files: list[UploadFile] = File(...)):
             failed.append({"name": _safe_name(f.filename), "error": _public_error(e)})
 
     findings, rule_states = run_rules_with_states(invoices, config=_current_rules_config())
+    # RV-48：报告标注规则阈值来源（自定义阈值时附 rules_hash 审计快照）
+    from .config_store import is_default_rules, rules_hash
+    rules_note, rules_h = "", ""
+    if not is_default_rules(_APP_CONFIG):  # RV-50：逐叶子比较，空对象/全默认不误标
+        rules_note = "阈值来自自定义配置（企业设置面板校准）"
+        rules_h = rules_hash(_APP_CONFIG)
     report = build_report(invoices, findings, failed, RULESET_VERSION,
-                          file_count=len(files), rule_states=rule_states)
+                          file_count=len(files), rule_states=rule_states,
+                          rules_config_note=rules_note, rules_hash=rules_h)
     report["batch_id"] = batch_id
     logger.info(
         "batch=%s files=%d parsed=%d failed=%d findings=%d elapsed_ms=%.0f ruleset=%s",
@@ -268,3 +306,16 @@ async def explain(request: Request):
         "prompt_version": "explain-v1",
         "count": len(explanations),
     }
+
+
+@app.get("/{pwa_path:path}")
+async def pwa_static(pwa_path: str):
+    """PWA 静态资源白名单（F-06：manifest/SW/icons；仅列出的文件对外，防目录泄露）。"""
+    f = _PWA_STATIC.get("/" + pwa_path)
+    if not f or not f.exists():
+        raise HTTPException(404, "Not Found")
+    media = {"service-worker.js": "text/javascript",
+             "manifest.json": "application/manifest+json"}.get(pwa_path)
+    return FileResponse(f, media_type=media)
+
+
