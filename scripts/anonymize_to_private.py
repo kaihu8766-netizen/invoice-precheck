@@ -38,47 +38,30 @@ def fake_taxid(seed: str) -> str:
 
 
 def render_invoice_pdf(path: Path, fields: dict) -> None:
-    """合成脱敏版数电票 PDF（标签+值结构，可被解析器识别并勾稽）。"""
-    from reportlab.lib.pagesizes import A4
-    from reportlab.pdfgen import canvas
-    c = canvas.Canvas(str(path), pagesize=A4)
-    w, h = A4
-    y = h - 60
-    c.setFont("Helvetica-Bold", 16)
-    c.drawString(60, y, "电子发票（增值税电子发票）")
-    y -= 24
-    c.setFont("Helvetica", 11)
-    c.drawString(60, y, f"发票号码：{fields['invoice_no']}")
-    c.drawString(320, y, f"开票日期：{fields['issue_date']}")
-    y -= 30
-    c.drawString(60, y, "购买方信息")
-    y -= 16
-    c.drawString(60, y, f"名称：{fields['buyer_name']}")
-    c.drawString(320, y, f"统一社会信用代码/纳税人识别号：{fields['buyer_taxid']}")
-    y -= 30
-    c.drawString(60, y, "销售方信息")
-    y -= 16
-    c.drawString(60, y, f"名称：{fields['seller_name']}")
-    c.drawString(320, y, f"统一社会信用代码/纳税人识别号：{fields['seller_taxid']}")
-    y -= 40
-    c.setFont("Helvetica-Bold", 11)
-    c.drawString(60, y, "项目名称            金额            税率/征收率            税额")
-    y -= 18
-    c.setFont("Helvetica", 11)
+    """合成脱敏版数电票 PDF（fitz china-s 中文字体，标签+值结构可被解析器识别并勾稽）。"""
+    import fitz
+    doc = fitz.open()
+    page = doc.new_page(width=595, height=842)  # A4 pt
+    y = 780
+    page.insert_text((60, y), "电子发票（增值税电子发票）", fontname="china-s", fontsize=14); y -= 26
+    page.insert_text((60, y), f"发票号码：{fields['invoice_no']}", fontname="china-s", fontsize=11)
+    page.insert_text((300, y), f"开票日期：{fields['issue_date']}", fontname="china-s", fontsize=11); y -= 34
+    page.insert_text((60, y), "购买方信息", fontname="china-s", fontsize=11); y -= 18
+    page.insert_text((60, y), f"名称：{fields['buyer_name']}", fontname="china-s", fontsize=11)
+    page.insert_text((300, y), f"统一社会信用代码/纳税人识别号：{fields['buyer_taxid']}", fontname="china-s", fontsize=11); y -= 30
+    page.insert_text((60, y), "销售方信息", fontname="china-s", fontsize=11); y -= 18
+    page.insert_text((60, y), f"名称：{fields['seller_name']}", fontname="china-s", fontsize=11)
+    page.insert_text((300, y), f"统一社会信用代码/纳税人识别号：{fields['seller_taxid']}", fontname="china-s", fontsize=11); y -= 38
+    page.insert_text((60, y), "项目名称            金额            税率/征收率            税额", fontname="china-s", fontsize=11); y -= 20
     for it in fields.get("items", [])[:4]:
-        c.drawString(60, y, it.get("name", "示例项目"))
-        c.drawString(200, y, it.get("amount", ""))
-        c.drawString(320, y, it.get("rate", ""))
-        c.drawString(420, y, it.get("tax", ""))
-        y -= 18
-    y -= 20
-    c.setFont("Helvetica", 11)
-    c.drawString(60, y, f"合计金额：{fields['amount']}")
-    c.drawString(320, y, f"合计税额：{fields['tax']}")
-    y -= 22
-    c.setFont("Helvetica-Bold", 11)
-    c.drawString(60, y, f"价税合计(小写)：¥{fields['total']}")
-    c.save()
+        # 整行单次插入（含空格分隔列），避免多段插入文本流粘连（如 金额+0% 粘成 xx140%）
+        page.insert_text((60, y), f"{it.get('name', '示例项目')}  {it.get('amount', '')}  {it.get('rate', '')}  {it.get('tax', '')}", fontname="china-s", fontsize=11)
+        y -= 20
+    y -= 24
+    page.insert_text((60, y), f"合计金额：{fields['amount']}    合计税额：{fields['tax']}", fontname="china-s", fontsize=11); y -= 22
+    page.insert_text((60, y), f"价税合计(小写)：¥{fields['total']}", fontname="china-s", fontsize=12)
+    doc.save(str(path))
+    doc.close()
 
 
 def main() -> int:

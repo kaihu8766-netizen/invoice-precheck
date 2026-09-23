@@ -105,8 +105,9 @@ def _run_private_copy() -> dict:
     for pth in files:
         try:
             inv = parse_document(pth.read_bytes())
-            gk = inv.total > 0 and inv.amount + inv.tax == inv.total
-            rows.append({"file": pth.name, "parsed": True, "reconcile": gk,
+            ok = bool(inv.invoice_no and inv.total > 0)   # 解析成功=有票号且金额有效（防字段丢失伪装成功）
+            gk = ok and inv.amount + inv.tax == inv.total
+            rows.append({"file": pth.name, "parsed": ok, "reconcile": gk,
                          "invoice_no": inv.invoice_no, "total": str(inv.total),
                          "review_needed": inv.review_needed})
         except Exception as e:

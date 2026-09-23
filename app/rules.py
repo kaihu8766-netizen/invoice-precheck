@@ -102,8 +102,10 @@ class RulesConfig:
     serial_min_count: int = 3         # 窗口内最少票数（≥3 才提示）
     concentrate_threshold: int = 6    # 同供应商同日票数阈值
     max_carry_days: int = 365         # 开票距报销最长天数
-    # P0-8 金额异常阈值（占位口径：待真实数据校准，见 manifest.governance.required_for_v1 P0-8）
-    max_plausible_total: Decimal = Decimal("1000000")  # 单票价税合计合理上限（占位）
+    # P0-8 金额异常阈值（真实样本校准 09-23：31 张汽车行业票价税合计 P95≈1819 万、max≈2229 万；
+    # 上限取 3000 万=真实 max×1.35 留业务余量。局限：样本行业有偏（机动车批发），
+    # 办公/差旅类小额票补充样本后需复核。回收前召优先原则：宁可放过不可误报）
+    max_plausible_total: Decimal = Decimal("30000000")
 
 
 def _finding(rule_id: str, inv: NormalizedInvoice, severity: str, confidence: str,
