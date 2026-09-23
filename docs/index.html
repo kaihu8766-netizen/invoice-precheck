@@ -297,6 +297,34 @@
 .rev-btn{margin-left:8px;padding:2px 9px;font-size:12px;}
 .badge.review.done{background:#e8f6ee;color:#2f7d4f;border:1px solid #b6e0c6;}
 </style>
+<script>
+/* ES5 兼容探针（RV-39：独立于主脚本，主脚本解析失败也能点亮） */
+(function () {
+  function addErr(ev) {
+    try {
+      var bar = document.getElementById("errbar");
+      if (!bar) {
+        bar = document.createElement("div"); bar.id = "errbar";
+        bar.style.cssText = "position:fixed;top:0;left:0;right:0;z-index:9999;background:#7f1d1d;color:#fff;font:12px/1.5 monospace;padding:6px 10px;white-space:pre-wrap;max-height:90px;overflow:auto;";
+        document.body.appendChild(bar);
+      }
+      bar.textContent = "[页面错误] " + (ev.message || ev.type || "未知") + (ev.filename ? " @ " + String(ev.filename).split("/").pop() + ":" + ev.lineno : "");
+    } catch (_) {}
+  }
+  if (window.addEventListener) window.addEventListener("error", addErr, false);
+  try {
+    var p = document.createElement("div");
+    p.id = "probe";
+    p.style.cssText = "position:fixed;left:8px;bottom:8px;z-index:99999;background:#111827;color:#e5e7eb;font:10px/1.5 monospace;padding:4px 8px;border-radius:6px;opacity:.92;max-width:70vw;white-space:pre-wrap;word-break:break-all;";
+    p.textContent = "v=fa78051\u00b7UA=" + String(navigator.userAgent || "").slice(0, 90);
+    (document.body || document.documentElement).appendChild(p);
+    window.__probeOK = true;
+  } catch (e) {
+    try { document.title = "probe-fail:" + (e && e.message); } catch (_) {}
+  }
+})();
+</script>
+
 </head>
 <body class="demo">
 <div class="app">
