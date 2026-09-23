@@ -138,6 +138,18 @@
   .kpi .l{ font-size:11.5px; color:var(--sub); margin-top:2px; word-break:keep-all; line-height:1.4; }
   .kpi .n.ok{ color:var(--ok); } .kpi .n.mid{ color:var(--mid); } .kpi .n.high{ color:var(--high); }
   .kpi.main{ background:var(--brand-weak); border-color:#d6e2ff; }
+  /* F-08 KPI 下钻：可点击 KPI 交互态（主动筛选） */
+  .kpi[data-drill]{ cursor:pointer; transition:border-color .12s ease, box-shadow .12s ease; }
+  .kpi[data-drill]:hover{ border-color:var(--brand); box-shadow:0 1px 4px rgba(79,107,154,.18); }
+  .kpi[data-drill].active{ border-color:var(--brand); border-top-width:2px; background:var(--brand-weak); }
+  .kpi[data-drill].active .n, .kpi[data-drill].active .l{ color:var(--brand); }
+  .kpi .drill-hint{ display:block; font-size:10px; color:var(--weak); margin-top:2px; }
+  .drill-note{ display:flex; align-items:center; gap:8px; font-size:12px; color:#3d5bb3; background:#eef3fb; border:1px solid #d6e2ff; border-radius:8px; padding:6px 10px; margin-bottom:10px; flex-wrap:wrap; }
+  .drill-note .clear{ margin-left:auto; font-size:12px; }
+  .rule-link{ cursor:pointer; text-decoration:underline dotted; color:var(--brand); }
+  .drift-warn{ font-size:12.5px; color:#9a6a2f; background:#fff7e8; border:1px solid #f0d9a8; border-radius:8px; padding:8px 12px; margin-bottom:12px; }
+  .rule-card.flash{ animation:flashRule .9s ease 2; }
+  @keyframes flashRule{ 0%,100%{ background:transparent; } 50%{ background:#fff3bf; } }
   /* 触摸反馈：可点元素按压微缩放（DeepSeek Week1 痛点） */
   button:active, .vs:active, summary:active, .drop:active, [role="button"]:active{ transform:scale(0.98); }
   @media (hover:none){ button, .vs, summary, .drop{ -webkit-tap-highlight-color:transparent; transition:transform .08s ease; } }
@@ -1120,10 +1132,84 @@ document.addEventListener("click", (e) => {
       el.style.display = f === "pending" ? el.dataset.rid && ((getDisp(el.dataset.rid) || {}).status || "pending") === "pending" ? "" : "none" : "";
     });
   }
+  // F-08 KPI 下钻：点击 KPI 卡片（待复核/自动通过/解析失败）
+  const kpi = e.target.closest(".kpi[data-drill]");
+  if (kpi) {
+    drillKpi(kpi.dataset.drill);
+    return;
+  }
+  // F-08 发票→规则：点击规则 ID 跳规则视图并高亮
+  const rl = e.target.closest(".rule-link");
+  if (rl) {
+    drillRule(rl.dataset.rule);
+    return;
+  }
+  // F-08 规则→发票：规则卡"查看发票"按钮
+  const rv = e.target.closest(".drill-inv");
+  if (rv) {
+    drillRuleInv(rv.dataset.rule);
+    return;
+  }
+  // F-08 清除筛选
+  if (e.target.closest(".drill-clear")) {
+    clearDrill();
+    return;
+  }
 });
 let __lastReport = null;
+// F-08 KPI 下钻状态：{kpi: "review"|"pass"|"fail"|null, rule: "R3"|null}（会话态，不入 localStorage）
+let __drill = { kpi: null, rule: null };
+function setKpiActive(k) {
+  document.querySelectorAll(".kpi[data-drill]").forEach((el) => {
+    const on = el.dataset.drill === k;
+    el.classList.toggle("active", on);
+    el.setAttribute("aria-pressed", on ? "true" : "false");
+  });
+}
+function drillKpi(k) {
+  if (!__lastReport) return;
+  if (__drill && __drill.kpi === k && !__drill.rule) {
+    clearDrill();
+    return;
+  }
+  __drill = { kpi: k, rule: null };
+  setKpiActive(k);
+  setView("invoice");
+  renderInvoiceView();
+}
+function drillRule(rid) {
+  if (!__lastReport) return;
+  setView("rule");
+  const card = document.querySelector(`.rule-card[data-rule="${rid}"]`);
+  if (card) {
+    card.scrollIntoView({ behavior: "smooth", block: "center" });
+    card.classList.add("flash");
+    setTimeout(() => card.classList.remove("flash"), 2000);
+  }
+}
+function drillRuleInv(rid) {
+  if (!__lastReport) return;
+  __drill = { kpi: null, rule: rid };
+  setKpiActive(null);
+  setView("invoice");
+  renderInvoiceView();
+}
+function clearDrill() {
+  __drill = { kpi: null, rule: null };
+  setKpiActive(null);
+  renderInvoiceView();
+}
+function renderInvoiceView() {
+  const d = __lastReport;
+  if (!d) return;
+  const el = document.getElementById("view-invoice");
+  if (!el) return;
+  const metaMap = buildRuleMetaMap(d.rules);
+  el.innerHTML = invoiceViewHtml(d, metaMap);
+}
 function render(d) {
   __lastReport = d;
+  __drill = { kpi: null, rule: null };  // 新报告/重渲染重置下钻筛选（会话态）
   __origRender(d);
 }
 function renderReport() {
@@ -1145,7 +1231,7 @@ function findingRow(f, metaMap, showOps) {
   return `<details class="finding${dim}" data-rid="${rid}">
     <summary>
       <span class="bar ${sevCls}"></span>
-      <span class="sev ${sevCls}">${sev === "高" ? "▲" : sev === "中" ? "●" : "·"} ${esc(f.rule_id)} ${esc(sev)}</span>
+      <span class="sev ${sevCls}">${sev === "高" ? "▲" : sev === "中" ? "●" : "·"} <span class="rule-link" data-rule="${esc(f.rule_id)}" title="点击跳转规则分析">${esc(f.rule_id)}</span> ${esc(sev)}</span>
       <span class="rname">${esc(resolveRuleMeta(f.rule_id, metaMap))}</span>
       <span class="ticket">${esc(shortNo(f.invoice_no))}</span>
       ${badge}
@@ -1179,6 +1265,18 @@ function invoiceViewHtml(d, metaMap) {
   const byInv = {};
   (d.findings || []).forEach((f) => (byInv[f.invoice_no] = byInv[f.invoice_no] || []).push(f));
   const notExec = (d.rules || []).some((r) => /未执行/.test(r.state || ""));
+  const drill = __drill || {};
+  let drillNote = "";
+  if (drill.kpi === "fail") {
+    const n = (d.summary || {}).failed_count || 0;
+    drillNote = `<div class="drill-note"><span><b>解析失败 ${n} 个文件</b>：解析失败无结构化数据可下钻（不生成发票行）。建议重传或检查文件格式（PDF 需可提取文本，图片需清晰）。</span><button class="btn-ghost drill-clear">清除筛选</button></div>`;
+  } else if (drill.kpi === "review") {
+    drillNote = `<div class="drill-note"><span>已筛选：<b>待复核</b>（有命中/字段缺失/数据不完整，口径=非"未见异常"）</span><button class="btn-ghost drill-clear">清除筛选</button></div>`;
+  } else if (drill.kpi === "pass") {
+    drillNote = `<div class="drill-note"><span>已筛选：<b>自动通过</b>（口径=状态"未见异常"）</span><button class="btn-ghost drill-clear">清除筛选</button></div>`;
+  } else if (drill.rule) {
+    drillNote = `<div class="drill-note"><span>已按规则 <b>${esc(drill.rule)}</b> 筛选（仅含命中该规则的发票）</span><button class="btn-ghost drill-clear">清除筛选</button></div>`;
+  }
   const invs = (d.invoices || []).map((i) => {
     const fs = (byInv[i.invoice_no] || []).slice().sort((a, b) => {
       var _a, _b;
@@ -1188,15 +1286,21 @@ function invoiceViewHtml(d, metaMap) {
       var _a;
       return (_a = sevRank[f.severity]) != null ? _a : 9;
     })) : 9;
-    return __spreadProps(__spreadValues({}, i), { fs, maxSev, clean: fs.length === 0 });
-  }).sort((a, b) => {
+    // F-08 下钻过滤（数据状态口径，与 summary 严格对齐）
+    let keep = true;
+    if (drill.kpi === "review") keep = (i.status || "未见异常") !== "未见异常";
+    else if (drill.kpi === "pass") keep = (i.status || "未见异常") === "未见异常";
+    else if (drill.rule) keep = fs.some((f) => f.rule_id === drill.rule);
+    return __spreadProps(__spreadValues({}, i), { fs, maxSev, clean: fs.length === 0, keep });
+  }).filter((i) => i.keep).sort((a, b) => {
     if (a.clean !== b.clean) return a.clean ? 1 : -1;
     if (a.maxSev !== b.maxSev) return a.maxSev - b.maxSev;
     if (a.fs.length !== b.fs.length) return b.fs.length - a.fs.length;
     return a.invoice_no.localeCompare(b.invoice_no);
   });
-  if (!invs.length) return `<div class="card card-pad"><div class="hint">无发票数据。</div></div>`;
+  if (!invs.length) return `${drillNote}<div class="card card-pad"><div class="hint">${drill.kpi || drill.rule ? "当前筛选下无匹配发票。" : "无发票数据。"}${drill.kpi || drill.rule ? ` <button class="btn-ghost drill-clear">清除筛选</button>` : ""}</div></div>`;
   return `${notExec ? `<div class="view-note">⚠ 部分规则未执行（数据不足/未配置），不能据此判定无命中</div>` : ""}
+  ${drillNote}
   <div class="inv-group">${invs.map((i) => `
     <details class="inv-card${i.clean ? " clean" : ""}${notExec && i.clean ? " partial" : ""}">
       <summary class="inv-head">
@@ -1239,11 +1343,12 @@ function ruleViewHtml(d, metaMap) {
   <div class="rule-group">${rules.map((r) => {
     const sev = r.severity || "中";
     const sevCls = SEV_CLS[sev] || "low";
-    return `<div class="rule-card">
+    return `<div class="rule-card" data-rule="${esc(r.rule_id)}">
       <div class="rule-head">
         <span class="sev ${sevCls}">${esc(r.rule_id)} ${esc(sev)}</span>
         <span class="rname">${esc(resolveRuleMeta(r.rule_id, metaMap))}</span>
         <span class="rule-cnt">命中 <b>${r.hit}</b>${r.notExec ? ` · <span class="fail">未执行</span>` : ` · 未命中 <b>${r.miss}</b>`}</span>
+        ${r.hit ? `<button class="btn-ghost drill-inv" data-rule="${esc(r.rule_id)}">查看发票</button>` : ""}
       </div>
       ${r.hit ? `<details class="rule-hits"><summary>命中票（${r.hit}）</summary><div class="inner">${r.hits.map((f) => findingRow(f, metaMap, false)).join("")}</div></details>` : ""}
       ${r.notExec ? `<div class="rule-note">未执行（${esc(r.state)}）——不能判定合规，需补齐数据/配置后重跑</div>` : ""}
@@ -1303,15 +1408,28 @@ function __origRender(d) {
     const s = d.summary || {};
     const rules = d.rules || [], rs = d.rules_summary || {};
     const stateNote = rs.enabled_count ? `启用 ${rs.enabled_count} 条 · 命中 ${rs.命中 || 0} · 未命中 ${rs.未命中 || 0} · 未执行 ${rs.未执行 || 0}` : "";
-    const autoPass = Math.max(0, ((_a = s.total_count) != null ? _a : 0) - ((_b = s.review_count) != null ? _b : 0));
+    // F-08 RV-62：autoPass 同源计数（同一 status 数组），不做减法；断言防口径漂移（不阻断渲染）
+    const invStatusArr = (d.invoices || []).map((i) => i.status || "未见异常");
+    const passCnt = invStatusArr.filter((st) => st === "未见异常").length;
+    const autoPass = passCnt;
+    const reviewCnt = (_a = s.review_count) != null ? _a : invStatusArr.filter((st) => st !== "未见异常").length;
+    // RV-62/RV-63 口径明示：断言仅覆盖"成功解析票"（total_count=len(invoices)=passCnt+reviewCnt）；
+    // 第三态"解析失败"独立于本断言（failed 不入 invoices、不计 review_count，独立计入 file_count=total_count+failed_count）
+    let __driftMsg = "";
+    if (passCnt + reviewCnt !== ((_b = s.total_count) != null ? _b : invStatusArr.length)) {
+      __driftMsg = "报告内部计数不一致（autoPass+review_count≠total_count）：请反馈维护者核查数据模型或升级后端";
+      console.error("[口径漂移] autoPass+review_count≠total_count:", passCnt, reviewCnt, s.total_count, invStatusArr.length);
+    }
+    const _drill = __drill || {};
+    const drillCls = (k) => (_drill.kpi === k ? " active" : "");
     const kpis = `
   <div class="ctxbar">
     <div class="kpis">
       <div class="kpi total main"><div class="n">${esc((_c = s.file_count) != null ? _c : 0)}</div><div class="l">文件数</div></div>
       <div class="kpi total main"><div class="n">${fmtMoney(s.total_amount)}</div><div class="l">价税合计</div></div>
-      <div class="kpi"><div class="n mid">${esc((_d = s.review_count) != null ? _d : 0)}${((_e = s.human_review_count) != null ? _e : 0) > 0 ? `<span class="mini">含人工${esc(s.human_review_count)}</span>` : ""}</div><div class="l">待复核</div></div>
-      <div class="kpi"><div class="n ok">${esc(autoPass)}</div><div class="l">自动通过</div></div>
-      <div class="kpi"><div class="n high">${esc((_f = s.failed_count) != null ? _f : 0)}</div><div class="l">解析失败</div></div>
+      <div class="kpi${drillCls("review")}" data-drill="review" role="button" tabindex="0" aria-pressed="${_drill.kpi === "review"}" title="查看待复核发票"><div class="n mid">${esc((_d = s.review_count) != null ? _d : 0)}${((_e = s.human_review_count) != null ? _e : 0) > 0 ? `<span class="mini">含人工${esc(s.human_review_count)}</span>` : ""}</div><div class="l">待复核</div><span class="drill-hint">点击下钻 ↓</span></div>
+      <div class="kpi${drillCls("pass")}" data-drill="pass" role="button" tabindex="0" aria-pressed="${_drill.kpi === "pass"}" title="查看自动通过发票"><div class="n ok">${esc(autoPass)}</div><div class="l">自动通过</div><span class="drill-hint">点击下钻 ↓</span></div>
+      <div class="kpi${drillCls("fail")}" data-drill="fail" role="button" tabindex="0" aria-pressed="${_drill.kpi === "fail"}" title="解析失败文件（无结构化数据）"><div class="n high">${esc((_f = s.failed_count) != null ? _f : 0)}</div><div class="l">解析失败</div><span class="drill-hint">点击下钻 ↓</span></div>
     </div>
     <div class="ctxmeta" title="批次/生成时间/口径">批次 ${esc(d.batch_id || "—")} · 生成 ${esc((d.generated_at || "").slice(0, 16) || "—")} · 口径：待复核+自动通过+解析失败=文件数；人工为待复核子集不参与求和；价税合计=仅成功解析票金额</div>
   </div>`;
@@ -1333,6 +1451,7 @@ function __origRender(d) {
     ${done ? `<span class="alldone">✓ 全部处置完成，可导出</span>` : ""}
   </div>` : "";
     const html = `
+  ${__driftMsg ? `<div class="drift-warn" role="alert"><b>⚠ 口径漂移</b>：${esc(__driftMsg)}</div>` : ""}
   <div class="card">${kpis}</div>
   <div class="print-head" id="printHead"></div>
   <div class="view-switch">
