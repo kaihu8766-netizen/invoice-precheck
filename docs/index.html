@@ -310,6 +310,15 @@
         <h3>演示样例</h3>
         <div class="hint">内置 4 张 PDF 样例发票（含 1 张图片版走本地 OCR）+ 1 个失败文件，覆盖重复票（R1）、差额征税（R9）、行级勾稽（R10）、红冲关联（R11）与"需人工复核"（OCR 低置信度）展示。演示故事：财务上传一批 PDF 发票 → 自动识别 → 预审 → 处置 → 导出。</div>
         <button id="btnRun" class="btn btn-ghost" style="margin-top:10px;">重新运行演示</button>
+        <details class="card" style="margin-top:10px;border:1px dashed var(--line);background:#fafbfc;">
+          <summary style="cursor:pointer;padding:8px 12px;font-size:12.5px;font-weight:600;color:var(--sub);">数据限制说明（演示数据口径）</summary>
+          <div style="padding:8px 12px 10px;font-size:12px;color:#57606a;line-height:1.75;">
+            <div>· <b>本演示全部使用合成/脱敏数据</b>：不含任何真实发票；样例覆盖重复票/差额征税/行级勾稽/红冲关联/OCR 低置信度复核等规则场景。</div>
+            <div>· 真实数据验证结果（文本型 14 张、图片版 38 张、机动车免税 31 张）已归档为基准集记录，源文件按数据红线验后删除，演示环境<b>不可重跑真实样本</b>。</div>
+            <div>· 规则阈值已用 31 张真实样本校准（金额上限 100 万→3000 万），类别限额仍为财政部默认口径（待补样本）。</div>
+            <div>· "需人工复核"= 解析低置信度/勾稽不符/字段缺失的兜底标记，<b>不自动放行</b>；处置状态仅保存在本浏览器（localStorage），刷新可重置。</div>
+          </div>
+        </details>
       </section>
     </aside>
 
