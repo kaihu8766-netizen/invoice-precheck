@@ -101,10 +101,13 @@
   #empty .s{ font-size:13px; margin-top:6px; }
 
   /* KPI 摘要 */
-  .kpis{ display:grid; grid-template-columns:repeat(6,1fr); gap:10px; padding:16px; }
+  .kpis{ display:grid; grid-template-columns:repeat(5,1fr); gap:10px; padding:14px 16px 4px; }
   @media (max-width:720px){ .kpis{ grid-template-columns:repeat(3,1fr); } }
+  .ctxbar{ border-bottom:1px solid var(--line-soft); }
+  .ctxmeta{ font-size:11.5px; color:var(--weak); padding:6px 16px 12px; overflow-wrap:anywhere; }
+  .kpi .mini{ display:block; font-size:10.5px; font-weight:500; color:var(--sub); margin-top:1px; }
   .kpi{ background:#fafbfc; border:1px solid var(--line-soft); border-radius:var(--r-md); padding:10px 12px; }
-  .kpi .n{ font-size:20px; font-weight:800; line-height:1.2; }
+  .kpi .n{ font-size:20px; font-weight:800; line-height:1.2; font-variant-numeric:tabular-nums; }
   .kpi .l{ font-size:11.5px; color:var(--sub); margin-top:2px; word-break:keep-all; line-height:1.4; }
   .kpi .n.ok{ color:var(--ok); } .kpi .n.mid{ color:var(--mid); } .kpi .n.high{ color:var(--high); }
   .kpi.main{ background:var(--brand-weak); border-color:#d6e2ff; }
@@ -135,7 +138,7 @@
   .inv-head, .rule-head{ display:flex; align-items:center; gap:8px; flex-wrap:wrap; font-size:13px; }
   .inv-no{ font-weight:700; }
   .inv-full{ color:var(--weak); font-size:11.5px; font-family:ui-monospace,Menlo,Consolas,monospace; }
-  .inv-meta{ color:var(--sub); font-size:12px; }
+  .inv-meta{ color:var(--sub); font-size:12px; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .inv-list{ margin-top:8px; display:flex; flex-direction:column; gap:8px; }
   .inv-clean-note{ margin-top:8px; font-size:12px; color:var(--ok); background:var(--ok-bg); padding:8px 10px; border-radius:8px; }
   .stb.warn{ background:var(--mid-bg); color:var(--mid); }
@@ -170,7 +173,7 @@
   @media (pointer:coarse){
     .ops{ gap:10px; }
     .op{ min-height:44px; padding:9px 16px; font-size:13px; }
-    .btn, .btn-ghost, .vs, .flt{ min-height:40px; }
+    .btn, .btn-ghost, .vs, .flt{ min-height:44px; }
   }
   @media (max-width:480px){
     .tools{ gap:8px; }
@@ -180,12 +183,12 @@
     .kpi .n{ font-size:18px; }
     .kpi .l{ word-break:keep-all; line-height:1.4; }
   }
-  .finding .amt{ font-size:12.5px; font-weight:600; margin-left:auto; white-space:nowrap; }
+  .finding .amt{ font-size:12.5px; font-weight:600; margin-left:auto; white-space:nowrap; font-variant-numeric:tabular-nums; }
   .finding .caret{ color:var(--weak); font-size:11px; flex-shrink:0; }
   .finding[open] .caret{ transform:rotate(90deg); }
   .finding .body{ padding:10px 12px 12px; }
-  .finding .msg{ font-size:13.5px; font-weight:600; line-height:1.5; }
-  .finding .meta{ font-size:12px; color:var(--sub); margin-top:6px; }
+  .finding .msg{ font-size:13.5px; font-weight:600; line-height:1.5; overflow-wrap:anywhere; }
+  .finding .meta{ font-size:12px; color:var(--sub); line-height:1.7; } .meta div{ overflow-wrap:anywhere; }
   .finding .meta code{ background:var(--line-soft); border-radius:4px; padding:0 5px; font-family:ui-monospace,Menlo,Consolas,monospace; font-size:11.5px; }
   .finding .sug{ font-size:13px; margin-top:8px; }
   .finding .sug b{ color:var(--sub); font-weight:600; font-size:12px; }
@@ -403,7 +406,7 @@ function demoReport() {
   byId("R4").state = "未执行（未提供报销类别）";
   return {
     "summary": {
-      "file_count": 5, "total_count": 5, "total_amount": "2161.40",
+      "file_count": 5, "total_count": 4, "total_amount": "2161.40",
       "no_finding_count": 1, "review_count": 4, "failed_count": 1, "human_review_count": 1
     },
     "findings": [
@@ -626,6 +629,18 @@ function reviewAction(invNo, action) {
   }
   setRev(invNo, { invoice_no: invNo, original, current, corrected_fields, reviewed, corrected, reviewedAt: new Date().toISOString(), auditLog });
 }
+/* fmtMoney：金额千分位格式化（RV-37 财务信任点：统一小数位、千分位、负号保留）
+   "2161.40"→"¥2,161.40"；"-530.00"→"-¥530.00"；空/非法→"—" */
+function fmtMoney(v) {
+  if (v === null || v === undefined || v === "") return "—";
+  const s = String(v).trim();
+  if (!/^-?\d+(\.\d+)?$/.test(s)) return esc(v);
+  const neg = s.startsWith("-");
+  const [i, d] = (neg ? s.slice(1) : s).split(".");
+  const g = i.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  return (neg ? "-" : "") + "¥" + g + (d !== undefined ? "." + d : "");
+}
+
 /* ---------- 导出共用模型（RV-35 方案 D 采纳） ----------
    EXPORT_COLUMNS：列定义（key/表头/类型）；buildExportRows() 生成行数据。
    CSV 与 XLSX 共用同一模型，渲染层各自适配（列名/顺序/修正值优先级严格一致）。 */
@@ -935,7 +950,7 @@ function invoiceViewHtml(d, metaMap) {
       <summary class="inv-head">
         <span class="inv-no">${esc(shortNo(i.invoice_no))}</span>
         <span class="inv-full">${esc(i.invoice_no)}</span>
-        <span class="inv-meta">${esc(i.seller_name || "")} · ${esc(i.issue_date || "")} · ¥${esc(i.total || i.amount || "—")}</span>
+        <span class="inv-meta">${esc(i.seller_name || "")} · ${esc(i.issue_date || "")} · ${fmtMoney(i.total || i.amount)}${i.tax ? `（税额 ${fmtMoney(i.tax)}）` : ""}</span>
         ${i.clean
           ? (notExec ? `<span class="stb q">？ 未完全检查</span>` : `<span class="stb ok">✓ 无命中</span>`)
           : `<span class="stb warn">${i.fs.length} 条命中</span>`}
@@ -1024,15 +1039,18 @@ function __origRender(d) {
   const rules = d.rules || [], rs = d.rules_summary || {};
   const stateNote = rs.enabled_count ? `启用 ${rs.enabled_count} 条 · 命中 ${rs.命中||0} · 未命中 ${rs.未命中||0} · 未执行 ${rs.未执行||0}` : "";
 
+  /* RV-37 上下文条：三态互斥（待复核+自动通过+解析失败=文件数），消除口径打架 */
+  const autoPass = Math.max(0, (s.total_count ?? 0) - (s.review_count ?? 0));
   const kpis = `
-  <div class="kpis">
-    <div class="kpi main"><div class="n">${esc(s.file_count ?? 0)}</div><div class="l">文件数</div></div>
-    <div class="kpi main"><div class="n">¥${esc(s.total_amount ?? "—")}</div><div class="l">价税合计</div></div>
-    <div class="kpi main"><div class="n mid">${esc(s.review_count ?? 0)}</div><div class="l">待复核</div></div>
-    <div class="kpi"><div class="n ${(s.human_review_count ?? 0) > 0 ? "high" : ""}">${esc(s.human_review_count ?? 0)}</div><div class="l">需人工复核</div></div>
-    <div class="kpi"><div class="n">${esc(s.total_count ?? 0)}</div><div class="l">成功解析</div></div>
-    <div class="kpi"><div class="n ok">${esc(s.no_finding_count ?? 0)}</div><div class="l">未见异常</div></div>
-    <div class="kpi"><div class="n high">${esc(s.failed_count ?? 0)}</div><div class="l">解析失败</div></div>
+  <div class="ctxbar">
+    <div class="kpis">
+      <div class="kpi main"><div class="n">${esc(s.file_count ?? 0)}</div><div class="l">文件数</div></div>
+      <div class="kpi main"><div class="n">${fmtMoney(s.total_amount)}</div><div class="l">价税合计</div></div>
+      <div class="kpi"><div class="n mid">${esc(s.review_count ?? 0)}${(s.human_review_count ?? 0) > 0 ? `<span class="mini">含人工${esc(s.human_review_count)}</span>` : ""}</div><div class="l">待复核</div></div>
+      <div class="kpi"><div class="n ok">${esc(autoPass)}</div><div class="l">自动通过</div></div>
+      <div class="kpi"><div class="n high">${esc(s.failed_count ?? 0)}</div><div class="l">解析失败</div></div>
+    </div>
+    <div class="ctxmeta" title="批次与生成时间">批次 ${esc(d.batch_id || "—")} · 生成 ${esc((d.generated_at || "").slice(0, 16) || "—")} · 口径：待复核+自动通过+解析失败=文件数</div>
   </div>`;
 
   const metaMap = buildRuleMetaMap(d.rules);
@@ -1052,46 +1070,15 @@ function __origRender(d) {
     ${done ? `<span class="alldone">✓ 全部处置完成，可导出</span>` : ""}
   </div>` : "";
 
-  const invoices = `
-  <details class="adv section" id="invSec">
-    <summary>发票明细（${(d.invoices||[]).length}）</summary>
-    <div class="inner">
-      <table>
-        <tr><th>票号</th><th>日期</th><th>类型</th><th>金额</th><th>税额</th><th>价税合计</th><th>行数</th><th>状态</th></tr>
-        ${(d.invoices||[]).map(i => {
-          const stCls = i.status === "未见异常" ? "ok" : i.status === "待复核" || i.status === "待复核（字段缺失）" ? "mid" : "high";
-          return `<tr><td>${esc(i.invoice_no)}</td><td>${esc(i.issue_date)}</td><td>${esc(i.invoice_type)}</td>
-            <td>${esc(i.amount)}</td><td>${esc(i.tax)}</td><td>${esc(i.total)}</td>
-            <td>${esc(i.item_count ?? 0)}${i.warning_count ? `<span class="hint">（${i.warning_count} 告警）</span>` : ""}</td>
-            <td class="${stCls}">${esc(i.status)}${i.review_needed ? `<span class="badge review" title="${esc(i.review_reason || "OCR 低置信度/勾稽不符等")}">需人工复核</span>` : ""}</td></tr>`;
-        }).join("") || `<tr><td colspan="8" class="hint">无成功解析的发票</td></tr>`}
-      </table>
-      ${(d.failed||[]).length ? `<div class="hint" style="margin-top:8px;">解析失败：${d.failed.map(f => `<span class="fail">${esc(f.file)}</span>：${esc(f.error)}`).join("；")}</div>` : ""}
-    </div>
-  </details>`;
-
-  const rulesSec = `
-  <details class="adv section">
-    <summary>规则清单（${stateNote}）</summary>
-    <div class="inner">
-      <table>
-        <tr><th>规则</th><th>名称</th><th>状态</th></tr>
-        ${(rules||[]).map(r => {
-          const st = r.state || "未执行";
-          const cls = st === "命中" ? "pill hit" : st === "未命中" ? "pill nohit" : "pill skip";
-          return `<tr><td><b>${esc(r.rule_id)}</b></td><td>${esc(r.name)}</td><td><span class="${cls}">${esc(st)}</span></td></tr>`;
-        }).join("")}
-      </table>
-    </div>
-  </details>`;
+  /* RV-37：冗余折叠已移除——发票明细/规则清单由对应视图承担（避免同屏信息重复） */
 
   const html = `
   <div class="card">${kpis}</div>
   <div class="print-head" id="printHead"></div>
   <div class="view-switch">
-    <button class="vs active" data-view="risk">风险视图</button>
-    <button class="vs" data-view="invoice">发票视图</button>
-    <button class="vs" data-view="rule">规则视图</button>
+    <button class="vs active" data-view="risk">风险处理</button>
+    <button class="vs" data-view="invoice">发票明细</button>
+    <button class="vs" data-view="rule">规则分析</button>
   </div>
   <div class="section">
     <div class="section-head">
@@ -1107,11 +1094,9 @@ function __origRender(d) {
     </div>
     ${dispBar}
     <div id="view-risk" class="report-view"><h2>风险清单 <span class="sub">${(d.findings||[]).length} 条命中 · 按严重度排序</span></h2>${findings}</div>
-    <div id="view-invoice" class="report-view" hidden><h2>发票视图 <span class="sub">${(d.invoices||[]).length} 张票 · 无命中票最后</span></h2>${invoiceViewHtml(d, metaMap)}</div>
-    <div id="view-rule" class="report-view" hidden><h2>规则效果视图 <span class="sub">${(d.rules||[]).length} 条规则 · 三态口径</span></h2>${ruleViewHtml(d, metaMap)}</div>
+    <div id="view-invoice" class="report-view" hidden><h2>发票明细 <span class="sub">${(d.invoices||[]).length} 张票 · 无命中票最后</span></h2>${invoiceViewHtml(d, metaMap)}</div>
+    <div id="view-rule" class="report-view" hidden><h2>规则分析 <span class="sub">${(d.rules||[]).length} 条规则 · 三态口径</span></h2>${ruleViewHtml(d, metaMap)}</div>
   </div>
-  ${invoices}
-  ${rulesSec}
   <div class="meta">
     <div>规则包：${esc(d.ruleset?.version || d.ruleset_version)}（生效 ${esc(d.ruleset?.effective_date || "")}）· 批次 ${esc(d.batch_id)} · 生成 ${esc(d.generated_at)}</div>
     <div>范围说明：${esc(d.ruleset?.scope_note || d.scope_note || "")}</div>
