@@ -1,18 +1,25 @@
 #!/bin/sh
-# commit-msg 钩子（DeepSeek 评审 #9 采纳）：校验 commit message 含合法 ID 引用。
-# 安装：git config core.hooksPath .githooks（或复制到 .git/hooks/commit-msg）
-# 失败即拒绝提交：message 必须含 GATE-* / RV-* / DEC-* / ISS-* 之一。
+# commit-msg 钩子（RV-9 建 + RV-13 升级）：双闸门
+#  闸门 1（RV-9）：message 必须含合法 ID 引用（GATE/RV/DEC/ISS）
+#  闸门 2（RV-13）：命中评审红线（app/pdf.py/rules.py/parser.py/ocr.py/脱敏脚本 等）
+#    → 必须带已批准且 diff_hash 与当前 staged diff 完全一致的 RV-ID，否则拒绝提交
+# 安装：git config core.hooksPath .githooks
 
 MSG_FILE="$1"
 MSG=$(cat "$MSG_FILE")
 
-# 合并后续行（subject 用整段判断，避免 body 遗漏）
+# 闸门 1：ID 引用存在性（保留原有校验）
 if ! printf '%s' "$MSG" | grep -Eq '\b(GATE|RV|DEC|ISS)[-:][0-9]{6,8}(-[0-9]+)?\b|\bISS-[0-9]+\b'; then
     echo "✗ commit-msg 钩子拒绝：message 必须含 ID 引用（GATE-* / RV-* / DEC-* / ISS-*）" >&2
-    echo "  示例：feat(scope): 描述 (RV-20260923-05, GATE-20260923-01)" >&2
-    echo "  或引用开放问题：fix: ... (ISS-53)" >&2
     exit 1
 fi
 
-# 若存在 trace_gate.py，再做存在性提示（不阻塞：钩子最小化，不依赖 PYTHONPATH）
+# 闸门 2：红线分类 + RV diff_hash 校验（机器规则替代主观判断）
+if python3 -c "import yaml" 2>/dev/null && [ -f scripts/trace_gate.py ] && [ -f scripts/gate_rules.yaml ]; then
+    python3 scripts/trace_gate.py check-rv --message "$MSG"
+    RC=$?
+    if [ $RC -ne 0 ]; then
+        exit $RC
+    fi
+fi
 exit 0

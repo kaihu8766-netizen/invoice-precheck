@@ -1,0 +1,18 @@
+# 评审红线（RV-13 采纳）：命中即必须带已批准且 diff_hash 匹配的 RV-ID 才能提交
+# 类别: paths(前缀匹配) 或 keywords(文件名/路径含词)
+rules:
+  parser_core:            # 解析核心：路由/字段提取/勾稽
+    paths: ["app/parser.py"]
+    keywords: ["parser", "parse_document", "勾稽"]
+  pdf_pipeline:           # PDF 解析/版式/OCR 路径
+    paths: ["app/pdf.py"]
+    keywords: ["pdf", "版式", "ocr", "dpi", "二维码", "qr"]
+  ocr_engine:             # OCR 渲染/Provider
+    paths: ["app/ocr.py"]
+    keywords: ["ocr", "dpi", "render"]
+  rules_engine:           # 规则/阈值
+    paths: ["app/rules.py"]
+    keywords: ["阈值", "rule", "限额", "上限"]
+  data_redline:           # 脱敏/真实数据处理（红线相关一律必审）
+    paths: ["scripts/anonymize_to_private.py", "scripts/benchmark.py"]
+    keywords: ["anonymize", "脱敏", "private", "真实", "发票"]

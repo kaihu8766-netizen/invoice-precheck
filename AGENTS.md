@@ -74,3 +74,11 @@ python3 scripts/trace_gate.py check --message "你的 commit message"
 
 - 豆包只有**提议权**，无直接大动作执行权；用户是决策者
 - 用户否决 = 停止该分支，不绕过、不降级宣称完成
+
+## 红线提交流程（RV-13 双闸门，2026-09-23 起强制）
+改动命中评审红线（app/parser.py、app/pdf.py、app/ocr.py、app/rules.py、脱敏/基准脚本，见 scripts/gate_rules.yaml）时：
+1. `git add` 改动 → `python3 scripts/trace_gate.py classify --staged` 确认命中类别；
+2. 用 deepseek_gate.py 发起评审（自动记录 staged diff_hash）→ 批准后档案含 diff_hash；
+3. 重提交：message 带 `RV-<id>`，钩子校验 diff_hash 与当前 staged 完全一致才放行。
+- 评审完成前不得再改红线文件（改过 hash 即失效，需重新评审）。
+- 非红线文件仅需常规 ID 引用（GATE/RV/DEC/ISS）。

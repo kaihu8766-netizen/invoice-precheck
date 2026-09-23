@@ -150,12 +150,103 @@ def cmd_ids(grep: str) -> int:
     return 0
 
 
+def _classify(staged_diff: str) -> tuple[list[str], str]:
+    """按 gate_rules.yaml 分类 staged diff：返回 (命中类别列表, diff_hash)。"""
+    import hashlib, re, yaml
+    rules_path = Path(__file__).parent / "gate_rules.yaml"
+    rules = yaml.safe_load(rules_path.read_text(encoding="utf-8"))["rules"]
+    diff_hash = hashlib.sha256(staged_diff.encode("utf-8", "replace")).hexdigest()[:16]
+    files = set()
+    for ln in staged_diff.splitlines():
+        if ln.startswith("diff --git"):
+            m = re.search(r"b/(\S+)", ln)
+            if m:
+                files.add(m.group(1))
+    hits = []
+    for name, rule in rules.items():
+        paths = rule.get("paths", []); kws = rule.get("keywords", [])
+        if any(f.startswith(p) for f in files for p in paths):
+            hits.append(name); continue
+        if any(k in f for f in files for k in kws):
+            hits.append(name)
+    return sorted(set(hits)), diff_hash
+
+
+def cmd_classify(staged: bool) -> int:
+    """classify --staged：分类当前 staged diff，输出命中红线类别 + diff_hash。"""
+    import subprocess
+    diff = subprocess.run(["git", "diff", "--cached", "--binary"],
+                          capture_output=True, text=True).stdout if staged else ""
+    if not staged:
+        print("缺少 --staged；仅支持对 staged 改动分类（commit 前使用）")
+        return 2
+    hits, diff_hash = _classify(diff)
+    if hits:
+        print(f"[classify] 命中评审红线：{', '.join(hits)}")
+    else:
+        print("[classify] 未命中评审红线（可仅带常规 ID 提交）")
+    print(f"[classify] diff_hash={diff_hash}")
+    return 0 if not hits else 1
+
+
+def cmd_check_rv(message: str) -> int:
+    """check-rv --message <msg>：命中红线时校验提交带已批准且 diff_hash 匹配的 RV-ID。
+
+    commit-msg 钩子调用：1) 分类 staged diff；2) 命中红线→必须有 RV-ID 且
+    其档案记录的 diff_hash == 当前 staged diff hash；3) 无 RV 或哈希不符→拒绝。
+    """
+    import subprocess, re, yaml
+    diff = subprocess.run(["git", "diff", "--cached", "--binary"],
+                          capture_output=True, text=True).stdout
+    hits, cur_hash = _classify(diff)
+    if not hits:
+        print("[check-rv] 未命中评审红线（常规 ID 校验由钩子继续）")
+        return 0
+    m = re.search(r"\bRV-(\d{6,8}(?:-\d+)?)\b", message)
+    if not m:
+        print(f"✗ 命中评审红线（{', '.join(hits)}），提交被拒：必须带已批准 RV-ID", file=sys.stderr)
+        print("  流程：先跑 deepseek_gate.py 发起评审（自动记录 staged diff_hash），批准后重提交", file=sys.stderr)
+        print("  提示：git add 后评审，评审完成前不要改动工作区", file=sys.stderr)
+        return 1
+    rv = m.group(1)  # 形如 20260923-99（message 提取时无 RV- 前缀）
+    # 索引行不含完整 RV-ID（只有序号），按档案文件名格式匹配：YYYY-MM-DD-NN
+    ymd, no = rv.split("-")[0], "-".join(rv.split("-")[1:])
+    arch_glob = f"{ymd[:4]}-{ymd[4:6]}-{ymd[6:]}-{no}"
+    idx = _read_text(RV_INDEX)
+    rv_line = next((ln for ln in idx.splitlines() if arch_glob in ln), None)
+    arch = None
+    if rv_line:
+        cm = re.search(r"\|\s*([^|]+\.md)\s*\|", rv_line)
+        if cm:
+            arch = cm.group(1).strip()
+    if not arch:
+        print(f"✗ RV-{rv} 未在索引中找到档案，提交被拒", file=sys.stderr)
+        return 1
+    arch_path = Path(RV_INDEX).parent / arch
+    if not arch_path.exists():
+        print(f"✗ RV-{rv} 档案不存在（{arch}），提交被拒", file=sys.stderr)
+        return 1
+    atext = arch_path.read_text(encoding="utf-8")
+    dm = re.search(r"diff_hash:\s*([0-9a-f]{16})", atext)
+    if not dm:
+        print(f"✗ RV-{rv} 档案未记录 diff_hash（需用新版 deepseek_gate.py 生成），提交被拒", file=sys.stderr)
+        return 1
+    if dm.group(1) != cur_hash:
+        print(f"✗ RV-{rv} 的 diff_hash({dm.group(1)}) ≠ 当前 staged({cur_hash})，提交被拒", file=sys.stderr)
+        print("  原因：评审后改动过红线文件；请重新评审或提交未评审的新改动", file=sys.stderr)
+        return 1
+    print(f"[check-rv] 通过：RV-{rv} diff_hash 匹配（{cur_hash}）")
+    return 0
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="项目硬门禁")
     sub = ap.add_subparsers(dest="cmd", required=True)
     g = sub.add_parser("gate"); g.add_argument("--task", required=True)
     c = sub.add_parser("check"); c.add_argument("--message", required=True)
     i = sub.add_parser("ids"); i.add_argument("--grep", required=True)
+    cl = sub.add_parser("classify"); cl.add_argument("--staged", action="store_true")
+    cr = sub.add_parser("check-rv"); cr.add_argument("--message", required=True)
     args = ap.parse_args()
     if args.cmd == "gate":
         return cmd_gate(args.task)
@@ -163,6 +254,10 @@ def main() -> int:
         return cmd_check(args.message)
     if args.cmd == "ids":
         return cmd_ids(args.grep)
+    if args.cmd == "classify":
+        return cmd_classify(args.staged)
+    if args.cmd == "check-rv":
+        return cmd_check_rv(args.message)
     return 0
 
 
