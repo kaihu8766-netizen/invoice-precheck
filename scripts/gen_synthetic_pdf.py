@@ -27,7 +27,7 @@ def gen(path: Path, no: str, seller: str, amount: float, date: str):
         (f"销售方税号: 91320000MA1FKEXAMPLE2", 12),
         (f"金额: {amount:.2f}", 12),
         (f"税额: {round(amount*0.13, 2):.2f}", 12),
-        (f"价税合计: {round(amount, 2) + round(amount*0.13, 2):.2f}", 12),
+        (f"价税合计（小写）: ￥{round(amount, 2) + round(amount*0.13, 2):.2f}", 12),
         ("备注: 合成测试数据，主体虚构，仅用于解析验证", 12),
     ]
     for text, size in rows:

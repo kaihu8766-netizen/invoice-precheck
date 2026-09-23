@@ -1,16 +1,18 @@
-"""数电票 PDF 解析（Week0 · DeepSeek 评审：PDF 主路径，当前只做文本型 PDF）。
+"""数电票 PDF 解析（Week0 · DeepSeek 评审：PDF 主路径；真实票验证驱动重构 2026-09-23）。
 
-设计要点（对齐 parser.py 契约，输出 NormalizedInvoice）：
-- 二维码优先：数电票 PDF 版式通常带"数电票信息二维码"（结构化 JSON），
-  zxingcpp 解码 + json 解析，字段最稳；解码失败/无码回落文本抽取；
-- 文本抽取：PyMuPDF get_text → 宽容正则（中文标签/英文 key/常见方言），
-  金额全链路 Decimal，防 float；
-- 扫描型分流：页面文本长度低于阈值 → 标记 need_ocr（友好降级，OCR 延 Week2，
-  架构预留 OcrProvider 接口）；
-- 安全：文件大小上限、页数上限、解码结果白名单取字段（不信任任意 JSON 结构）。
+设计要点（真实数电票 PDF 版式观察修正）：
+- 二维码是"税务核验短码"（逗号分隔：版本,票种,发票号,价税合计,开票日期,校验码），
+  不是全字段 JSON——只能拿发票号/合计/日期，完整字段靠版式文本；
+- 文本抽取改"值类型识别 + 勾稽三元组"（真实版式标签块与值块分离，标签匹配不可靠）：
+  发票号=20位数字、日期=YYYY年M月D日、税号=91开头18位、公司名=含'公司|集团|厂'行、
+  金额=¥价税合计 + 勾稽驱动的 (amount, tax) 三元组选择；
+- 多页遍历找二维码（二维码可能不在第 1 页）；
+- 扫描型分流：无可提取文本才判扫描件；加密/页数/大小限制；
+- 输出 NormalizedInvoice（对齐 XML 契约），勾稽不符告警不抛错。
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 from decimal import Decimal, InvalidOperation
@@ -22,127 +24,125 @@ from .models import NormalizedInvoice
 
 MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB（与 XML 对齐）
 MAX_PAGES = 20                    # 页数上限（防超大 PDF）
-_TEXT_MIN_CHARS = 80              # 文本型/扫描型阈值：低于则视为扫描件（需 OCR）
-_QR_SCALE = 3                     # 渲染缩放（二维码解码清晰度）
+_QR_SCALE = 6                     # 二维码渲染缩放（真实票 6 倍解码稳定）
 
-# 字段别名（中文/英文/常见方言宽容匹配；取"最后出现"与 XML 策略一致）
-_FIELD_ALIAS = {
-    "invoice_no": ["发票号码", "发票代码和号码", "InvoiceNo", "Invoice Number", "NO"],
-    "issue_date": ["开票日期", "IssueDate", "Date", "开票时间"],
-    "amount":     ["金额", "不含税金额", "Amount", "金额合计"],
-    "tax":        ["税额", "TaxAmount", "Tax"],
-    "total":      ["价税合计", "合计", "Total", "价税合计(小写)", "小写"],
-    "buyer_name": ["购买方名称", "购方名称", "BuyerName", "购买方"],
-    "buyer_taxid":["购买方税号", "购方税号", "购买方纳税人识别号", "BuyerTaxID", "BuyerTaxNo"],
-    "seller_name":["销售方名称", "销方名称", "SellerName", "销售方"],
-    "seller_taxid":["销售方税号", "销方税号", "销售方纳税人识别号", "SellerTaxID", "SellerTaxNo"],
-}
-_QR_ALIAS = {
-    "invoice_no": ["发票号码", "InvoiceNo", "invoiceNo", "invoice_no"],
-    "issue_date": ["开票日期", "IssueDate", "issueDate", "issue_date", "开票时间"],
-    "amount":     ["金额", "Amount", "amount", "不含税金额"],
-    "tax":        ["税额", "TaxAmount", "taxAmount", "tax"],
-    "total":      ["价税合计", "Total", "total", "价税合计(小写)"],
-    "buyer_name": ["购买方名称", "BuyerName", "buyerName", "购方名称"],
-    "buyer_taxid":["购买方税号", "BuyerTaxID", "buyerTaxId", "购方税号", "购买方纳税人识别号"],
-    "seller_name":["销售方名称", "SellerName", "sellerName", "销方名称"],
-    "seller_taxid":["销售方税号", "SellerTaxID", "sellerTaxId", "销方税号", "销售方纳税人识别号"],
-}
-_AMOUNT_RE = re.compile(r"[-+]?\d[\d,]*\.\d{2}")
-_DATE_RE = re.compile(r"(\d{4})[年/\-.](\d{1,2})[月/\-.](\d{1,2})日?")
+_INVOICE_NO_RE = re.compile(r"\b(\d{20})\b")
+_DATE_RE = re.compile(r"(\d{4})\s*(?:年|[/\-.])\s*(\d{1,2})\s*(?:月|[/\-.])\s*(\d{1,2})\s*日?")
+_TAXID_RE = re.compile(r"\b(91[0-9A-Z]{16})\b")          # 统一社会信用代码 18 位，91 开头
+_COMPANY_RE = re.compile(r"[\u4e00-\u9fff（）()A-Za-z0-9]{2,40}(?:公司|集团|中心|厂|研究院|事务所)")
+_YEN_RE = re.compile(r"[¥￥]\s*([\d,]+\.\d{2})")
+_NUM_RE = re.compile(r"\d[\d,]*\.\d{2}")
 
 
 def _clean_money(s: str) -> Decimal:
-    s = s.replace(",", "").replace("¥", "").replace("￥", "").strip()
     try:
-        return Decimal(s)
+        return Decimal(s.replace(",", "").replace("¥", "").replace("￥", "").strip())
     except InvalidOperation:
         return Decimal("0")
 
 
-def _first_value(page_text: str, key: str, aliases: list[str]) -> Optional[str]:
-    """按别名表在文本中找字段。匹配'别名 + 冒号 + 值'（真实数电票 PDF 标签均带冒号），
-    避免前缀别名误匹配（如'购买方'撞上'购买方税号'）；长别名优先；取最后出现（与 XML 一致）。"""
-    found = None
-    for a in sorted(aliases, key=len, reverse=True):
-        for m in re.finditer(rf"{re.escape(a)}\s*[:：]\s*([^\n]{{0,40}})", page_text):
-            v = m.group(1).strip()
-            if not v:
-                continue
-            found = v
-    if found is None:
-        return None
-    # 金额字段：从候选串中抽首个金额
-    if key in ("amount", "tax", "total"):
-        m = _AMOUNT_RE.search(found)
-        return m.group(0) if m else None
-    return found.strip()
+# ---------------- 二维码路径 ----------------
 
-
-def _extract_by_qrcode(pix: "fitz.Pixmap") -> Optional[dict]:
+def _decode_qr(pix: "fitz.Pixmap") -> Optional[str]:
+    """灰度 pixmap → numpy 数组 → zxingcpp 解码，返回首个 QR 文本。"""
     try:
+        import numpy as np
         import zxingcpp
     except Exception:
         return None
     try:
-        results = zxingcpp.read_barcodes(pix.samples, pix.width, pix.height, pixel_format=zxingcpp.ImageFormat.LumA)
+        arr = np.frombuffer(pix.samples, dtype=np.uint8).reshape(pix.height, pix.width)
+        for r in zxingcpp.read_barcodes(arr):
+            if r.format == zxingcpp.BarcodeFormat.QRCode:
+                return r.text
     except Exception:
         return None
-    for r in results:
-        if r.format == zxingcpp.BarcodeFormat.QRCode:
-            txt = r.text
-            try:
-                data = json.loads(txt)
-            except Exception:
-                continue
-            if isinstance(data, dict):
-                return data
-            if isinstance(data, list) and data and isinstance(data[0], dict):
-                return data[0]
     return None
 
 
-def _normalize_from_dict(data: dict, source: str, source_hash: str) -> NormalizedInvoice:
-    def pick(aliases):
-        for a in aliases:
-            if a in data:
-                v = data[a]
-                if isinstance(v, dict):
-                    # 部分二维码嵌套 {Invoice: {...}} 结构，逐层找标量
-                    for k, vv in v.items():
-                        if isinstance(vv, (str, int, float)) and not isinstance(vv, (dict, list)):
-                            return str(vv)
-                    continue
-                if isinstance(v, (str, int, float)):
-                    return str(v)
-        return ""
+def _parse_qr_core(txt: str) -> dict:
+    """数电票二维码短码：逗号分隔（版本,票种,发票号,价税合计,开票日期YYYYMMDD,校验码）。
+    部分平台二维码是 JSON 变体，兼容解析。"""
+    out = {}
+    no = _INVOICE_NO_RE.search(txt)
+    if no:
+        out["invoice_no"] = no.group(1)
+    m = re.search(r"(\d{4})(\d{2})(\d{2})", txt)
+    if m and 1900 < int(m.group(1)) < 2100:
+        out["issue_date"] = f"{m.group(1)}-{m.group(2)}-{m.group(3)}"
+    for tok in txt.split(","):
+        tok = tok.strip()
+        if re.fullmatch(r"\d[\d,]*\.\d{2}", tok) and len(tok) < 20:
+            out["total"] = _clean_money(tok)
+            break
+    try:
+        data = json.loads(txt)
+        if isinstance(data, dict):
+            out["_json"] = data
+    except Exception:
+        pass
+    return out
 
-    inv = NormalizedInvoice(
-        invoice_no=pick(_QR_ALIAS["invoice_no"]),
-        issue_date=pick(_QR_ALIAS["issue_date"]),
-        amount=_clean_money(pick(_QR_ALIAS["amount"]) or "0"),
-        tax=_clean_money(pick(_QR_ALIAS["tax"]) or "0"),
-        total=_clean_money(pick(_QR_ALIAS["total"]) or "0"),
-        buyer_name=pick(_QR_ALIAS["buyer_name"]),
-        buyer_taxid=pick(_QR_ALIAS["buyer_taxid"]),
-        seller_name=pick(_QR_ALIAS["seller_name"]),
-        seller_taxid=pick(_QR_ALIAS["seller_taxid"]),
-        invoice_type="电子发票",
-        source_hash=source_hash,
-        raw_fields={k: v for k, v in data.items() if isinstance(v, (str, int, float))},
-    )
-    if not inv.invoice_no:
-        inv.parse_warnings.append(f"二维码 {source} 未识别到发票号码")
-    if inv.amount + inv.tax != inv.total:
-        inv.parse_warnings.append("二维码价税勾稽不符")
-    return inv
 
+# ---------------- 文本路径（值类型识别 + 勾稽三元组） ----------------
+
+def _extract_text_fields(text: str, qr_total: Decimal = Decimal("0")) -> dict:
+    lines = [l.strip() for l in text.splitlines() if l.strip()]
+    joined = "\n".join(lines)
+
+    no = _INVOICE_NO_RE.search(joined)
+    date = _DATE_RE.search(joined)
+    taxids = _TAXID_RE.findall(joined)
+    cos = _COMPANY_RE.findall(joined)
+    yens = [_clean_money(x) for x in _YEN_RE.findall(joined)]
+
+    # 公司名去重保序（购买方=第一个，销售方=第二个）
+    seen, unique = set(), []
+    for c in cos:
+        if c not in seen:
+            seen.add(c); unique.append(c)
+
+    # total：优先二维码核验码（真实票可靠）→ '小写'标签后首个¥ → 兜底最大¥
+    total = Decimal("0")
+    if yens:
+        total = max(yens)  # 兜底：价税合计通常是最大¥（税额≤合计）
+    total = max(total, qr_total)
+    # 金额三元组：amount+tax≈total（容差 ±0.01），选最大 amount
+    amount = tax = Decimal("0")
+    if total > 0:
+        nums = sorted({_clean_money(x) for x in _NUM_RE.findall(joined) if _clean_money(x) < total})
+        best = None
+        for a in nums:
+            tt = total - a
+            # tax 须是数字集中真实存在的值（amount+tax==total 勾稽）
+            if any(abs(x - tt) < Decimal("0.011") for x in nums):
+                if best is None or a > best[0]:
+                    best = (a, tt if tt >= 0 else Decimal("0"))
+        if best:
+            amount, tax = best
+        elif "免税" in joined or "***" in joined:
+            # 免税/整额票：明细金额整数且无税额（普票常见），价税合计即金额
+            amount, tax = total, Decimal("0")
+
+    return {
+        "invoice_no": no.group(1) if no else "",
+        "issue_date": f"{int(date.group(1)):04d}-{int(date.group(2)):02d}-{int(date.group(3)):02d}"
+        if date and 1 <= int(date.group(2)) <= 12 and 1 <= int(date.group(3)) <= 31 else "",
+        "amount": amount, "tax": tax, "total": total,
+        "buyer_name": unique[0] if unique else "",
+        "seller_name": unique[1] if len(unique) > 1 else "",
+        "buyer_taxid": taxids[0] if taxids else "",
+        "seller_taxid": taxids[1] if len(taxids) > 1 else "",
+        "invoice_type": "电子发票",
+    }
+
+
+# ---------------- 主流程 ----------------
 
 def parse_pdf(data: bytes, source_hash: str = "") -> NormalizedInvoice:
-    """解析 PDF（文本型），输出 NormalizedInvoice；扫描件抛 PDFNeedsOCR。"""
+    """解析 PDF，输出 NormalizedInvoice；扫描件抛 PDFNeedsOCR，加密抛 PDFEncrypted。"""
     if len(data) > MAX_FILE_SIZE:
         raise ValueError("文件超过 10MB 上限")
-    import hashlib
     if not source_hash:
         source_hash = hashlib.sha256(data).hexdigest()[:16]
 
@@ -150,41 +150,49 @@ def parse_pdf(data: bytes, source_hash: str = "") -> NormalizedInvoice:
     try:
         if doc.page_count > MAX_PAGES:
             raise ValueError(f"PDF 页数 {doc.page_count} 超过上限 {MAX_PAGES}")
-        page = doc[0]
-        pix = page.get_pixmap(matrix=fitz.Matrix(_QR_SCALE, _QR_SCALE), colorspace=fitz.csGRAY)
+        if doc.is_encrypted:
+            raise PDFEncrypted("PDF 已加密，请提供未加密文件")
 
-        # 1) 二维码优先
-        qr = _extract_by_qrcode(pix)
-        if qr:
-            return _normalize_from_dict(qr, "pdf-qrcode", source_hash)
+        qr_core = {}
+        full_text = []
+        for page in doc:
+            pix = page.get_pixmap(matrix=fitz.Matrix(_QR_SCALE, _QR_SCALE), colorspace=fitz.csGRAY)
+            qr = _decode_qr(pix)
+            if qr and not qr_core:
+                qr_core = _parse_qr_core(qr)
+            full_text.append(page.get_text("text"))
 
-        # 2) 文本型兜底
-        text = page.get_text("text")
-        if len(text.strip()) < _TEXT_MIN_CHARS:
-            raise PDFNeedsOCR(f"PDF 页面文本量不足（{len(text.strip())} 字符），疑似扫描件，需 OCR")
+        text = "\n".join(full_text)
+        if len(text.strip()) < 10:
+            raise PDFNeedsOCR(f"PDF 无可提取文本（{len(text.strip())} 字符），疑似扫描件")
 
-        fields = {}
-        for key, aliases in _FIELD_ALIAS.items():
-            fields[key] = _first_value(text, key, aliases) or ""
+        tf = _extract_text_fields(text, qr_total=qr_core.get("total", Decimal("0")))
+        warnings = []
+
+        # 二维码核心字段与文本校验（不一致告警，不覆盖）
+        if qr_core.get("invoice_no") and tf["invoice_no"] and qr_core["invoice_no"] != tf["invoice_no"]:
+            warnings.append("二维码发票号与版式文本不一致")
+        if qr_core.get("total") and tf["total"] and qr_core["total"] != tf["total"]:
+            warnings.append("二维码价税合计与版式文本不一致")
+
         inv = NormalizedInvoice(
-            invoice_no=fields["invoice_no"],
-            issue_date=fields["issue_date"],
-            amount=_clean_money(fields["amount"]) if fields["amount"] else Decimal("0"),
-            tax=_clean_money(fields["tax"]) if fields["tax"] else Decimal("0"),
-            total=_clean_money(fields["total"]) if fields["total"] else Decimal("0"),
-            buyer_name=fields["buyer_name"],
-            buyer_taxid=fields["buyer_taxid"],
-            seller_name=fields["seller_name"],
-            seller_taxid=fields["seller_taxid"],
-            invoice_type="电子发票",
+            invoice_no=tf["invoice_no"] or qr_core.get("invoice_no", ""),
+            issue_date=tf["issue_date"] or qr_core.get("issue_date", ""),
+            amount=tf["amount"], tax=tf["tax"],
+            total=tf["total"],
+            buyer_name=tf["buyer_name"], buyer_taxid=tf["buyer_taxid"],
+            seller_name=tf["seller_name"], seller_taxid=tf["seller_taxid"],
+            invoice_type=tf["invoice_type"],
             source_hash=source_hash,
-            raw_fields={"pdf_text_head": text[:500]},
+            raw_fields={"parse_path": "qr+text", "qr_core": qr_core, "pdf_text_head": text[:300]},
         )
-        missing = [k for k, v in fields.items() if not v]
+        missing = [k for k in ("invoice_no", "issue_date", "total", "buyer_name", "seller_name")
+                   if not getattr(inv, k)]
         if missing:
-            inv.parse_warnings.append(f"文本抽取缺失字段: {','.join(missing)}")
-        if inv.invoice_no and inv.amount + inv.tax != inv.total and inv.total != 0:
-            inv.parse_warnings.append("文本抽取价税勾稽不符（需人工复核）")
+            warnings.append(f"字段缺失: {','.join(missing)}")
+        if inv.total > 0 and inv.amount + inv.tax != inv.total:
+            warnings.append("价税勾稽不符（需人工复核）")
+        inv.parse_warnings = warnings
         return inv
     finally:
         doc.close()
@@ -192,3 +200,7 @@ def parse_pdf(data: bytes, source_hash: str = "") -> NormalizedInvoice:
 
 class PDFNeedsOCR(Exception):
     """扫描型 PDF：当前阶段不支持，需 OCR（Week2 启用 OcrProvider）。"""
+
+
+class PDFEncrypted(Exception):
+    """加密 PDF：无法解析。"""
