@@ -153,6 +153,25 @@
   .finding .rname{ font-size:13px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0; flex:0 1 auto; }
   .finding .ticket{ font-size:12px; color:var(--sub); font-family:ui-monospace,Menlo,Consolas,monospace; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0; flex:0 1 auto; }
   @media (max-width:480px){ .finding .ticket{ flex-basis:100%; padding-left:11px; } }
+  /* ===== 双端响应式打磨（2026-09-23）===== */
+  .drop .t .desk{ display:inline; } .drop .t .mob{ display:none; }
+  .drop .s .kbd{ display:inline; }
+  .camera-btn{ display:none; }
+  @media (max-width:768px){
+    .drop .t .desk{ display:none; } .drop .t .mob{ display:inline; }
+    .drop .s .kbd{ display:none; }
+    .camera-btn{ display:flex; }
+  }
+  @media (max-width:480px){
+    .ops{ gap:10px; }
+    .op{ min-height:44px; padding:9px 16px; font-size:13px; }
+    .tools{ gap:8px; }
+    .tools .btn-ghost{ white-space:nowrap; }
+    .view-switch .vs{ padding:7px 12px; }
+    .kpi{ padding:8px 10px; }
+    .kpi .n{ font-size:18px; }
+    .kpi .l{ word-break:keep-all; line-height:1.4; }
+  }
   .finding .amt{ font-size:12.5px; font-weight:600; margin-left:auto; white-space:nowrap; }
   .finding .caret{ color:var(--weak); font-size:11px; flex-shrink:0; }
   .finding[open] .caret{ transform:rotate(90deg); }
@@ -255,10 +274,12 @@
         <h3>上传发票</h3>
         <div class="drop" id="dropZone" tabindex="0" role="button" aria-label="上传发票文件">
           <div class="ic">📄</div>
-          <div class="t">拖拽文件到此处，或点击选择</div>
-          <div class="s">支持数电票 XML 与 OFD 容器 · 可多选 · 或粘贴 Ctrl+V</div>
+          <div class="t"><span class="desk">拖拽文件到此处，或点击选择</span><span class="mob">点击选择发票文件</span></div>
+          <div class="s">支持数电票 XML 与 OFD 容器 · 可多选 · <span class="kbd">或粘贴 Ctrl+V</span></div>
         </div>
         <input id="fileInput" type="file" multiple accept=".xml,.ofd,.zip" style="display:none">
+        <button id="btnCamera" class="btn btn-ghost camera-btn" type="button" style="margin-top:10px;width:100%;justify-content:center;align-items:center;gap:6px;">📷 拍照识别发票（规划中）</button>
+        <input id="cameraInput" type="file" accept="image/*" capture="environment" style="display:none">
         <div class="filelist" id="fileList"></div>
         <button id="btnReview" class="btn btn-primary" style="margin-top:12px;">运行预审</button>
         <div class="hint" id="runHint">运行后右侧显示合规预审报告。文件仅发往你配置的后端，不发送第三方。</div>
@@ -860,6 +881,16 @@ function syncFiles() {
   $("runHint").className = "hint";
 }
 $("fileInput").onchange = syncFiles;
+
+/* 拍照识别（规划中能力位）：选择图片后给出诚实提示，不假装能解析 */
+$("btnCamera").onclick = () => $("cameraInput").click();
+$("cameraInput").onchange = () => {
+  if ($("cameraInput").files.length) {
+    $("runHint").textContent = "拍照识别（OCR）规划在真实模式后端接入后上线。当前演示版仅解析 XML/OFD 结构化文件，请上传数电票 XML 或 OFD 文件。";
+    $("runHint").className = "hint err";
+    $("cameraInput").value = "";
+  }
+};
 
 /* ---------- 绑定 ---------- */
 $("btnDemo").onclick = () => { setMode(false); render(demoReport()); };
