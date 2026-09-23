@@ -124,6 +124,11 @@ def _extract_text_fields(text: str, qr_total: Decimal = Decimal("0")) -> dict:
         elif "免税" in joined or "***" in joined:
             # 免税/整额票：明细金额整数且无税额（普票常见），价税合计即金额
             amount, tax = total, Decimal("0")
+        elif total > 0:
+            # 0% 税率免税兜底（真实版式：机动车销售等，税率列全 0 且无"免税"字样）
+            tax_marks = re.findall(r"(\d+(?:\.\d+)?)%", joined)
+            if tax_marks and all(abs(float(x)) < 1e-9 for x in tax_marks):
+                amount, tax = total, Decimal("0")
 
     return {
         "invoice_no": no.group(1) if no else "",

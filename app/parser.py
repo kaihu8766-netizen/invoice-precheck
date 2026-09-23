@@ -292,6 +292,7 @@ def parse_xml(data: bytes) -> NormalizedInvoice:
     tax = _to_decimal(pick("tax"), warnings, "税额")
     total = _to_decimal(pick("total"), warnings, "价税合计")
 
+
     # 勾稽校验（容差 ±0.01；不平时记告警，不中断）
     if total != 0 and abs((amount + tax) - total) > Decimal("0.01"):
         warnings.append(
