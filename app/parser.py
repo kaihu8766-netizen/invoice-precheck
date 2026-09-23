@@ -378,5 +378,13 @@ def parse_document(data: bytes) -> NormalizedInvoice:
         return parse_xml(inner)
     if dtype == "pdf":
         from .pdf import parse_pdf  # 延迟导入：PDF 路径（文本/OCR 兜底）依赖较重
-        return parse_pdf(data)
+        try:
+            return parse_pdf(data)
+        except (ValueError, Exception) as e:
+            # 坏 PDF（魔数对但内容垃圾/损坏）：PyMuPDF 抛 FileDataError 等底层异常
+            # → 统一转友好错误（/parse 400、/review failed 列表；防 500 拖垮整批）
+            from pymupdf import FileDataError
+            if isinstance(e, FileDataError) or "open stream" in str(e) or "no objects" in str(e):
+                raise ValueError("文件无法解析（格式或编码不支持）") from e
+            raise
     return parse_xml(data)

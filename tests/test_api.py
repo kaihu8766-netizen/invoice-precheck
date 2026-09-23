@@ -82,9 +82,10 @@ class TestAPI(unittest.TestCase):
         self.assertEqual(d["total"], "113.00")
 
     def test_parse_rejects_pdf(self):
+        # 魔数路由（8ffc3cf）：PDF 魔数→PDF 解析链路；垃圾内容→"文件无法解析"（友好错误）
         r = client.post("/parse", files=[("file", ("bad.pdf", b"%PDF-1.7 junk", "application/pdf"))])
         self.assertEqual(r.status_code, 400)
-        self.assertIn("不支持的输入类型", r.json()["detail"])
+        self.assertIn("无法解析", r.json()["detail"])
 
     def test_review_full_flow(self):
         resp = client.post("/review", files=files(
@@ -117,7 +118,7 @@ class TestAPI(unittest.TestCase):
         # 单 XML 上传不携带报销类别 → R4 不判定（防误报；类别通道在 P3）
         self.assertNotIn("R4", rids)
         self.assertEqual(len(d["failed"]), 1)
-        self.assertIn("不支持的输入类型", d["failed"][0]["error"])
+        self.assertIn("无法解析", d["failed"][0]["error"])
         # 报告架构（DeepSeek 信息架构）：摘要/清单/明细/规则版本/免责
         for key in ("summary", "findings", "invoices", "failed", "ruleset_version", "scope_note", "disclaimer"):
             self.assertIn(key, d)

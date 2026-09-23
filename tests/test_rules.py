@@ -231,9 +231,9 @@ class TestRules(unittest.TestCase):
         self.assertIn("勾稽不符", r8[0].message)
 
     def test_r8_absurd_total(self):
-        """单票超合理阈值 → 低危疑似（占位阈值，可配置）。"""
-        f = run_rules([inv("1001", "2026-08-01", Decimal("999999"), Decimal("1130000"),
-                           tax=Decimal("130001"))], CFG)
+        """单票超合理阈值 → 低危疑似（阈值已校准 09-23：100万→3000万，31张真实票分布）。"""
+        f = run_rules([inv("1001", "2026-08-01", Decimal("34999999"), Decimal("35000000"),
+                           tax=Decimal("1"))], CFG)
         r8 = [x for x in f if x.rule_id == "R8"]
         self.assertEqual(len(r8), 1)
         self.assertEqual(r8[0].severity, "低")
