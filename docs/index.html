@@ -82,6 +82,7 @@
   .inv-card.partial{ background:#fdfbf7; border-color:#e5d5a8; }
   .stb.q{ background:#fdf6e3; color:#9a6700; }
   .btn-ghost:disabled{ opacity:.45; cursor:not-allowed; }
+  .print-head{ display:none; }
   @media print{ .view-switch{ display:none !important; } }
 
   .fld{ display:flex; flex-direction:column; gap:6px; margin-top:8px; }
@@ -217,6 +218,7 @@
   /* 打印：只保留报告 */
   @media print{
     .topbar, .input-panel, .tools, details.adv summary{ display:none !important; }
+    .print-head{ display:block; font-size:12px; color:#333; margin-bottom:10px; padding-bottom:6px; border-bottom:1px solid #ccc; }
     .app{ max-width:100%; padding:0; }
     body{ background:#fff; }
     .finding{ break-inside:avoid; }
@@ -475,6 +477,14 @@ function shortNo(n) {
 }
 
 /* 导出 CSV（DeepSeek 评审 P0：财务需留痕/导出） */
+/* CSV 注入防护（DeepSeek P1）：字段以 = + - @ 开头时加 ' 前缀（防 Excel/WPS 公式执行）；
+   剥离 tab/换行（防单元格注入）；双引号包裹 + 转义 */
+function csvCell(v) {
+  let s = String(v ?? "");
+  if (/[\t\r\n]/.test(s)) s = s.replace(/[\t\r\n]+/g, " ");
+  if (/^[=+\-@]/.test(s)) s = "'" + s;
+  return `"${s.replace(/"/g, '""')}"`;
+}
 function exportCSV(findings, metaMap) {
   const rows = [["# 导出范围：全量命中清单（N 条，不随视图切换变化） · 生成 " + new Date().toISOString()]];
   rows.push(["规则", "规则名", "严重度", "置信度", "票号", "字段", "问题", "建议", "处置状态", "处置时间"]);
@@ -487,7 +497,7 @@ function exportCSV(findings, metaMap) {
       d ? d.updatedAt.slice(0,16).replace("T", " ") : ""
     ]);
   });
-  const csv = "\uFEFF" + rows.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
+  const csv = "\uFEFF" + rows.map(r => r.map(csvCell).join(",")).join("\n");
   const blob = new Blob([csv], {type: "text/csv;charset=utf-8"});
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
@@ -643,6 +653,7 @@ function setView(v) {
   document.querySelectorAll(".report-view").forEach(el => { el.hidden = el.id !== "view-" + v; });
   document.querySelectorAll(".vs").forEach(b => b.classList.toggle("active", b.dataset.view === v));
   applyFltState(v);
+  updatePrintHead(v);
 }
 function applyView() {
   let v = localStorage.getItem(VIEW_KEY);
@@ -650,6 +661,13 @@ function applyView() {
   document.querySelectorAll(".report-view").forEach(el => { el.hidden = el.id !== "view-" + v; });
   document.querySelectorAll(".vs").forEach(b => b.classList.toggle("active", b.dataset.view === v));
   applyFltState(v);
+  updatePrintHead(v);
+}
+function updatePrintHead(v) {
+  const ph = document.getElementById("printHead");
+  if (!ph || !__lastReport) return;
+  const name = {risk:"风险视图", invoice:"发票视图", rule:"规则效果视图"}[v] || "风险视图";
+  ph.textContent = name + " · 规则包 " + (__lastReport.ruleset?.version || __lastReport.ruleset_version || "?") + " · 生成 " + (__lastReport.generated_at || "");
 }
 
 function __origRender(d) {
@@ -722,6 +740,7 @@ function __origRender(d) {
 
   const html = `
   <div class="card">${kpis}</div>
+  <div class="print-head" id="printHead"></div>
   <div class="view-switch">
     <button class="vs active" data-view="risk">风险视图</button>
     <button class="vs" data-view="invoice">发票视图</button>
