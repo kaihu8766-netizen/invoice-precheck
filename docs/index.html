@@ -269,6 +269,7 @@ const SEV_CLS = {"高":"high","中":"mid","低":"low"};
 const CONF_ALLOW = new Set(["确定","疑似"]);
 const DISCLAIMER = "基于 XML 结构化数据的规则预审，不替代人工复核与税务判断；命中项需核原始凭证，未命中不等于合规；规则版本与覆盖范围已列明。";
 const SCOPE_NOTE = "本报告基于数电票 XML 结构化数据的确定性规则生成；公开+合成集验证通过，真实分布未验证。";
+/* 演示快照数据源（与后端 RULESET_META 同构，非生产权威；生产名称解析走响应 d.rules） */
 const RULES_META = [
   {rule_id:"R1", name:"重复报销 / 整文件重复", severity:"高"},
   {rule_id:"R2", name:"抬头/税号校验", severity:"高"},
@@ -281,13 +282,27 @@ const RULES_META = [
   {rule_id:"R10", name:"明细行勾稽（行级一致性）", severity:"高"},
   {rule_id:"R11", name:"红冲关联（占位）", severity:"中"},
 ];
-const ruleName = id => (RULES_META.find(r => r.rule_id === id) || {}).name || id;
+/* 规则元数据解析（DeepSeek 评审：按响应绑定，不用全局可变 map）：
+   生产（live）只信本次响应 d.rules 构建的 map；未命中显示 rule_id + console.warn；
+   演示（demo）用演示快照 RULES_META。findings[].rule 是 rule_id，业务名从同响应 rules 解析（契约）。 */
+function buildRuleMetaMap(rules) {
+  const m = {};
+  (rules || []).forEach(r => { if (r && r.rule_id) m[r.rule_id] = r; });
+  return m;
+}
+function resolveRuleMeta(ruleId, map) {
+  const m = map[ruleId];
+  if (m && m.name) return m.name;
+  console.warn("未知规则（响应 rules 未覆盖）:", ruleId);
+  return ruleId;
+}
+function demoRuleName(id) { return (RULES_META.find(r => r.rule_id === id) || {}).name || id; }
 
 /* ---------- 内置样例报告（ruleset 0.3.0 结构：证据链 + 行级明细 + R9-R11） ---------- */
 function demoReport() {
   const now = new Date();
   const ts = now.getFullYear() + "-" + String(now.getMonth()+1).padStart(2,"0") + "-" + String(now.getDate()).padStart(2,"0") + " " + String(now.getHours()).padStart(2,"0") + ":" + String(now.getMinutes()).padStart(2,"0") + ":" + String(now.getSeconds()).padStart(2,"0");
-  const rules = RULES_META.map(m => ({...m, basis:"政策依据按主题引用（见 ruleset scope_note）", scope_note:"", state:"未命中"}));
+  const rules = RULES_META.map(m => ({...m, basis:"政策依据按主题引用（见 ruleset scope_note）", scope_note:"", state:"未命中"})); // 演示快照，非生产权威
   const byId = id => rules.find(r => r.rule_id === id);
   byId("R1").state = "命中";
   byId("R9").state = "命中";
@@ -425,12 +440,12 @@ function shortNo(n) {
 }
 
 /* 导出 CSV（DeepSeek 评审 P0：财务需留痕/导出） */
-function exportCSV(findings) {
+function exportCSV(findings, metaMap) {
   const rows = [["规则", "规则名", "严重度", "置信度", "票号", "字段", "问题", "建议", "处置状态", "处置时间"]];
   (findings || []).forEach(f => {
     const d = getDisp(riskId(f));
     rows.push([
-      f.rule_id, ruleName(f.rule_id), f.severity, f.confidence || "疑似", f.invoice_no,
+      f.rule_id, resolveRuleMeta(f.rule_id, metaMap || {}), f.severity, f.confidence || "疑似", f.invoice_no,
       f.field, f.message, f.suggestion,
       d ? DISP_LABEL[d.status] : DISP_LABEL.pending,
       d ? d.updatedAt.slice(0,16).replace("T", " ") : ""
@@ -483,7 +498,8 @@ function __origRender(d) {
     <div class="kpi"><div class="n high">${esc(s.failed_count ?? 0)}</div><div class="l">解析失败</div></div>
   </div>`;
 
-  const ruleName0 = id => (RULES_META.find(r => r.rule_id === id) || {}).name || id;
+  const metaMap = buildRuleMetaMap(d.rules);
+  const rname = id => resolveRuleMeta(id, metaMap);
   const findings = (d.findings||[]).length === 0
     ? `<div class="card card-pad"><div class="hint">本批次未见规则命中，报告完成 ✓<br/>未命中不等于合规，请结合规则覆盖范围判断。</div></div>`
     : (d.findings||[]).map(f => {
@@ -505,7 +521,7 @@ function __origRender(d) {
         <summary>
           <span class="bar ${sevCls}"></span>
           <span class="sev ${sevCls}">${sev === "高" ? "▲" : sev === "中" ? "●" : "·"} ${esc(f.rule_id)} ${esc(sev)}</span>
-          <span class="rname">${esc(ruleName0(f.rule_id))}</span>
+          <span class="rname">${esc(rname(f.rule_id))}</span>
           <span class="ticket">${esc(shortNo(f.invoice_no))}</span>
           ${badge}
           ${amt ? `<span class="amt">${amt}</span>` : ""}
@@ -574,7 +590,7 @@ function __origRender(d) {
       <div class="tools">
         <button class="btn-ghost flt active" data-flt="all">全部</button>
         <button class="btn-ghost flt" data-flt="pending">待处理</button>
-        <button class="btn-ghost" onclick="exportCSV(${JSON.stringify(d.findings||[]).replace(/"/g,"&quot;")})">导出 CSV</button>
+        <button class="btn-ghost" onclick="exportCSV(${JSON.stringify(d.findings||[]).replace(/"/g,"&quot;")}, ${JSON.stringify(d.rules||[]).replace(/"/g,"&quot;")})">导出 CSV</button>
         <button class="btn-ghost" onclick="window.print()">打印</button>
       </div>
     </div>

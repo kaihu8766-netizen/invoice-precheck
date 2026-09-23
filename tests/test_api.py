@@ -108,6 +108,12 @@ class TestAPI(unittest.TestCase):
         rids = {f["rule_id"] for f in d["findings"]}
         self.assertIn("R1", rids)
         self.assertIn("R3", rids)
+        # 规则名契约（P1② 规则名业务化）：findings 的 rule_id 必须被响应 rules 覆盖（业务名从 rules 解析）
+        rule_ids_in_rules = {r["rule_id"] for r in d["rules"]}
+        self.assertTrue(rids.issubset(rule_ids_in_rules),
+                        f"findings rule_id 未被 rules 覆盖: {rids - rule_ids_in_rules}")
+        for r in d["rules"]:
+            self.assertTrue(r.get("name"), f"rules[{r['rule_id']}] 缺业务名")
         # 单 XML 上传不携带报销类别 → R4 不判定（防误报；类别通道在 P3）
         self.assertNotIn("R4", rids)
         self.assertEqual(len(d["failed"]), 1)

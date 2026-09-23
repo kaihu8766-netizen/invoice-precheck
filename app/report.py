@@ -63,7 +63,13 @@ def build_report(
     file_count: int | None = None,
     rule_states: dict[str, str] | None = None,
 ) -> dict:
-    """组装一页风险报告 JSON。rule_states：{rule_id: 命中/未命中/未执行（…）} 三态。"""
+    """组装一页风险报告 JSON。rule_states：{rule_id: 命中/未命中/未执行（…）} 三态。
+
+    规则名契约（P1②）：findings[].rule_id 的业务名由同响应 rules[] 解析
+    （rules 数组含 name/severity/state，是唯一权威源）；消费方如需还原业务名
+    必须同时保存 rules 数组，不得前端拼接。findings 不冗余 name（避免同响应内
+    多副本不一致）。
+    """
     review_ids = {f.invoice_no for f in findings if f.invoice_no != "-"}
 
     # ① 汇总（按"张"计数；"未见异常"= 无命中且无解析告警）
