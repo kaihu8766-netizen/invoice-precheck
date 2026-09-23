@@ -9,6 +9,13 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+# 测试隔离：移除本地 data/config.json（若有），确保"未配置企业主体"基线
+from app import config_store as _cfg_store
+try:
+    _cfg_store.CONFIG_PATH.unlink()
+except FileNotFoundError:
+    pass
+
 from fastapi.testclient import TestClient
 
 from app.main import DEV_API_KEY, MAX_FILE_BYTES, app

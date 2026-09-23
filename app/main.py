@@ -32,12 +32,20 @@ from fastapi import FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 
+from .config_store import load_config, save_config, to_rules_config
 from .llm_explain import LLM_ENABLED, explain_findings
 from .parser import parse_document
 from .report import DISCLAIMER, build_report, invoice_to_dict
 from .rules import RULESET_VERSION, run_rules_with_states
 
 logger = logging.getLogger("invoice-precheck")
+
+# 企业主体配置（RV-42）：启动加载本地 data/config.json；PUT /api/config 热更新
+_APP_CONFIG = load_config()
+
+
+def _current_rules_config():
+    return to_rules_config(_APP_CONFIG)
 
 MAX_FILES = 200
 MAX_FILE_BYTES = 10 * 1024 * 1024   # 10MB（与 parser.MAX_FILE_SIZE 一致）
@@ -115,8 +123,16 @@ def _public_error(e: Exception) -> str:
 
 @app.get("/healthz")
 async def healthz():
-    """存活探活（公开；无业务数据）。"""
-    return {"status": "ok", "ruleset": RULESET_VERSION}
+    """存活探活（公开；无业务数据）。含主体配置初始化状态（RV-44：暴露 initialized 防静默未配置）。"""
+    ent = _APP_CONFIG.get("company_entities") or [{}]
+    e0 = ent[0] if ent else {}
+    initialized = bool(e0.get("name") and e0.get("tax_id"))
+    return {
+        "status": "ok",
+        "ruleset": RULESET_VERSION,
+        "config_initialized": initialized,
+        "config_source": "file" if (Path(__file__).resolve().parent.parent / "data" / "config.json").exists() else "default",
+    }
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -127,6 +143,47 @@ async def index() -> HTMLResponse:
     html = FRONTEND.read_text(encoding="utf-8")
     html = html.replace("{{DISCLAIMER}}", DISCLAIMER).replace("{{RULESET_VERSION}}", RULESET_VERSION)
     return HTMLResponse(html)
+
+
+@app.get("/api/config")
+async def get_config():
+    """读取当前企业主体配置（需 X-API-Key）。税号脱敏返回，避免前端全量回显。"""
+    global _APP_CONFIG
+    ents = []
+    for e in _APP_CONFIG.get("company_entities", []):
+        row = {k: v for k, v in e.items()}
+        tid = str(row.get("tax_id") or "")
+        row["tax_id"] = (tid[:4] + "****" + tid[-4:]) if len(tid) >= 8 else ""
+        ents.append(row)
+    return {"company_entities": ents, "r2": _APP_CONFIG.get("r2", {})}
+
+
+@app.put("/api/config")
+async def put_config(request: Request):
+    """保存企业主体配置（需 X-API-Key）。校验后写本地 data/config.json 并热生效。
+
+    入参：{"company_name": str, "tax_id": str}
+    """
+    global _APP_CONFIG
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(400, "请求体不是合法 JSON")
+    name = str(body.get("company_name") or "").strip()
+    taxid = str(body.get("tax_id") or "").strip().replace(" ", "")
+    if not name and not taxid:
+        raise HTTPException(400, "企业名称与税号不能同时为空")
+    if taxid and not (8 <= len(taxid) <= 20 and taxid.isalnum()):
+        raise HTTPException(400, "税号应为 8-20 位字母数字（统一社会信用代码 18 位）")
+    ent = _APP_CONFIG["company_entities"][0]
+    ent["name"] = name
+    ent["tax_id"] = taxid
+    try:
+        save_config(_APP_CONFIG)
+    except ValueError as e:
+        raise HTTPException(500, str(e)) from e
+    _APP_CONFIG = load_config()  # 重载（含环境变量覆盖语义）
+    return {"status": "ok", "message": "企业主体配置已保存", "tax_id_masked": (taxid[:4] + "****" + taxid[-4:]) if len(taxid) >= 8 else ""}
 
 
 @app.post("/parse")
@@ -169,7 +226,7 @@ async def review(files: list[UploadFile] = File(...)):
             logger.exception("parse failed: %s", _safe_name(f.filename))
             failed.append({"name": _safe_name(f.filename), "error": _public_error(e)})
 
-    findings, rule_states = run_rules_with_states(invoices)
+    findings, rule_states = run_rules_with_states(invoices, config=_current_rules_config())
     report = build_report(invoices, findings, failed, RULESET_VERSION,
                           file_count=len(files), rule_states=rule_states)
     report["batch_id"] = batch_id

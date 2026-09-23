@@ -24,3 +24,6 @@ data/
 .idea/
 .vscode/
 benchmark/private/
+
+# 企业主体配置（RV-42：本地数据，不入 Git；示例文件除外）
+data/config.json

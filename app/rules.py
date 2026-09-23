@@ -197,11 +197,18 @@ def r1_duplicate(invoices: list[NormalizedInvoice]) -> list[Finding]:
 
 
 def r2_header(invoices: list[NormalizedInvoice], cfg: RulesConfig) -> list[Finding]:
-    """抬头/税号不符：购买方名称、税号与企业主体不匹配。
+    """抬头/税号校验（RV-42/43 重写：税号优先分级，收票场景首版只校验购买方）。
 
-    未配置企业主体 → 输出"R2 未执行"提示（不误报）；
-    名称/税号为空 → 记为疑似（明示未检查，避免漏报无提示）。
+    分级（防误报优先 + 防 fail-open）：
+    - 未配置企业主体 → 整批一条"R2 未执行"低风险提示（保留原降级，不误报）
+    - 票面税号无效/缺失 + 名称一致 → 低风险"无法校验"（税号缺失无法强校验）
+    - 票面税号无效/缺失 + 名称不一致/缺失 → 中风险"可疑"（RV-43 补档：不得 fail-open 掉到低）
+    - 税号有效一致 → 通过（名称不一致仅低风险"名称差异"提示，不报高）
+    - 税号有效不一致 → 高风险"抬头/税号不符"（即使名称一致）
+    - 归一化：全半角/空格/括号/大小写统一（config_store 单一实现，票面/配置共用）
     """
+    from .config_store import is_plausible_tax_id, normalize_name, normalize_tax_id
+
     out: list[Finding] = []
     if not cfg.company_name or not cfg.company_taxid:
         if invoices:
@@ -209,38 +216,63 @@ def r2_header(invoices: list[NormalizedInvoice], cfg: RulesConfig) -> list[Findi
                 rule_id="R2", severity=_SEV_LOW, confidence=_CONF_MAYBE,
                 invoice_no="-", field="config",
                 message="R2 未执行：未配置企业主体（抬头/税号校验需要企业名称与税号）",
-                evidence="请在规则配置中填写 company_name / company_taxid",
+                evidence="请在设置面板填写企业名称与统一社会信用代码",
                 ruleset_version=RULESET_VERSION,
             ))
         return out
+    cfg_name = normalize_name(cfg.company_name)
+    cfg_taxid = normalize_tax_id(cfg.company_taxid)
     for inv in invoices:
-        if not inv.buyer_name or not inv.buyer_taxid:
-            out.append(_finding(
-                "R2", inv, _SEV_LOW, _CONF_MAYBE, "buyer_name/buyer_taxid",
-                "抬头数据不完整：购买方名称或税号缺失，未校验",
-                f"名称：{inv.buyer_name or '(空)'}；税号：{_mask_taxid(inv.buyer_taxid) or '(空)'}",
-                "补齐抬头信息后复核",
-            ))
+        ticket_taxid = normalize_tax_id(inv.buyer_taxid or "")
+        if not is_plausible_tax_id(inv.buyer_taxid):
+            # 税号缺失/占位符：名称一致→低·无法校验；名称不一致→中·可疑（防 fail-open）
+            name_ok = bool(inv.buyer_name) and normalize_name(inv.buyer_name) == cfg_name
+            if not name_ok:
+                out.append(_finding(
+                    "R2", inv, "中", _CONF_MAYBE, "buyer_taxid",
+                    "票面税号缺失或无效且购买方名称与配置主体不一致：疑似非本公司发票",
+                    f"票面名称：{inv.buyer_name or '(空)'}；税号：(缺失/无效)；"
+                    f"企业主体：{cfg.company_name} / {_mask_taxid(cfg.company_taxid)}",
+                    "核对发票抬头：若确非本公司请退回；若为解析失败请人工补录税号后复核",
+                    evidence_chain=[
+                        _link("buyer_name", inv.buyer_name or "(空)", normalize_name(inv.buyer_name or ""),
+                              note="票面购买方名称（归一后比对）"),
+                        _link("config.company_taxid", _mask_taxid(cfg.company_taxid),
+                              cfg.company_taxid, note="企业主体配置税号（脱敏展示）"),
+                    ],
+                ))
+            else:
+                out.append(_finding(
+                    "R2", inv, _SEV_LOW, _CONF_MAYBE, "buyer_taxid",
+                    "票面税号缺失或无效，无法强校验（名称与配置主体一致）",
+                    f"名称：{inv.buyer_name or '(空)'}；税号：(缺失/无效)",
+                    "补齐/修正税号后复核",
+                ))
             continue
-        norm_name = inv.buyer_name.strip().replace(" ", "")
-        norm_cfg = cfg.company_name.strip().replace(" ", "")
-        if norm_name != norm_cfg or inv.buyer_taxid.strip() != cfg.company_taxid.strip():
+        if ticket_taxid != cfg_taxid:
             out.append(_finding(
                 "R2", inv, _SEV_HIGH, _CONF_SURE, "buyer_name/buyer_taxid",
                 "抬头/税号与企业主体信息不符",
-                f"票面抬头：{inv.buyer_name} / {_mask_taxid(inv.buyer_taxid)}；"
+                f"票面购买方：{inv.buyer_name or '(空)'} / {_mask_taxid(inv.buyer_taxid)}；"
                 f"企业主体：{cfg.company_name} / {_mask_taxid(cfg.company_taxid)}",
                 "核对发票抬头是否开错（退票重开或补充说明）",
                 evidence_chain=[
-                    _link("buyer_name", inv.buyer_name, inv.buyer_name.strip().replace(" ", ""),
-                          note="票面购买方名称（去空格归一）"),
                     _link("buyer_taxid", _mask_taxid(inv.buyer_taxid), inv.buyer_taxid,
-                          note="票面购买方税号（脱敏展示）"),
-                    _link("config.company_name", cfg.company_name,
-                          cfg.company_name.strip().replace(" ", ""), note="企业主体配置名称"),
+                          note="票面购买方税号（脱敏展示，归一后比对）"),
                     _link("config.company_taxid", _mask_taxid(cfg.company_taxid),
-                          cfg.company_taxid, note="企业主体配置税号（脱敏展示）"),
+                          cfg.company_taxid, note="企业主体配置税号（脱敏展示，归一后比对）"),
+                    _link("buyer_name", inv.buyer_name or "(空)", ticket_taxid,
+                          note="票面购买方名称（归一后仅提示，不参与高风险判定）"),
                 ],
+            ))
+            continue
+        # 税号一致：名称仅辅助提示（低风险），不报高
+        if not inv.buyer_name or normalize_name(inv.buyer_name) != cfg_name:
+            out.append(_finding(
+                "R2", inv, _SEV_LOW, _CONF_MAYBE, "buyer_name",
+                "税号一致但名称差异或缺失：票面购买方名称与配置主体名称不一致",
+                f"票面名称：{inv.buyer_name or '(空)'}；配置名称：{cfg.company_name}",
+                "若为简称/括号差异可忽略；名称严重不符建议核对",
             ))
     return out
 

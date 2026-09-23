@@ -60,12 +60,12 @@ class TestRules(unittest.TestCase):
         r2 = [x for x in run_rules(batch, CFG) if x.rule_id == "R2"]
         self.assertEqual(len(r2), 1)
         self.assertEqual(r2[0].severity, "高")
-        # 空值不产出"确定"级结论（M15）
+        # 空值不产出"确定"级结论（M15）：税号缺失+名称缺失 → 中·可疑（RV-43 防 fail-open，仍非确定级）
         batch2 = [NormalizedInvoice(invoice_no="x1", invoice_type="普票", issue_date="2026-08-01",
                                     amount=Decimal("1"), tax=Decimal("0"), total=Decimal("1"),
                                     buyer_name="", buyer_taxid="", seller_name="s")]
         r2b = [x for x in run_rules(batch2, CFG) if x.rule_id == "R2"]
-        self.assertTrue(all(x.severity == "低" for x in r2b))
+        self.assertTrue(all(x.severity in ("低", "中") for x in r2b))
 
     def test_r2_no_config_skips(self):
         # 红线保护：未配置企业主体 → R2 不误报（H7）
@@ -75,6 +75,166 @@ class TestRules(unittest.TestCase):
         r2 = [x for x in f if x.rule_id == "R2"]
         self.assertEqual(len(r2), 1)
         self.assertIn("未配置企业主体", r2[0].message)
+        self.assertEqual(r2[0].severity, "低")
+
+    # ---------- RV-42 重写：税号优先分级（F-20260923-04） ----------
+
+    def test_r2_taxid_match_name_match_no_finding(self):
+        # 税号一致 + 名称一致 → 通过（无 R2 finding）
+        batch = [inv("1001", "2026-08-01", Decimal("100"), Decimal("113"),
+                     buyer="示例科技有限公司", taxid="91310000MA1FL1XXXX", tax=Decimal("13"))]
+        r2 = [x for x in run_rules(batch, CFG) if x.rule_id == "R2"]
+        self.assertEqual(r2, [])
+
+    def test_r2_taxid_match_name_mismatch_low(self):
+        # RV-42：税号一致但名称不一致 → 低风险"名称差异"，不报高
+        batch = [inv("1002", "2026-08-01", Decimal("100"), Decimal("113"),
+                     buyer="示例科技公司（简称）", taxid="91310000MA1FL1XXXX", tax=Decimal("13"))]
+        r2 = [x for x in run_rules(batch, CFG) if x.rule_id == "R2"]
+        self.assertEqual(len(r2), 1)
+        self.assertEqual(r2[0].severity, "低")
+        self.assertIn("名称", r2[0].message)
+
+    def test_r2_taxid_mismatch_high_even_name_match(self):
+        # RV-42：税号不一致（即使名称一致）→ 高风险"抬头/税号不符"
+        batch = [inv("1003", "2026-08-01", Decimal("100"), Decimal("113"),
+                     buyer="示例科技有限公司", taxid="999999999999999999", tax=Decimal("13"))]
+        r2 = [x for x in run_rules(batch, CFG) if x.rule_id == "R2"]
+        self.assertEqual(len(r2), 1)
+        self.assertEqual(r2[0].severity, "高")
+
+    def test_r2_taxid_missing_low(self):
+        # RV-42：票面税号缺失 → 低风险"无法校验"
+        batch = [inv("1004", "2026-08-01", Decimal("100"), Decimal("113"),
+                     buyer="示例科技有限公司", taxid="", tax=Decimal("13"))]
+        r2 = [x for x in run_rules(batch, CFG) if x.rule_id == "R2"]
+        self.assertEqual(len(r2), 1)
+        self.assertEqual(r2[0].severity, "低")
+        self.assertIn("缺失", r2[0].message)
+
+    def test_r2_fullwidth_norm_pass(self):
+        # RV-42：全半角/大小写归一化 → 全角税号与配置一致 → 通过
+        from app.config_store import normalize_tax_id
+        fullwidth = normalize_tax_id("９１３１００００MA1FL1XXXX")
+        self.assertEqual(fullwidth, "91310000MA1FL1XXXX")
+        batch = [inv("1005", "2026-08-01", Decimal("100"), Decimal("113"),
+                     buyer="示例科技有限公司", taxid="９１３１００００MA1FL1XXXX", tax=Decimal("13"))]
+        r2 = [x for x in run_rules(batch, CFG) if x.rule_id == "R2"]
+        self.assertEqual(r2, [])
+
+    def test_r2_name_missing_taxid_match_low(self):
+        # RV-42：税号一致但名称缺失 → 低风险提示（不报高）
+        batch = [inv("1006", "2026-08-01", Decimal("100"), Decimal("113"),
+                     buyer="", taxid="91310000MA1FL1XXXX", tax=Decimal("13"))]
+        r2 = [x for x in run_rules(batch, CFG) if x.rule_id == "R2"]
+        self.assertEqual(len(r2), 1)
+        self.assertEqual(r2[0].severity, "低")
+
+    # ---------- RV-43 补档：占位符税号 / fail-open 修复 / env 成套 ----------
+
+    def test_r2_placeholder_taxid_name_ok_low(self):
+        # RV-43：税号缺失/占位符 + 名称一致 → 低·无法校验（不误报高）
+        for ph in ["0" * 18, "00000000000000000000", "N/A", "-", "无"]:
+            batch = [inv("p1", "2026-08-01", Decimal("100"), Decimal("113"),
+                         buyer="示例科技有限公司", taxid=ph, tax=Decimal("13"))]
+            r2 = [x for x in run_rules(batch, CFG) if x.rule_id == "R2"]
+            self.assertEqual(len(r2), 1, f"占位符 {ph}")
+            self.assertEqual(r2[0].severity, "低", f"占位符 {ph}")
+
+    def test_r2_placeholder_taxid_name_mismatch_medium(self):
+        # RV-43 补档：税号缺失/占位符 + 名称不一致 → 中·可疑（不得 fail-open 掉到低）
+        for ph in ["00000000000000000000", "-"]:
+            batch = [inv("p2", "2026-08-01", Decimal("100"), Decimal("113"),
+                         buyer="完全无关公司", taxid=ph, tax=Decimal("13"))]
+            r2 = [x for x in run_rules(batch, CFG) if x.rule_id == "R2"]
+            self.assertEqual(len(r2), 1, f"占位符 {ph}")
+            self.assertEqual(r2[0].severity, "中", f"占位符 {ph} 名称不符应中风险")
+
+    def test_r2_short_taxid_invalid(self):
+        # RV-43：短税号（<8 位）视为无效 → 不参与高风险比对
+        batch = [inv("p3", "2026-08-01", Decimal("100"), Decimal("113"),
+                     buyer="示例科技有限公司", taxid="123", tax=Decimal("13"))]
+        r2 = [x for x in run_rules(batch, CFG) if x.rule_id == "R2"]
+        self.assertEqual(len(r2), 1)
+        self.assertEqual(r2[0].severity, "低")
+
+    def test_config_env_pairing(self):
+        # RV-43：env 必须成套，只设一个时忽略两个（防混合主体）
+        import importlib, os
+        from unittest import mock
+        os.environ.pop("INVOICE_COMPANY_NAME", None)
+        os.environ.pop("INVOICE_COMPANY_TAXID", None)
+        with mock.patch.dict(os.environ, {"INVOICE_COMPANY_NAME": "仅名字公司"}, clear=False):
+            from app.config_store import load_config as lc
+            # 直接测 load_config 内部逻辑（env 单设 → 不覆盖）
+            # 用子进程隔离太重，改为验证：单设 env 时 load_config 仍返回文件/默认（无 env 值）
+            cfg = lc()
+            ent = cfg["company_entities"][0]
+            self.assertEqual(ent["name"], "")  # 单设 env 被忽略
+        with mock.patch.dict(os.environ, {"INVOICE_COMPANY_NAME": "成对公司", "INVOICE_COMPANY_TAXID": "91310000MA1FL1XXXX"}, clear=False):
+            from app.config_store import load_config as lc2
+            cfg = lc2()
+            ent = cfg["company_entities"][0]
+            self.assertEqual(ent["name"], "成对公司")
+            self.assertEqual(ent["tax_id"], "91310000MA1FL1XXXX")
+
+    def test_config_atomic_save(self):
+        # RV-43：原子写（tmp+replace）——保存后文件可读且内容完整
+        import json, tempfile
+        from app import config_store
+        tmpdir = tempfile.mkdtemp()
+        old_dir, old_path = config_store.DATA_DIR, config_store.CONFIG_PATH
+        config_store.DATA_DIR = Path(tmpdir)
+        config_store.CONFIG_PATH = Path(tmpdir) / "config.json"
+        try:
+            cfg = {"company_entities": [{"id": "default", "name": "原子公司", "tax_id": "91310000MA1FL1XXXX", "enabled": True}], "r2": {}}
+            config_store.save_config(cfg)
+            loaded = json.loads(Path(tmpdir, "config.json").read_text(encoding="utf-8"))
+            self.assertEqual(loaded["company_entities"][0]["name"], "原子公司")
+            self.assertFalse((Path(tmpdir) / "config.json.tmp").exists(), "临时文件应已清理")
+        finally:
+            config_store.DATA_DIR, config_store.CONFIG_PATH = old_dir, old_path
+
+    # ---------- RV-44：税号白名单/长度区间/占位词边界 ----------
+
+    def test_is_plausible_tax_id_matrix(self):
+        from app.config_store import is_plausible_tax_id
+        cases = [
+            ("", False),                      # 空
+            ("91310000MA1FL1XXXX", True),     # 18 位统一码（标准）
+            ("91310000123456789", True),      # 15 位老税号
+            ("１２３４５６７８９０１", False),  # 全角数字（归一后长度不足 15）
+            ("91310000ma1fl1xxxx", True),     # 小写字母 → 归一后大写 → 有效
+            (" 91310000MA1FL1XXXX ", True),   # 前后空白 → 归一后有效
+            ("9131-0000-MA1F-L1XX", False),   # 连字符 → 归一后非纯字母数字 → 无效
+            ("1234567", False),               # 短号
+            ("0" * 18, False),                # 全 0 占位
+            ("X" * 18, False),                # 全 X 占位
+            ("N/A", False),                   # 占位词
+            ("暂无", False),
+            ("91310000MA1FL1XX0X", True),     # 含 X 的混合合法（不误杀）
+        ]
+        for raw, want in cases:
+            got = is_plausible_tax_id(raw)
+            self.assertEqual(got, want, f"is_plausible_tax_id({raw!r}) 应为 {want}")
+
+    def test_r2_taxid_valid_mismatch_name_missing_high(self):
+        # RV-44 固化：税号有效且不一致 + 名称缺失 → 高（不得因名称缺失降级）
+        batch = [inv("p4", "2026-08-01", Decimal("100"), Decimal("113"),
+                     buyer="", taxid="91310000MA1FL1XXXX", tax=Decimal("13"))]
+        # CFG 税号即 91310000MA1FL1XXXX → 配置另一有效税号触发不一致
+        from app.rules import RulesConfig
+        cfg2 = RulesConfig(company_name="示例科技有限公司", company_taxid="91440300MA5XXXXX2A")
+        r2 = [x for x in run_rules(batch, cfg2) if x.rule_id == "R2"]
+        self.assertEqual(len(r2), 1)
+        self.assertEqual(r2[0].severity, "高")
+
+    def test_r2_company_suffix_variant_documented(self):
+        # RV-44 固化：不做"有限公司/有限责任公司"同义合并（文档声明）→ 名称差异 → 低（税号一致）
+        batch = [inv("p5", "2026-08-01", Decimal("100"), Decimal("113"),
+                     buyer="示例科技有限责任公司", taxid="91310000MA1FL1XXXX", tax=Decimal("13"))]
+        r2 = [x for x in run_rules(batch, CFG) if x.rule_id == "R2"]
+        self.assertEqual(len(r2), 1)
         self.assertEqual(r2[0].severity, "低")
 
     def test_r3_serial(self):
