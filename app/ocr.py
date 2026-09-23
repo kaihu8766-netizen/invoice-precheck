@@ -9,6 +9,7 @@
 from __future__ import annotations
 
 import io
+import os
 from typing import Protocol, runtime_checkable
 
 import fitz
@@ -50,8 +51,16 @@ class RapidOcrProvider:
         return "\n".join(lines), confs
 
 
-def render_pdf_page(pdf_bytes: bytes, page_index: int = 0, dpi: int = 300) -> bytes:
-    """PDF 页 → PNG bytes（OCR 输入）。"""
+def render_pdf_page(pdf_bytes: bytes, page_index: int = 0, dpi: int | None = None) -> bytes:
+    """PDF 页 → PNG bytes（OCR 输入）。
+
+    速度优化（DeepSeek 优化序，OPEN_ISSUES #54）：
+    - 文本层/二维码短路已内置（有文本层不 OCR）；
+    - dpi 可经环境变量 OCR_DPI 调（默认 300 保精度；内测提速可 200，需精度回归后定）；
+    - 版面裁剪/并行分页待真实样本回归后启用（暂不动，防伤精度）。
+    """
+    if dpi is None:
+        dpi = int(os.environ.get("OCR_DPI", "300"))
     doc = fitz.open(stream=pdf_bytes, filetype="pdf")
     try:
         page = doc[page_index]

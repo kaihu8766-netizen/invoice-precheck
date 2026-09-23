@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>发票合规预审 · 演示</title>
 <style>
   :root{
@@ -108,6 +108,9 @@
   .kpi .l{ font-size:11.5px; color:var(--sub); margin-top:2px; word-break:keep-all; line-height:1.4; }
   .kpi .n.ok{ color:var(--ok); } .kpi .n.mid{ color:var(--mid); } .kpi .n.high{ color:var(--high); }
   .kpi.main{ background:var(--brand-weak); border-color:#d6e2ff; }
+  /* 触摸反馈：可点元素按压微缩放（DeepSeek Week1 痛点） */
+  button:active, .vs:active, summary:active, .drop:active, [role="button"]:active{ transform:scale(0.98); }
+  @media (hover:none){ button, .vs, summary, .drop{ -webkit-tap-highlight-color:transparent; transition:transform .08s ease; } }
   .kpi.main .l{ color:#3d5bb3; }
 
   /* 风险清单：密集行式列表（财务批量复核场景，DeepSeek 评审 P0） */
@@ -198,7 +201,7 @@
   .explain.tpl .tag{ color:var(--sub); border-color:var(--line); }
 
   /* 表格（折叠区） */
-  table{ width:100%; border-collapse:collapse; font-size:13px; }
+  table{ width:100%; border-collapse:collapse; font-size:13px; font-variant-numeric:tabular-nums; }
   th, td{ text-align:left; padding:7px 8px; border-bottom:1px solid var(--line-soft); vertical-align:top; }
   th{ color:var(--sub); font-weight:600; font-size:12px; background:#fafbfc; }
   tr:last-child td{ border-bottom:none; }
@@ -293,11 +296,11 @@
         <h3>连接后端</h3>
         <div class="fld">
           <label for="backendUrl">后端地址</label>
-          <input id="backendUrl" type="text" placeholder="https://xxx.trycloudflare.com 或 http://localhost:8000">
+          <input id="backendUrl" type="text" inputmode="url" placeholder="https://xxx.trycloudflare.com 或 http://localhost:8000" style="font-size:16px;">
         </div>
         <div class="fld">
           <label for="apiKey">API Key（X-API-Key）</label>
-          <input id="apiKey" type="password" placeholder="后端环境变量 INVOICE_API_KEY 的值">
+          <input id="apiKey" type="password" autocomplete="off" placeholder="后端环境变量 INVOICE_API_KEY 的值" style="font-size:16px;">
         </div>
         <button id="btnTest" class="btn btn-ghost" style="margin-top:10px;">测试连接</button>
         <div class="hint" id="connHint">地址与 Key 仅保存在本浏览器，不发送到第三方。</div>
@@ -832,25 +835,30 @@ async function runReview() {
   const files = $("fileInput").files;
   if (!url) { $("connHint").textContent = "请填写后端地址"; $("connHint").className = "hint err"; return; }
   if (!key) { $("connHint").textContent = "请填写 API Key（后端环境变量 INVOICE_API_KEY 的值）"; $("connHint").className = "hint err"; return; }
-  if (!files.length) { $("runHint").textContent = "请选择要上传的发票文件（XML/OFD）"; $("runHint").className = "hint err"; return; }
+  if (!files.length) { $("runHint").textContent = "请选择要上传的发票文件（XML/OFD/PDF）"; $("runHint").className = "hint err"; return; }
   localStorage.setItem("ipc_backend", url); localStorage.setItem("ipc_key", key);
   const fd = new FormData();
   for (const f of files) fd.append("files", f, f.name);
-  $("btnReview").disabled = true; $("btnReview").textContent = "预审中…";
+  const totalMb = Array.from(files).reduce((s, f) => s + f.size, 0) / 1048576;
+  $("btnReview").disabled = true; $("btnReview").textContent = `上传中 0%（共 ${totalMb.toFixed(1)} MB）`;
   try {
-    const r = await fetch(url + "/review", {method:"POST", headers:{"X-API-Key": key}, body: fd});
-    const j = await r.json();
-    if (!r.ok) { $("result").innerHTML = `<div class="card card-pad high">后端拒绝：${esc(j.detail || ("HTTP " + r.status))}</div>`; return; }
-    render(j);
-    if ((j.findings||[]).length) {
+    // XHR 上传（fetch 无上传进度；大文件需真实反馈，DeepSeek Week1 痛点）
+    const j = await xhrUpload(url + "/review", key, fd, (loaded, total) => {
+      const pct = total ? Math.round(loaded / total * 100) : 0;
+      $("btnReview").textContent = `上传中 ${pct}%（${(loaded/1048576).toFixed(1)}/${(total/1048576).toFixed(1)} MB）`;
+    });
+    $("btnReview").textContent = "解析中…";
+    if (j.status !== 200) { $("result").innerHTML = `<div class="card card-pad high">后端拒绝：${esc((j.body||{}).detail || ("HTTP " + j.status))}</div>`; return; }
+    render(j.body);
+    if ((j.body.findings||[]).length) {
       try {
         const er = await fetch(url + "/v1/findings/explain", {method:"POST",
           headers:{"X-API-Key": key, "Content-Type":"application/json"},
-          body: JSON.stringify({findings: j.findings})});
+          body: JSON.stringify({findings: j.body.findings})});
         if (er.ok) {
           const ej = await er.json();
-          (ej.explanations||[]).forEach((exp, i) => { if (exp && j.findings[i]) j.findings[i].explanation = exp; });
-          render(j);
+          (ej.explanations||[]).forEach((exp, i) => { if (exp && j.body.findings[i]) j.body.findings[i].explanation = exp; });
+          render(j.body);
         }
       } catch (e2) { /* 解释获取失败：保留已渲染的报告 */ }
     }
@@ -859,6 +867,24 @@ async function runReview() {
   } finally {
     $("btnReview").disabled = false; $("btnReview").textContent = "运行预审";
   }
+}
+
+/* XHR 上传（带进度回调；返回 {status, body}） */
+function xhrUpload(url, key, fd, onProgress) {
+  return new Promise((resolve, reject) => {
+    const x = new XMLHttpRequest();
+    x.open("POST", url);
+    x.setRequestHeader("X-API-Key", key);
+    x.upload.onprogress = e => { if (e.lengthComputable) onProgress(e.loaded, e.total); };
+    x.onload = () => {
+      let body = null;
+      try { body = JSON.parse(x.responseText || "null"); } catch (e) { body = null; }
+      resolve({ status: x.status, body });
+    };
+    x.onerror = () => reject(new Error("网络错误（检查后端地址与网络）"));
+    x.onabort = () => reject(new Error("上传被中止"));
+    x.send(fd);
+  });
 }
 
 /* ---------- 上传交互 ---------- */
