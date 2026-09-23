@@ -286,7 +286,7 @@
           <div class="s">支持数电票 XML/OFD/PDF · 可多选 · <span class="kbd">或粘贴 Ctrl+V</span></div>
         </div>
         <input id="fileInput" type="file" multiple accept=".xml,.ofd,.zip,.pdf" style="display:none">
-        <button id="btnCamera" class="btn btn-ghost camera-btn" type="button" style="margin-top:10px;width:100%;justify-content:center;align-items:center;gap:6px;">📷 拍照识别发票（规划中）</button>
+        <button id="btnCamera" class="btn btn-ghost camera-btn" type="button" style="margin-top:10px;width:100%;justify-content:center;align-items:center;gap:6px;">📷 拍照识别发票</button>
         <div class="filelist" id="fileList"></div>
         <button id="btnReview" class="btn btn-primary" style="margin-top:12px;">运行预审</button>
         <div class="hint" id="runHint">运行后右侧显示合规预审报告。文件仅发往你配置的后端，不发送第三方。</div>
@@ -308,7 +308,7 @@
 
       <section class="card card-pad demo-only">
         <h3>演示样例</h3>
-        <div class="hint">内置 4 张样例发票 + 1 个失败文件，覆盖重复票（R1）、差额征税（R9）、行级勾稽（R10）、红冲关联（R11）与证据链展示。</div>
+        <div class="hint">内置 4 张 PDF 样例发票（含 1 张图片版走本地 OCR）+ 1 个失败文件，覆盖重复票（R1）、差额征税（R9）、行级勾稽（R10）、红冲关联（R11）与"需人工复核"（OCR 低置信度）展示。演示故事：财务上传一批 PDF 发票 → 自动识别 → 预审 → 处置 → 导出。</div>
         <button id="btnRun" class="btn btn-ghost" style="margin-top:10px;">重新运行演示</button>
       </section>
     </aside>
@@ -419,7 +419,7 @@ function demoReport() {
       {"invoice_no":"26440000000000100004","invoice_type":"增值税电子普通发票（红字）","issue_date":"2026-08-04","amount":"-500.00","tax":"-30.00","total":"-530.00","seller_name":"示例物流有限公司","status":"待复核","warning_count":0,"item_count":2,"review_needed":true,"review_reason":"OCR 关键字段置信度偏低（最低 0.62）；价税勾稽不符（金额+税额≠价税合计）"},
       {"invoice_no":"26440000000000100005","invoice_type":"增值税电子普通发票","issue_date":"2026-08-05","amount":"120.00","tax":"7.20","total":"127.20","seller_name":"示例咨询有限公司","status":"未见异常","warning_count":0,"item_count":1}
     ],
-    "failed": [{"file":"upload.pdf","error":"不支持的输入类型（仅支持数电票 XML 与 OFD 容器）"}],
+    "failed": [{"file":"扫描件-无文本层.pdf","error":"PDF 无可提取文本且本地 OCR 不可用，疑似扫描件"}],
     "ruleset_version":"0.3.0",
     "ruleset":{"version":"0.3.0","name":"invoice-precheck 规则包","effective_date":"2026-09-23","scope_note":"政策依据按主题引用；规则阈值（限额/连号窗口/大额上限）为占位口径，待真实业务数据校准"},
     "rules": rules,
@@ -914,9 +914,9 @@ function syncFiles() {
 }
 $("fileInput").onchange = syncFiles;
 
-/* 拍照识别（规划中能力位，DeepSeek 评审修正：不触发选图，直接显示提示） */
+/* 拍照识别（能力位保留；Week2 演示冻结：无"规划中"字样，不触发选图，点击给提示） */
 $("btnCamera").onclick = () => {
-  $("runHint").textContent = "拍照识别（OCR）规划在真实模式后端接入后上线。当前演示版仅解析 XML/OFD 结构化文件，请上传数电票 XML 或 OFD 文件。";
+  $("runHint").textContent = "拍照识别（OCR）在真实模式后端接入后可用（本地 OCR 已支持图片版 PDF）。演示版请上传 PDF/XML/OFD 文件。";
   $("runHint").className = "hint err";
 };
 
