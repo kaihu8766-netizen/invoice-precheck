@@ -162,13 +162,17 @@
     .drop .s .kbd{ display:none; }
     .camera-btn{ display:flex; }
   }
-  @media (max-width:480px){
+  /* 触摸设备判定（DeepSeek 评审修正：宽度改 pointer:coarse，覆盖 iPad/触屏本） */
+  @media (pointer:coarse){
     .ops{ gap:10px; }
     .op{ min-height:44px; padding:9px 16px; font-size:13px; }
+    .btn, .btn-ghost, .vs, .flt{ min-height:40px; }
+  }
+  @media (max-width:480px){
     .tools{ gap:8px; }
     .tools .btn-ghost{ white-space:nowrap; }
     .view-switch .vs{ padding:7px 12px; }
-    .kpi{ padding:8px 10px; }
+    .kpi{ padding:8px 10px; min-width:0; }
     .kpi .n{ font-size:18px; }
     .kpi .l{ word-break:keep-all; line-height:1.4; }
   }
@@ -279,7 +283,6 @@
         </div>
         <input id="fileInput" type="file" multiple accept=".xml,.ofd,.zip" style="display:none">
         <button id="btnCamera" class="btn btn-ghost camera-btn" type="button" style="margin-top:10px;width:100%;justify-content:center;align-items:center;gap:6px;">📷 拍照识别发票（规划中）</button>
-        <input id="cameraInput" type="file" accept="image/*" capture="environment" style="display:none">
         <div class="filelist" id="fileList"></div>
         <button id="btnReview" class="btn btn-primary" style="margin-top:12px;">运行预审</button>
         <div class="hint" id="runHint">运行后右侧显示合规预审报告。文件仅发往你配置的后端，不发送第三方。</div>
@@ -882,14 +885,10 @@ function syncFiles() {
 }
 $("fileInput").onchange = syncFiles;
 
-/* 拍照识别（规划中能力位）：选择图片后给出诚实提示，不假装能解析 */
-$("btnCamera").onclick = () => $("cameraInput").click();
-$("cameraInput").onchange = () => {
-  if ($("cameraInput").files.length) {
-    $("runHint").textContent = "拍照识别（OCR）规划在真实模式后端接入后上线。当前演示版仅解析 XML/OFD 结构化文件，请上传数电票 XML 或 OFD 文件。";
-    $("runHint").className = "hint err";
-    $("cameraInput").value = "";
-  }
+/* 拍照识别（规划中能力位，DeepSeek 评审修正：不触发选图，直接显示提示） */
+$("btnCamera").onclick = () => {
+  $("runHint").textContent = "拍照识别（OCR）规划在真实模式后端接入后上线。当前演示版仅解析 XML/OFD 结构化文件，请上传数电票 XML 或 OFD 文件。";
+  $("runHint").className = "hint err";
 };
 
 /* ---------- 绑定 ---------- */
