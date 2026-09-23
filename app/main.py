@@ -60,7 +60,9 @@ app.add_middleware(
     allow_headers=["X-API-Key", "Content-Type"],
 )
 
-FRONTEND = Path(__file__).resolve().parent.parent / "frontend" / "index.html"
+# 产品前端统一用 docs/index.html（完整版：演示模式+实时模式+复核工作台+导出）；
+# 旧 frontend/index.html（204 行精简版）废弃保留，不参与服务。
+FRONTEND = Path(__file__).resolve().parent.parent / "docs" / "index.html"
 
 # 无需鉴权的公开路径（仅静态页面与探活，无业务数据）
 PUBLIC_PATHS = {"/", "/healthz"}

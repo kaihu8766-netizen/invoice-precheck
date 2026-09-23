@@ -253,6 +253,24 @@
     .finding .caret{ display:none; }
     .finding .body{ display:block !important; }
   }
+
+/* 复核工作台（RV-17）：modal 弹窗 */
+.rev-overlay{position:fixed;inset:0;background:rgba(15,23,42,.45);z-index:99;display:flex;align-items:center;justify-content:center;padding:16px;}
+.rev-modal{background:#fff;border-radius:14px;max-width:520px;width:100%;max-height:86vh;overflow:auto;padding:18px 20px;box-shadow:0 18px 50px rgba(0,0,0,.25);}
+.rev-head{font-size:15px;font-weight:700;margin-bottom:10px;}
+.rev-todo-note{font-size:12.5px;color:#b45309;background:#fef3e2;border-radius:8px;padding:8px 10px;margin-bottom:10px;}
+.rev-done-note{font-size:12.5px;color:#2f7d4f;background:#e8f6ee;border-radius:8px;padding:8px 10px;margin-bottom:10px;}
+.rev-fields{display:flex;flex-direction:column;gap:7px;margin-bottom:12px;}
+.rev-row{display:flex;align-items:center;gap:10px;}
+.rev-row label{width:104px;font-size:12.5px;color:#4b5563;flex-shrink:0;}
+.rev-in{flex:1;border:1px solid #d1d5db;border-radius:7px;padding:6px 8px;font-size:13px;font-family:inherit;}
+.rev-in:focus{outline:none;border-color:#2563eb;box-shadow:0 0 0 2px rgba(37,99,235,.15);}
+.rev-audit{font-size:12px;color:#6b7280;background:#f6f7f9;border-radius:8px;padding:8px 10px;margin-bottom:12px;max-height:120px;overflow:auto;}
+.rev-audit-title{font-weight:600;color:#4b5563;margin-bottom:4px;}
+.rev-audit-row{font-size:11.5px;line-height:1.5;word-break:break-all;}
+.rev-actions{display:flex;gap:8px;flex-wrap:wrap;}
+.rev-btn{margin-left:8px;padding:2px 9px;font-size:12px;}
+.badge.review.done{background:#e8f6ee;color:#2f7d4f;border:1px solid #b6e0c6;}
 </style>
 </head>
 <body class="demo">
@@ -498,16 +516,142 @@ function setDisp(id, status) {
 window.addEventListener("storage", e => { // 多标签页同步（深评中4）
   if (e.key === DISP_KEY && __lastReport) renderReport();
 });
-function getDisp(id) { return loadDisp()[id] || null; }
-function setDisp(id, status) {
-  const d = loadDisp();
-  if (status === "pending") delete d[id];
-  else d[id] = { status, updatedAt: new Date().toISOString() };
-  saveDisp(d);
-}
-const DISP_LABEL = { pending: "待处理", resolved: "已处理", ignored: "已忽略" };
 
-/* 票号缩略：长票号行内只显示前4…后8（防手机窄屏溢出），完整票号在展开区 */
+/* ---------- 复核工作台 v2（RV-17 事前评审采纳，2026-09-23） ----------
+   三态：reviewStatus = pending(数据待复核) | confirmed(数据已确认) | corrected(数据已修正)
+   复核≠处置：复核=发票级数据可信度；处置=findings级风险处理，两者不混、不自动联动。
+   留痕：每条记录存 original 原始快照 + current 当前值 + auditLog 操作流水（从哪到哪）。
+   MVP 边界：localStorage 本地，可清空/可篡改——审计留痕以导出 CSV 为准（诚实标注）。
+   B2 语义（RV-18/19/20 定稿）：reviewedAt=最近一次复核动作时间（保存/确认）；重置=软删复核层
+   （底层解析 __lastReport 数据仍在，仅删除复核记录→回滚到数据待复核；corrected/corrected_fields/
+   auditLog 随记录一并清空，reviewedAt 清空；导出不再落旧修正值）；clear 前弹确认防误删。
+   B4 语义（RV-18/19 定稿）：修正值不参与规则判定与处置（处置基于解析原始值）；修正仅用于
+   人工留痕与导出清单；处置后修正=导出清单与处置清单独立可对账（口径=分别以各自时间为准）。 */
+const REV_KEY = "fap:review:v1";
+const REV_FIELDS = [
+  {k:"invoice_no", label:"发票号码"},
+  {k:"invoice_type", label:"票种"},
+  {k:"issue_date", label:"开票日期"},
+  {k:"amount", label:"金额（不含税）"},
+  {k:"tax", label:"税额"},
+  {k:"total", label:"价税合计"},
+  {k:"seller_name", label:"销售方名称"},
+  {k:"seller_taxid", label:"销售方税号"},
+  {k:"buyer_name", label:"购买方名称"},
+  {k:"buyer_taxid", label:"购买方税号"},
+];
+function loadRev() { try { return JSON.parse(localStorage.getItem(REV_KEY) || "{}"); } catch (e) { return {}; } }
+function saveRev(d) {
+  try { localStorage.setItem(REV_KEY, JSON.stringify(d)); return true; }
+  catch (e) { window.__revStoreFail = true; return false; }
+}
+function getRev(invNo) { return loadRev()[invNo] || null; }
+function setRev(invNo, rec) {
+  const d = loadRev();
+  if (rec === null) delete d[invNo];
+  else d[invNo] = rec;
+  if (!saveRev(d)) window.__revStoreFail = true;
+  closeRevModal();
+  if (__lastReport) renderReport();
+}
+function _findInv(invNo) { return (__lastReport && (__lastReport.invoices||[]).find(x => x.invoice_no === invNo)) || null; }
+/* 复核弹窗（modal：不在卡片内平铺输入框） */
+function openReviewModal(invNo) {
+  const i = _findInv(invNo); if (!i) return;
+  const rec = getRev(invNo);
+  const reason = esc(i.review_reason || "OCR 低置信度 / 勾稽不一致 / 字段缺失");
+  const fields = REV_FIELDS.map(f => {
+    const val = rec ? (rec.current[f.k] ?? i[f.k] ?? "") : (i[f.k] ?? "");
+    return `<div class="rev-row"><label>${f.label}</label><input class="rev-in" data-f="${f.k}" value="${esc(val)}"></div>`;
+  }).join("");
+  const statusNote = rec
+    ? `<div class="rev-done-note">${rec.corrected ? "已修正 " + Object.keys(rec.corrected_fields||{}).length + " 项" : "已确认无误"} · ${esc((rec.reviewedAt||"").slice(0,16))}</div>`
+    : `<div class="rev-todo-note">数据待复核：${reason}</div>`;
+  const ov = document.createElement("div");
+  ov.className = "rev-overlay";
+  ov.id = "revOverlay";
+  ov.innerHTML = `<div class="rev-modal">
+    <div class="rev-head">复核工作台 · 票 ${esc(shortNo(invNo))}</div>
+    ${statusNote}
+    <div class="rev-fields">${fields}</div>
+    <div class="rev-audit">${rec ? auditHtml(rec) : `<span class="hint">留痕：确认/修正将记录原始快照与操作流水（本浏览器 localStorage，审计以导出为准）。修正值不参与规则判定与处置（处置基于解析原始值，见 B4 约定）</span>`}</div>
+    <div class="rev-actions">
+      <button class="btn-ghost" onclick="closeRevModal()">取消</button>
+      <button class="btn-ghost" onclick="reviewAction('${esc(invNo)}','confirm')">确认无误</button>
+      <button class="btn" onclick="reviewAction('${esc(invNo)}','save')">保存修正</button>
+      ${rec ? `<button class="btn-ghost" onclick="reviewAction('${esc(invNo)}','clear')">重置复核</button>` : ""}
+    </div>
+  </div>`;
+  document.body.appendChild(ov);
+}
+function closeRevModal() { const o = document.getElementById("revOverlay"); if (o) o.remove(); }
+function auditHtml(rec) {
+  const rows = (rec.auditLog||[]).map(a =>
+    `<div class="rev-audit-row"><b>${esc(a.t||"")}</b> ${esc(a.op||"")}：${esc(a.field||"")} "${esc(a.from ?? "")}" → "${esc(a.to ?? "")}"</div>`).join("");
+  return `<div class="rev-audit-title">操作流水</div>${rows || `<div class="hint">（无流水）</div>`}`;
+}
+/* reviewAction：RV-19 阻断1修复——复核动作与修正事实拆成两个维度：
+   reviewed: bool（是否已执行复核动作=确认/保存）——筛选/统计"待复核"用
+   corrected: bool（是否存在修正事实）——徽标显示"修正N项"用
+   corrected_fields：最终差异（original→current 每字段一条，过程流水在 auditLog） */
+function reviewAction(invNo, action) {
+  const ov = document.getElementById("revOverlay"); if (!ov) return;
+  const i = _findInv(invNo); if (!i) return;
+  const oldRec = getRev(invNo);
+  const original = (oldRec && oldRec.original) || (() => { const o = {}; REV_FIELDS.forEach(f => o[f.k] = i[f.k] ?? ""); return o; })();
+  const current = {}, corrected_fields = {}, auditLog = (oldRec && oldRec.auditLog || []).slice();
+  let changed = false;
+  ov.querySelectorAll(".rev-in").forEach(inp => {
+    const k = inp.dataset.f; const v = inp.value.trim();
+    current[k] = v;
+    const from = (oldRec && oldRec.current) ? (oldRec.current[k] ?? "") : (original[k] ?? "");
+    if (String(from ?? "") !== v) {
+      corrected_fields[k] = { from, to: v };
+      auditLog.push({ t: new Date().toISOString(), op: action === "confirm" ? "自动对齐" : "人工修正", field: k, from, to: v });
+      changed = true;
+    }
+  });
+  if (action === "clear") {
+    if (!window.confirm("重置将删除本票复核记录（含修正与流水），回滚到数据待复核；底层解析结果不受影响。继续？")) return;
+    setRev(invNo, null); return;  // 软删复核层，__lastReport 解析数据仍在
+  }
+  const reviewed = true;                       // 本次=复核动作（确认或保存）
+  let corrected = Boolean(changed) || !!(oldRec && oldRec.corrected);
+  if (!changed && oldRec) {                    // 未变更：保留既有修正差异
+    Object.assign(corrected_fields, oldRec.corrected_fields || {});
+    corrected = corrected || Boolean(oldRec.corrected);
+  }
+  if (action === "confirm" && oldRec && oldRec.corrected) {
+    auditLog.push({ t: new Date().toISOString(), op: "复核确认（保留修正）", field: "—", from: "corrected", to: "corrected" });
+  }
+  setRev(invNo, { invoice_no: invNo, original, current, corrected_fields, reviewed, corrected, reviewedAt: new Date().toISOString(), auditLog });
+}
+/* 导出发票清单 CSV（含复核状态、修正前后值；财务留痕） */
+function exportInvoicesCSV() {
+  const d = __lastReport; if (!d || !(d.invoices||[]).length) { alert("无发票数据可导出"); return; }
+  const rows = [["# 发票清单（N 张） · 生成 " + new Date().toISOString() + " · 复核记录来源=本浏览器localStorage(可清空,审计以本导出为准)"]];
+  rows.push(["发票号码","票种","开票日期","金额","税额","价税合计","销售方","销售方税号","购买方","数据可信度","修正字段","修正流水","复核时间"]);
+  (d.invoices||[]).forEach(i => {
+    const rec = getRev(i.invoice_no);
+    const st = rec ? (rec.corrected ? "数据已修正" : "数据已确认") : (i.review_needed ? "数据待复核" : "自动通过");
+    const cf = rec ? Object.keys(rec.corrected_fields||{}).join(";") : "";
+    const log = rec ? (rec.auditLog||[]).map(a => `${a.field}:${a.from}→${a.to}`).join(" | ") : "";
+    // 数值列=修正后最终值（current，B4"修正用于导出清单"），csvNumberCell 类型校验兜底
+    const cur = rec ? rec.current : i;
+    const row = [csvCell(i.invoice_no, true), csvCell(i.invoice_type, true), csvCell(i.issue_date, true),
+      csvNumberCell(cur.amount), csvNumberCell(cur.tax), csvNumberCell(cur.total),
+      csvCell(cur.seller_name, true), csvCell(cur.seller_taxid||"", true), csvCell(cur.buyer_name||"", true),
+      csvCell(st, true), csvCell(cf, true), csvCell(log, true),
+      csvCell(rec ? (rec.reviewedAt||"").slice(0,16) : "", true)];
+    rows.push(row);
+  });
+  const csv = "\uFEFF" + rows.map(r => r.join(",")).join("\n");
+  const blob = new Blob([csv], {type: "text/csv;charset=utf-8"});
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "invoice-precheck-list-" + new Date().toISOString().slice(0,10) + ".csv";
+  document.body.appendChild(a); a.click(); a.remove();
+}
 function shortNo(n) {
   n = String(n ?? "");
   return n.length > 14 ? n.slice(0,4) + "…" + n.slice(-8) : n;
@@ -516,11 +660,23 @@ function shortNo(n) {
 /* 导出 CSV（DeepSeek 评审 P0：财务需留痕/导出） */
 /* CSV 注入防护（DeepSeek P1）：字段以 = + - @ 开头时加 ' 前缀（防 Excel/WPS 公式执行）；
    剥离 tab/换行（防单元格注入）；双引号包裹 + 转义 */
-function csvCell(v) {
+/* csvCell(v, defend)：defend=true 文本列注入防护（票号/票种/购销方等）；
+   defend=false 数值列只转义不防护（RV-18 B3：金额/税额/合计可为负，红冲 -530.00
+   不得被加前缀成文本；转义在拼接前发生）。 */
+function csvCell(v, defend) {
   let s = String(v ?? "");
   if (/[\t\r\n]/.test(s)) s = s.replace(/[\t\r\n]+/g, " ");
-  if (/^[=+\-@]/.test(s)) s = "'" + s;
+  if (defend !== false && /^[=+\-@]/.test(s)) s = "'" + s;
   return `"${s.replace(/"/g, '""')}"`;
+}
+/* csvNumberCell(v)：数值列专用（RV-19 阻断2，RV-20 收紧记录）——
+   调用顺序固定：先数值类型判定（/^-?\d+(\.\d+)?$/），通过才原样输出；不通过降级文本+防护。
+   有意降级为文本的形态（边界收紧，勿放宽）：1e5、.5、+1、1,234.56、空串/None、=1+1 等。
+   locale 逗号小数点（-530,00）：非本正则 → 降级文本，双引号包裹+转义与 CSV 分隔符不冲突。 */
+function csvNumberCell(v) {
+  const s = String(v ?? "");
+  if (/^-?\d+(\.\d+)?$/.test(s)) return `"${s.replace(/"/g, '""')}"`;
+  return csvCell(s, true);
 }
 function exportCSV(findings, metaMap) {
   const rows = [["# 导出范围：全量命中清单（N 条，不随视图切换变化） · 生成 " + new Date().toISOString()]];
@@ -604,6 +760,23 @@ function findingRow(f, metaMap, showOps) {
   </details>`;
 }
 
+/* 复核徽标（RV-17）：三态文案，避免"已复核"被误读为风险已清零 */
+function reviewBadge(i) {
+  const rec = getRev(i.invoice_no);
+  if (rec) {
+    const n = Object.keys(rec.corrected_fields || {}).length;
+    if (rec.reviewed) {
+      const txt = rec.corrected ? `数据已复核·修正${n}项` : "数据已复核·确认无误";
+      return `<span class="badge review done" title="复核时间 ${esc(rec.reviewedAt || "")}；复核≠风险处置，未处置 findings 仍在风险清单">${esc(txt)}</span>`;
+    }
+    // RV-20：未复核但已有修正记录（旧格式兼容）→ 露出修正数，防"修正被吞"
+    if (n > 0) return `<span class="badge review" title="已修正 ${n} 项但尚未复核确认">数据待复核（已修正${n}项）</span>`;
+  }
+  return i.review_needed
+    ? `<span class="badge review" title="${esc(i.review_reason || "OCR 低置信度/勾稽不符等")}">数据待复核</span>`
+    : "";
+}
+
 /* 发票视图（P1③）：按票分组，无命中票可见（防沉默暗示合规） */
 function invoiceViewHtml(d, metaMap) {
   const sevRank = {高:0, 中:1, 低:2};
@@ -632,7 +805,8 @@ function invoiceViewHtml(d, metaMap) {
         ${i.clean
           ? (notExec ? `<span class="stb q">？ 未完全检查</span>` : `<span class="stb ok">✓ 无命中</span>`)
           : `<span class="stb warn">${i.fs.length} 条命中</span>`}
-        ${i.review_needed ? `<span class="badge review" title="${esc(i.review_reason || "OCR 低置信度/勾稽不符等")}">需人工复核</span>` : ""}
+        ${reviewBadge(i)}
+        ${(i.review_needed || getRev(i.invoice_no)) ? `<button class="btn-ghost rev-btn" onclick="event.preventDefault();event.stopPropagation();openReviewModal('${esc(i.invoice_no)}')">复核</button>` : ""}
         <span class="caret">▸</span>
       </summary>
       <div class="inv-body">
@@ -791,7 +965,8 @@ function __origRender(d) {
         <span class="hint" id="fltHint" style="margin:0 4px 0 0;"></span>
         <button class="btn-ghost flt active" data-flt="all">全部</button>
         <button class="btn-ghost flt" data-flt="pending">待处理</button>
-        <button class="btn-ghost" onclick="exportCSV(${JSON.stringify(d.findings||[]).replace(/"/g,"&quot;")}, ${JSON.stringify(d.rules||[]).replace(/"/g,"&quot;")})">导出 CSV</button>
+        <button class="btn-ghost" onclick="exportInvoicesCSV()">导出清单</button>
+        <button class="btn-ghost" onclick="exportCSV(${JSON.stringify(d.findings||[]).replace(/"/g,"&quot;")}, ${JSON.stringify(d.rules||[]).replace(/"/g,"&quot;")})">导出风险</button>
         <button class="btn-ghost" onclick="window.print()">打印</button>
       </div>
     </div>
