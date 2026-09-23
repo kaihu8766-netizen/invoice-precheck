@@ -158,6 +158,28 @@
   body.live .live-only{ display:block; }
   body.live .demo-only{ display:none; }
 
+  /* 处置状态（P1①） */
+  .finding.dim{ opacity:.55; }
+  .stb{ font-size:11px; font-weight:700; padding:1px 8px; border-radius:10px; white-space:nowrap; }
+  .stb.resolved{ background:var(--ok-bg); color:var(--ok); }
+  .stb.ignored{ background:var(--line-soft); color:var(--sub); }
+  .disps{ display:flex; align-items:center; gap:12px; flex-wrap:wrap; padding:6px 2px 10px; }
+  .dp{ font-size:12px; }
+  .dp b{ font-size:15px; }
+  .dp.pending b{ color:var(--mid); }
+  .dp.resolved b{ color:var(--ok); }
+  .dp.ignored b{ color:var(--sub); }
+  .alldone{ font-size:12px; font-weight:700; color:var(--ok); background:var(--ok-bg); padding:2px 10px; border-radius:10px; }
+  .ops{ display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-top:10px; }
+  .op{ font:inherit; font-size:12px; padding:4px 10px; border-radius:6px; cursor:pointer; border:1px solid var(--line); background:#fff; }
+  .op.resolved{ color:var(--ok); border-color:var(--ok); }
+  .op.resolved:hover{ background:var(--ok-bg); }
+  .op.ignored{ color:var(--sub); border-color:var(--line); }
+  .op.ignored:hover{ background:var(--line-soft); }
+  .op.undo{ color:var(--brand); border-color:var(--brand); }
+  .op.undo:hover{ background:var(--brand-weak); }
+  .flt.active{ background:var(--brand-weak); color:var(--brand); border-color:var(--brand); font-weight:600; }
+
   /* 打印：只保留报告 */
   @media print{
     .topbar, .input-panel, .tools, details.adv summary{ display:none !important; }
@@ -341,6 +363,33 @@ function explainBlock(f) {
     <b>该谁处理：</b>${esc(e.who)}</div>`;
 }
 
+/* ---------- 处置状态闭环（P1①，DeepSeek 任务卡落地） ---------- */
+const DISP_KEY = "fap:dispositions:v1";
+function fnv1a64(s) {
+  let h1 = 0x811c9dc5, h2 = 0x01000193 >>> 0; // 简化：用两个 32 位 FNV 变体拼 16 hex
+  let a = 0x811c9dc5, b = 0x01000193;
+  for (let i = 0; i < s.length; i++) {
+    const c = s.charCodeAt(i);
+    a ^= c; a = Math.imul(a, 0x01000193) >>> 0;
+    b = (b + c) | 0; b = Math.imul(b, 0x85ebca6b) >>> 0;
+  }
+  return a.toString(16).padStart(8, "0") + b.toString(16).padStart(8, "0");
+}
+function riskId(f) {
+  const path = (f.evidence_chain || []).map(e => e.field + ":" + (e.raw ?? "")).join("|");
+  return fnv1a64([f.rule_id, f.invoice_no || "", "0.3.0", path].join("|"));
+}
+function loadDisp() { try { return JSON.parse(localStorage.getItem(DISP_KEY) || "{}"); } catch (e) { return {}; } }
+function saveDisp(d) { try { localStorage.setItem(DISP_KEY, JSON.stringify(d)); } catch (e) { /* 隐私模式等不可写时静默 */ } }
+function getDisp(id) { return loadDisp()[id] || null; }
+function setDisp(id, status) {
+  const d = loadDisp();
+  if (status === "pending") delete d[id];
+  else d[id] = { status, updatedAt: new Date().toISOString() };
+  saveDisp(d);
+}
+const DISP_LABEL = { pending: "待处理", resolved: "已处理", ignored: "已忽略" };
+
 /* 票号缩略：长票号行内只显示前4…后8（防手机窄屏溢出），完整票号在展开区 */
 function shortNo(n) {
   n = String(n ?? "");
@@ -349,11 +398,16 @@ function shortNo(n) {
 
 /* 导出 CSV（DeepSeek 评审 P0：财务需留痕/导出） */
 function exportCSV(findings) {
-  const rows = [["规则", "规则名", "严重度", "置信度", "票号", "字段", "问题", "建议"]];
-  (findings || []).forEach(f => rows.push([
-    f.rule_id, ruleName(f.rule_id), f.severity, f.confidence || "疑似", f.invoice_no,
-    f.field, f.message, f.suggestion
-  ]));
+  const rows = [["规则", "规则名", "严重度", "置信度", "票号", "字段", "问题", "建议", "处置状态", "处置时间"]];
+  (findings || []).forEach(f => {
+    const d = getDisp(riskId(f));
+    rows.push([
+      f.rule_id, ruleName(f.rule_id), f.severity, f.confidence || "疑似", f.invoice_no,
+      f.field, f.message, f.suggestion,
+      d ? DISP_LABEL[d.status] : DISP_LABEL.pending,
+      d ? d.updatedAt.slice(0,16).replace("T", " ") : ""
+    ]);
+  });
   const csv = "\uFEFF" + rows.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
   const blob = new Blob([csv], {type: "text/csv;charset=utf-8"});
   const a = document.createElement("a");
@@ -364,7 +418,26 @@ function exportCSV(findings) {
 }
 
 /* ---------- 渲染 ---------- */
-function render(d) {
+/* ---------- 处置状态：事件委托（P1①） ---------- */
+document.addEventListener("click", e => {
+  const op = e.target.closest(".op");
+  if (op) { setDisp(op.dataset.rid, op.dataset.st); renderReport(); return; }
+  const flt = e.target.closest(".flt");
+  if (flt) {
+    const all = document.querySelectorAll(".flt");
+    all.forEach(b => b.classList.toggle("active", b === flt));
+    const f = flt.dataset.flt;
+    document.querySelectorAll(".finding").forEach(el => {
+      el.style.display = (f === "pending") ? (el.dataset.rid && ((getDisp(el.dataset.rid) || {}).status || "pending") === "pending" ? "" : "none") : "";
+    });
+  }
+});
+
+/* 渲染入口：render 改名为 renderReport 以支持处置后重渲染 */
+let __lastReport = null;
+function render(d) { __lastReport = d; __origRender(d); }
+function renderReport() { if (__lastReport) render(__lastReport); }
+function __origRender(d) {
   const el = $("result");
   $("empty").style.display = "none";
   if (!d || d.error) { el.innerHTML = `<div class="card card-pad high">${esc(d?.error || "无响应")}</div>`; return; }
@@ -382,6 +455,7 @@ function render(d) {
     <div class="kpi"><div class="n high">${esc(s.failed_count ?? 0)}</div><div class="l">解析失败</div></div>
   </div>`;
 
+  const ruleName0 = id => (RULES_META.find(r => r.rule_id === id) || {}).name || id;
   const findings = (d.findings||[]).length === 0
     ? `<div class="card card-pad"><div class="hint">本批次未见规则命中，报告完成 ✓<br/>未命中不等于合规，请结合规则覆盖范围判断。</div></div>`
     : (d.findings||[]).map(f => {
@@ -390,12 +464,22 @@ function render(d) {
       const conf = CONF_ALLOW.has(f.confidence) ? f.confidence : "疑似";
       const chain = (f.evidence_chain||[]).map(e => `<li><code>${esc(e.field)}</code>${e.row != null ? `（行 ${esc(e.row)}）` : ""}：原文 ${esc(e.raw)} → ${esc(e.value)}${e.note ? ` · ${esc(e.note)}` : ""}</li>`).join("");
       const amt = f.evidence_amt != null ? `¥${esc(f.evidence_amt)}` : "";
-      return `<details class="finding">
+      const rid = riskId(f);
+      const disp = getDisp(rid);
+      const st = disp ? disp.status : "pending";
+      const dim = st === "pending" ? "" : " dim";
+      const badge = st === "pending" ? "" : `<span class="stb ${st}">${st === "resolved" ? "✓" : "○"} ${DISP_LABEL[st]}</span>`;
+      const t0 = disp ? disp.updatedAt.slice(0,16).replace("T", " ") : "";
+      const ops = st === "pending"
+        ? `<button class="op resolved" data-rid="${rid}" data-st="resolved">✓ 标记已处理</button><button class="op ignored" data-rid="${rid}" data-st="ignored">○ 忽略</button>`
+        : `<button class="op undo" data-rid="${rid}" data-st="pending">↺ 撤销（回待处理）</button>`;
+      return `<details class="finding${dim}" data-rid="${rid}">
         <summary>
           <span class="bar ${sevCls}"></span>
           <span class="sev ${sevCls}">${sev === "高" ? "▲" : sev === "中" ? "●" : "·"} ${esc(f.rule_id)} ${esc(sev)}</span>
-          <span class="rname">${esc(ruleName(f.rule_id))}</span>
+          <span class="rname">${esc(ruleName0(f.rule_id))}</span>
           <span class="ticket">${esc(shortNo(f.invoice_no))}</span>
+          ${badge}
           ${amt ? `<span class="amt">${amt}</span>` : ""}
           <span class="caret">▸</span>
         </summary>
@@ -405,9 +489,21 @@ function render(d) {
           ${chain ? `<ul class="chain"><b>证据链：</b>${chain}</ul>` : ""}
           <div class="sug"><b>建议：</b>${esc(f.suggestion)}</div>
           ${explainBlock(f)}
+          <div class="ops">${ops}<span class="hint" style="margin-top:0;">${st !== "pending" ? "处置时间 " + esc(t0) : "处置后状态保留在本浏览器（localStorage），导出 CSV 将携带处置信息"}</span></div>
         </div>
       </details>`;
     }).join("");
+  const farr = d.findings || [];
+  const cnt = { pending: 0, resolved: 0, ignored: 0 };
+  farr.forEach(f => { const s = (getDisp(riskId(f)) || {}).status || "pending"; cnt[s]++; });
+  const done = farr.length > 0 && cnt.pending === 0;
+  const dispBar = farr.length ? `<div class="disps">
+    <span class="dp pending">待处理 <b>${cnt.pending}</b></span>
+    <span class="dp resolved">已处理 <b>${cnt.resolved}</b></span>
+    <span class="dp ignored">已忽略 <b>${cnt.ignored}</b></span>
+    <span class="hint">口径：已处理+已忽略 = 完成</span>
+    ${done ? `<span class="alldone">✓ 全部处置完成，可导出</span>` : ""}
+  </div>` : "";
 
   const invoices = `
   <details class="adv section" id="invSec">
@@ -448,10 +544,13 @@ function render(d) {
     <div class="section-head">
       <h2>风险清单 <span class="sub">${(d.findings||[]).length} 条命中 · 按严重度排序</span></h2>
       <div class="tools">
+        <button class="btn-ghost flt active" data-flt="all">全部</button>
+        <button class="btn-ghost flt" data-flt="pending">待处理</button>
         <button class="btn-ghost" onclick="exportCSV(${JSON.stringify(d.findings||[]).replace(/"/g,"&quot;")})">导出 CSV</button>
         <button class="btn-ghost" onclick="window.print()">打印</button>
       </div>
     </div>
+    ${dispBar}
     ${findings}
   </div>
   ${invoices}
@@ -507,7 +606,6 @@ async function runReview() {
     const j = await r.json();
     if (!r.ok) { $("result").innerHTML = `<div class="card card-pad high">后端拒绝：${esc(j.detail || ("HTTP " + r.status))}</div>`; return; }
     render(j);
-    // F：请求通俗解释（独立 explain 端点，失败不影响报告展示）
     if ((j.findings||[]).length) {
       try {
         const er = await fetch(url + "/v1/findings/explain", {method:"POST",
@@ -549,7 +647,7 @@ function syncFiles() {
   $("fileList").innerHTML = fs.length
     ? Array.from(fs).map(f => `<div class="f"><span>📎</span><span class="nm">${esc(f.name)}</span><span>${(f.size/1024).toFixed(0)}KB</span></div>`).join("")
     : "";
-  $("runHint").textContent = fs.length ? `已选 ${fs.length} 个文件，点击「运行预审」开始。` : "运行后右侧显示合规预审报告。";
+  $("runHint").textContent = fs.length ? `已选 ${fs.length} 个文件，点击「运行预审」开始。` : "运行后右侧显示合规预审报告。文件仅发往你配置的后端，不发送第三方。";
   $("runHint").className = "hint";
 }
 $("fileInput").onchange = syncFiles;
