@@ -626,26 +626,139 @@ function reviewAction(invNo, action) {
   }
   setRev(invNo, { invoice_no: invNo, original, current, corrected_fields, reviewed, corrected, reviewedAt: new Date().toISOString(), auditLog });
 }
-/* 导出发票清单 CSV（含复核状态、修正前后值；财务留痕） */
-function exportInvoicesCSV() {
-  const d = __lastReport; if (!d || !(d.invoices||[]).length) { alert("无发票数据可导出"); return; }
-  const rows = [["# 发票清单（N 张） · 生成 " + new Date().toISOString() + " · 复核记录来源=本浏览器localStorage(可清空,审计以本导出为准)"]];
-  rows.push(["发票号码","票种","开票日期","金额","税额","价税合计","销售方","销售方税号","购买方","数据可信度","修正字段","修正流水","复核时间"]);
+/* ---------- 导出共用模型（RV-35 方案 D 采纳） ----------
+   EXPORT_COLUMNS：列定义（key/表头/类型）；buildExportRows() 生成行数据。
+   CSV 与 XLSX 共用同一模型，渲染层各自适配（列名/顺序/修正值优先级严格一致）。 */
+const EXPORT_COLUMNS = [
+  { k: "invoice_no",   h: "发票号码",   t: "text" },
+  { k: "invoice_type", h: "票种",       t: "text" },
+  { k: "issue_date",   h: "开票日期",   t: "text" },
+  { k: "amount",       h: "金额",       t: "number" },
+  { k: "tax",          h: "税额",       t: "number" },
+  { k: "total",        h: "价税合计",   t: "number" },
+  { k: "seller_name",  h: "销售方",     t: "text" },
+  { k: "seller_taxid", h: "销售方税号", t: "text" },
+  { k: "buyer_name",   h: "购买方",     t: "text" },
+  { k: "review_state", h: "数据可信度", t: "text" },
+  { k: "corrected",    h: "修正字段",   t: "text" },
+  { k: "audit_log",    h: "修正流水",   t: "text" },
+  { k: "reviewed_at",  h: "复核时间",   t: "text" },
+];
+function buildExportRows() {
+  const d = __lastReport; if (!d || !(d.invoices||[]).length) return null;
+  const rows = [];
   (d.invoices||[]).forEach(i => {
     const rec = getRev(i.invoice_no);
     const st = rec ? (rec.corrected ? "数据已修正" : "数据已确认") : (i.review_needed ? "数据待复核" : "自动通过");
     const cf = rec ? Object.keys(rec.corrected_fields||{}).join(";") : "";
     const log = rec ? (rec.auditLog||[]).map(a => `${a.field}:${a.from}→${a.to}`).join(" | ") : "";
-    // 数值列=修正后最终值（current，B4"修正用于导出清单"），csvNumberCell 类型校验兜底
-    const cur = rec ? rec.current : i;
-    const row = [csvCell(i.invoice_no, true), csvCell(i.invoice_type, true), csvCell(i.issue_date, true),
-      csvNumberCell(cur.amount), csvNumberCell(cur.tax), csvNumberCell(cur.total),
-      csvCell(cur.seller_name, true), csvCell(cur.seller_taxid||"", true), csvCell(cur.buyer_name||"", true),
-      csvCell(st, true), csvCell(cf, true), csvCell(log, true),
-      csvCell(rec ? (rec.reviewedAt||"").slice(0,16) : "", true)];
-    rows.push(row);
+    const cur = rec ? rec.current : i; // 数值列=修正后最终值（B4"修正用于导出清单"）
+    rows.push({
+      invoice_no: i.invoice_no, invoice_type: i.invoice_type, issue_date: i.issue_date,
+      amount: cur.amount, tax: cur.tax, total: cur.total,
+      seller_name: cur.seller_name, seller_taxid: cur.seller_taxid||"", buyer_name: cur.buyer_name||"",
+      review_state: st, corrected: cf, audit_log: log,
+      reviewed_at: rec ? (rec.reviewedAt||"").slice(0,16) : "",
+    });
   });
-  const csv = "\uFEFF" + rows.map(r => r.join(",")).join("\n");
+  return rows;
+}
+
+/* ---------- 最小 XLSX 生成器（RV-35 方案 D：零依赖、离线、真 .xlsx、数据不出本机） ----------
+   结构：ZIP(store) + OOXML 最小集。文本单元格用 inlineStr（天然防公式注入，即使内容以 = 开头
+   也不会被 Excel 当公式执行）；合法数值写 t="n"；金额列 numFmtId=4（#,##0.00 可求和）。 */
+const XL_CRC_TABLE = (() => { const tt = new Uint32Array(256); for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1); tt[n] = c >>> 0; } return tt; })();
+function xlCrc32(bytes) { let c = 0xFFFFFFFF; for (let i = 0; i < bytes.length; i++) c = XL_CRC_TABLE[(c ^ bytes[i]) & 0xFF] ^ (c >>> 8); return (c ^ 0xFFFFFFFF) >>> 0; }
+function xlXmlEsc(s) { return String(s).replace(/[<>&'"]/g, ch => ({ "<":"&lt;", ">":"&gt;", "&":"&amp;", "'":"&apos;", '"':"&quot;" }[ch])); }
+function xlColName(idx) { let s = ""; idx++; while (idx > 0) { const m = (idx - 1) % 26; s = String.fromCharCode(65 + m) + s; idx = Math.floor((idx - 1) / 26); } return s; }
+function xlZip(files) {
+  const enc = new TextEncoder();
+  const parts = []; let offset = 0; const central = [];
+  for (const name in files) {
+    const nb = enc.encode(name), db = files[name], crc = xlCrc32(db);
+    // local file header：0 sig /4 ver /6 flags /8 comp /10 mtime /12 mdate /14 crc /18 csize /22 usize /26 nlen /28 xlen
+    const lh = new DataView(new ArrayBuffer(30 + nb.length));
+    lh.setUint32(0, 0x04034b50, true); lh.setUint16(4, 20, true); lh.setUint16(6, 0x0800, true);
+    lh.setUint16(8, 0, true); lh.setUint16(10, 0, true); lh.setUint16(12, 0, true);
+    lh.setUint32(14, crc, true); lh.setUint32(18, db.length, true); lh.setUint32(22, db.length, true);
+    lh.setUint16(26, nb.length, true); lh.setUint16(28, 0, true);
+    nb.forEach((b, i) => lh.setUint8(30 + i, b));
+    const lhB = new Uint8Array(lh.buffer);
+    parts.push(lhB, db);
+    central.push({ nb, crc, size: db.length, offset });
+    offset += lhB.length + db.length;
+  }
+  const cdStart = offset; let cdSize = 0;
+  for (const c of central) {
+    // central dir：0 sig /4 verMade /6 verNeed /8 flags /10 comp /12 mtime /14 mdate /16 crc /20 csize /24 usize /28 nlen /30 xlen /32 clen /34 disk /36 iattr /38 eattr /42 off /46 name
+    const ch = new DataView(new ArrayBuffer(46 + c.nb.length));
+    ch.setUint32(0, 0x02014b50, true); ch.setUint16(4, 20, true); ch.setUint16(6, 20, true); ch.setUint16(8, 0x0800, true);
+    ch.setUint16(10, 0, true); ch.setUint16(12, 0, true); ch.setUint16(14, 0, true);
+    ch.setUint32(16, c.crc, true); ch.setUint32(20, c.size, true); ch.setUint32(24, c.size, true);
+    ch.setUint16(28, c.nb.length, true); ch.setUint16(30, 0, true); ch.setUint16(32, 0, true);
+    ch.setUint16(34, 0, true); ch.setUint16(36, 0, true); ch.setUint32(38, 0, true);
+    ch.setUint32(42, c.offset, true);
+    c.nb.forEach((b, i) => ch.setUint8(46 + i, b));
+    parts.push(new Uint8Array(ch.buffer)); cdSize += 46 + c.nb.length;
+  }
+  // EOCD：0 sig /4 disk /6 cdDisk /8 nEntries /10 nEntries /12 cdSize /16 cdOff /20 clen
+  const eocd = new DataView(new ArrayBuffer(22));
+  eocd.setUint32(0, 0x06054b50, true); eocd.setUint16(4, 0, true); eocd.setUint16(6, 0, true);
+  eocd.setUint16(8, central.length, true); eocd.setUint16(10, central.length, true);
+  eocd.setUint32(12, cdSize, true); eocd.setUint32(16, cdStart, true); eocd.setUint16(20, 0, true);
+  parts.push(new Uint8Array(eocd.buffer));
+  const total = parts.reduce((s, u) => s + u.length, 0), out = new Uint8Array(total);
+  let o = 0; for (const u of parts) { out.set(u, o); o += u.length; }
+  return out;
+}
+function exportInvoicesXLSX() {
+  const rows = buildExportRows(); if (!rows) { alert("无发票数据可导出"); return; }
+  const enc = (s) => new TextEncoder().encode(s);
+  let sheetXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>';
+  const cell = (ref, col, v) => {
+    let s = String(v ?? "");
+    if (col.t === "number") {
+      const tr = s.trim();
+      if (/^-?\d+(\.\d+)?$/.test(tr)) return `<c r="${ref}" s="1"><v>${tr}</v></c>`; // 数值+金额样式
+      return `<c r="${ref}" t="inlineStr"><is><t>${xlXmlEsc(s)}</t></is></c>`;           // 校验不过→文本防注入
+    }
+    return `<c r="${ref}" t="inlineStr"><is><t>${xlXmlEsc(s)}</t></is></c>`;
+  };
+  let rowXml = '<row r="1">';
+  EXPORT_COLUMNS.forEach((c, i) => { rowXml += `<c r="${xlColName(i)}1" t="inlineStr"><is><t>${xlXmlEsc(c.h)}</t></is></c>`; });
+  sheetXml += rowXml + '</row>';
+  rows.forEach((r, ri) => {
+    let rx = `<row r="${ri + 2}">`;
+    EXPORT_COLUMNS.forEach((c, ci) => { rx += cell(xlColName(ci) + (ri + 2), c, r[c.k]); });
+    sheetXml += rx + '</row>';
+  });
+  sheetXml += '</sheetData></worksheet>';
+  const files = {
+    "[Content_Types].xml": enc('<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>'),
+    "_rels/.rels": enc('<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>'),
+    "xl/workbook.xml": enc('<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="发票清单" sheetId="1" r:id="rId1"/></sheets></workbook>'),
+    "xl/_rels/workbook.xml.rels": enc('<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>'),
+    "xl/worksheets/sheet1.xml": enc(sheetXml),
+    "xl/styles.xml": enc('<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><numFmts count="0"/><fonts count="1"><font><sz val="11"/><name val="Calibri"/></font></fonts><fills count="1"><fill><patternFill patternType="none"/></fill></fills><borders count="1"><border/></borders><cellStyleXfs count="1"><xf/></cellStyleXfs><cellXfs count="2"><xf xfId="0"/><xf xfId="0" numFmtId="4" applyNumberFormat="1"/></cellXfs></styleSheet>'),
+  };
+  const zip = xlZip(files);
+  const blob = new Blob([zip], {type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "invoice-precheck-ledger-" + new Date().toISOString().slice(0,10) + ".xlsx";
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+}
+
+/* 导出发票清单 CSV（含复核状态、修正前后值；财务留痕；与 Excel 共用 EXPORT_COLUMNS 模型） */
+function exportInvoicesCSV() {
+  const data = buildExportRows(); if (!data) { alert("无发票数据可导出"); return; }
+  const lines = [["# 发票清单（" + data.length + " 张） · 生成 " + new Date().toISOString() + " · 复核记录来源=本浏览器localStorage(可清空,审计以本导出为准)"]];
+  lines.push(EXPORT_COLUMNS.map(c => c.h));
+  data.forEach(r => {
+    lines.push(EXPORT_COLUMNS.map(c => c.t === "number" ? csvNumberCell(r[c.k]) : csvCell(r[c.k], true)));
+  });
+  const csv = "\uFEFF" + lines.map(r => r.join(",")).join("\n");
   const blob = new Blob([csv], {type: "text/csv;charset=utf-8"});
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
@@ -965,7 +1078,8 @@ function __origRender(d) {
         <span class="hint" id="fltHint" style="margin:0 4px 0 0;"></span>
         <button class="btn-ghost flt active" data-flt="all">全部</button>
         <button class="btn-ghost flt" data-flt="pending">待处理</button>
-        <button class="btn-ghost" onclick="exportInvoicesCSV()">导出清单</button>
+        <button class="btn" onclick="exportInvoicesXLSX()">导出 Excel</button>
+        <button class="btn-ghost" onclick="exportInvoicesCSV()">导出 CSV</button>
         <button class="btn-ghost" onclick="exportCSV(${JSON.stringify(d.findings||[]).replace(/"/g,"&quot;")}, ${JSON.stringify(d.rules||[]).replace(/"/g,"&quot;")})">导出风险</button>
         <button class="btn-ghost" onclick="window.print()">打印</button>
       </div>
