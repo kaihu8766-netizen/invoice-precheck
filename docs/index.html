@@ -365,6 +365,13 @@ function explainBlock(f) {
 
 /* ---------- 处置状态闭环（P1①，DeepSeek 任务卡落地） ---------- */
 const DISP_KEY = "fap:dispositions:v1";
+/* riskId 契约（DeepSeek 评审 C1/C2，2026-09-23 冻结）：
+   - 输入拼接（顺序固定）：rule_id | invoice_no | RULE_VERSION | evidence_path
+   - evidence_path：evidence_chain 按数组顺序，每项 field+":"+raw，| 连接（顺序=规则引擎输出顺序，不得排序——排序会改变语义）
+   - 编码：UTF-8；票号不得 trim 后拼接（票号本身无空白，保持原样）
+   - 前缀 v1: 预留哈希算法升级退路（换 sha256 时新旧键共存+一次性迁移）
+   - 规则版本进入哈希：规则升版 → 结论可能变 → 处置状态重置属有意语义（见 KPI 口径说明） */
+const RID_SCHEMA = "v1";
 function fnv1a64(s) {
   let h1 = 0x811c9dc5, h2 = 0x01000193 >>> 0; // 简化：用两个 32 位 FNV 变体拼 16 hex
   let a = 0x811c9dc5, b = 0x01000193;
@@ -377,10 +384,31 @@ function fnv1a64(s) {
 }
 function riskId(f) {
   const path = (f.evidence_chain || []).map(e => e.field + ":" + (e.raw ?? "")).join("|");
-  return fnv1a64([f.rule_id, f.invoice_no || "", "0.3.0", path].join("|"));
+  return RID_SCHEMA + ":" + fnv1a64([f.rule_id, f.invoice_no || "", "0.3.0", path].join("|"));
 }
 function loadDisp() { try { return JSON.parse(localStorage.getItem(DISP_KEY) || "{}"); } catch (e) { return {}; } }
-function saveDisp(d) { try { localStorage.setItem(DISP_KEY, JSON.stringify(d)); } catch (e) { /* 隐私模式等不可写时静默 */ } }
+const DISP_MAX = 500;
+function saveDisp(d) {
+  const keys = Object.keys(d);
+  if (keys.length > DISP_MAX) { // 上限淘汰最旧（按 updatedAt）
+    const sorted = keys.filter(k => d[k] && d[k].updatedAt)
+      .sort((a, b) => (d[a].updatedAt < d[b].updatedAt ? -1 : 1));
+    const drop = keys.length - DISP_MAX;
+    sorted.slice(0, drop).forEach(k => delete d[k]);
+  }
+  try { localStorage.setItem(DISP_KEY, JSON.stringify(d)); return true; }
+  catch (e) { window.__dispStoreFail = true; return false; } // 隐私模式/配额满：处置不保留
+}
+function getDisp(id) { return loadDisp()[id] || null; } // 不变式：永不返回 undefined 状态
+function setDisp(id, status) {
+  const d = loadDisp();
+  if (status === "pending") delete d[id];
+  else d[id] = { status, updatedAt: new Date().toISOString() };
+  if (!saveDisp(d)) window.__dispStoreFail = true;
+}
+window.addEventListener("storage", e => { // 多标签页同步（深评中4）
+  if (e.key === DISP_KEY && __lastReport) renderReport();
+});
 function getDisp(id) { return loadDisp()[id] || null; }
 function setDisp(id, status) {
   const d = loadDisp();
@@ -501,7 +529,7 @@ function __origRender(d) {
     <span class="dp pending">待处理 <b>${cnt.pending}</b></span>
     <span class="dp resolved">已处理 <b>${cnt.resolved}</b></span>
     <span class="dp ignored">已忽略 <b>${cnt.ignored}</b></span>
-    <span class="hint">口径：已处理+已忽略 = 完成</span>
+    <span class="hint">口径：已处理+已忽略=完成 · 规则升版后处置状态会重置（结论可能变化需重判）${window.__dispStoreFail ? ` · <span class="fail">存储不可用，本次处置不会保留</span>` : ""}</span>
     ${done ? `<span class="alldone">✓ 全部处置完成，可导出</span>` : ""}
   </div>` : "";
 
