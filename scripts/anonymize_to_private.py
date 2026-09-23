@@ -32,9 +32,9 @@ def fake_company(seed: str, role: str) -> str:
 
 
 def fake_taxid(seed: str) -> str:
+    """18 位统一社会信用代码（91 开头 + 16 位，符合解析器 _TAXID_RE 真实格式）。"""
     random.seed(seed)
-    return f"91{random.choice('1234567890')}{random.choice('0123456789')}" + \
-        "".join(random.choices("0123456789ABCDEFGHJKLMNPQRTUWXY", k=10))
+    return "91" + "".join(random.choices("0123456789ABCDEFGHJKLMNPQRTUWXY", k=16))
 
 
 def render_invoice_pdf(path: Path, fields: dict) -> None:
@@ -47,11 +47,11 @@ def render_invoice_pdf(path: Path, fields: dict) -> None:
     page.insert_text((60, y), f"发票号码：{fields['invoice_no']}", fontname="china-s", fontsize=11)
     page.insert_text((300, y), f"开票日期：{fields['issue_date']}", fontname="china-s", fontsize=11); y -= 34
     page.insert_text((60, y), "购买方信息", fontname="china-s", fontsize=11); y -= 18
-    page.insert_text((60, y), f"名称：{fields['buyer_name']}", fontname="china-s", fontsize=11)
-    page.insert_text((300, y), f"统一社会信用代码/纳税人识别号：{fields['buyer_taxid']}", fontname="china-s", fontsize=11); y -= 30
+    page.insert_text((60, y), f"名称：{fields['buyer_name']}", fontname="china-s", fontsize=11); y -= 18
+    page.insert_text((60, y), f"统一社会信用代码/纳税人识别号：{fields['buyer_taxid']}", fontname="china-s", fontsize=11); y -= 26
     page.insert_text((60, y), "销售方信息", fontname="china-s", fontsize=11); y -= 18
-    page.insert_text((60, y), f"名称：{fields['seller_name']}", fontname="china-s", fontsize=11)
-    page.insert_text((300, y), f"统一社会信用代码/纳税人识别号：{fields['seller_taxid']}", fontname="china-s", fontsize=11); y -= 38
+    page.insert_text((60, y), f"名称：{fields['seller_name']}", fontname="china-s", fontsize=11); y -= 18
+    page.insert_text((60, y), f"统一社会信用代码/纳税人识别号：{fields['seller_taxid']}", fontname="china-s", fontsize=11); y -= 38
     page.insert_text((60, y), "项目名称            金额            税率/征收率            税额", fontname="china-s", fontsize=11); y -= 20
     for it in fields.get("items", [])[:4]:
         # 整行单次插入（含空格分隔列），避免多段插入文本流粘连（如 金额+0% 粘成 xx140%）
