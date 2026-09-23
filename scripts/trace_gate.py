@@ -6,11 +6,20 @@
             判定是否需新评审 → 生成 GATE-YYYYMMDD-NN 记录（写 03-会议与日志/门禁记录/）
 - check   : 校验 commit message 含合法 ID 引用（GATE-|RV-|DEC-|ISS-），供 commit-msg 钩子调用
 - ids     : 按关键词列出相关 RV/DEC/ISS（讨论前查重，避免重复评审）
+- preflight: 功能开发前立项（RV-22 采纳：定位=发号器，非检查点）——生成 F-YYYYMMDD-NN
+            功能登记 + 检查该功能是否已有已批准(adopted)的方案评审 RV（phase=scheme）
+- check-scheme: 功能提交第三闸门（commit-msg 调用）——message 以 feat( 开头 →
+            必须引用 F-xxx 且存在已批准且 feature 匹配的 scheme-RV，否则拒绝提交
+- audit-scheme: 事后审计（RV-22 修正：时间审计不在 commit-msg 做墙钟比对——恒为假；
+            由审计脚本对比 scheme-RV 评审时间 vs 首次引用 F-xxx 的提交时间，产出"方案后补"清单）
 
 用法：
     python3 scripts/trace_gate.py gate --task "TASK-xxx 描述"
     python3 scripts/trace_gate.py check --message "feat: ... (RV-20260923-05)"
     python3 scripts/trace_gate.py ids --grep "OCR"
+    python3 scripts/trace_gate.py preflight --desc "复核工作台弹窗"
+    python3 scripts/trace_gate.py check-scheme --message "feat(rev): ... (F-20260923-01, RV-...)"
+    python3 scripts/trace_gate.py audit-scheme
 
 退出码：check 校验失败 = 1；其余正常 = 0。
 """
@@ -30,6 +39,7 @@ ROOT = Path(__file__).resolve().parent.parent
 TRACE = ROOT.parent / "project-trace"
 RV_DIR = TRACE / "03-会议与日志" / "DeepSeek评审"
 GATE_DIR = TRACE / "03-会议与日志" / "门禁记录"
+FEATURE_DIR = TRACE / "03-会议与日志" / "功能登记"
 DECISIONS = TRACE / "DECISIONS.md"
 OPEN_ISSUES = TRACE / "OPEN_ISSUES.md"
 RV_INDEX = RV_DIR / "索引.md"
@@ -244,6 +254,180 @@ def cmd_check_rv(message: str) -> int:
     return 0
 
 
+# ---------- 事前对齐门禁（RV-22/23 采纳实施） ----------
+
+# RV-23 口径 2：功能提交触发正则定死（feat: / feat(scope): / feat!: / feat(scope)!: 均算）
+# RV-24 修正：原 [)]? 形态对 feat: 不匹配（feat 后无 ( 即失败），改可选 (scope) 组
+FEAT_RE = re.compile(r"^feat(?:\([^)]*\))?!?:")
+# RV-23 口径 1：message 中出现的全部 F-xxx 都必须满足（防挂靠已批准 feature 包装未批准功能）
+# 定长 F-[0-9]{8}-[0-9]{2}（RV-25 修正：\d→[0-9] 防 Unicode 数字误判）；findall set 去重逐条校验，"顺带提到"的 F 号无豁免（有意为之）
+FID_RE = re.compile(r"\bF-([0-9]{8}-[0-9]{2})\b")
+
+def _next_feature_no() -> int:
+    if not FEATURE_DIR.exists():
+        return 1
+    used = []
+    for f in FEATURE_DIR.glob("F-*.md"):
+        m = re.search(r"F-(\d{8})-(\d+)", f.name)
+        if m and m.group(1) == _today():
+            used.append(int(m.group(2)))
+    return (max(used) + 1) if used else 1
+
+
+def _find_scheme_rv(fid: str) -> Path | None:
+    """查功能登记 F-xxx 是否有已批准(adopted)且 phase=scheme 的方案评审档案。"""
+    if not RV_DIR.exists():
+        return None
+    for f in sorted(RV_DIR.glob("*.md")):
+        if f.name == "索引.md":
+            continue
+        head = f.read_text(encoding="utf-8", errors="replace")[:800]
+        fm = re.search(r"phase:\s*(\S+)", head)
+        feat = re.search(r"feature:\s*(\S+)", head)
+        st = re.search(r"status:\s*(\S+)", head)
+        if fm and fm.group(1) == "scheme" and feat and feat.group(1) == fid \
+                and st and st.group(1) == "adopted":
+            return f
+    return None
+
+
+def cmd_preflight(desc: str) -> int:
+    """功能开发前立项（RV-22：定位=发号器）。生成 F-ID 功能登记；已有方案评审则提示可直接开发。"""
+    no = _next_feature_no()
+    fid = f"F-{_today()}-{no:02d}"
+    FEATURE_DIR.mkdir(parents=True, exist_ok=True)
+    f = FEATURE_DIR / f"{fid}.md"
+    f.write_text(
+        f"# {fid} · 功能登记\n\n"
+        f"- 时间：{datetime.datetime.now().isoformat(timespec='seconds')}\n"
+        f"- 描述：{desc}\n"
+        f"- 方案评审（phase=scheme RV）：待发起\n"
+        f"- 状态：已立项，待方案评审\n",
+        encoding="utf-8",
+    )
+    print(f"[preflight] 功能登记已建立：{fid}（{f.name}）")
+    rv = _find_scheme_rv(fid)
+    if rv:
+        print(f"[preflight] 已存在已批准方案评审：{rv.name} → 可直接开发")
+    else:
+        print("[preflight] 尚无已批准方案评审 → 下一步：deepseek_gate.py --phase scheme --feature " + fid + " 发起方案评审，批准后再开发")
+    print(f"[preflight] 功能提交规范：feat(scope): 描述 ({fid}) + 方案评审 RV-ID")
+    return 0
+
+
+def cmd_check_scheme(message: str) -> int:
+    """功能提交第三闸门（commit-msg 调用）：message 以 feat 约定开头 → 必须有已批准 scheme-RV。
+
+    RV-23 口径：
+    - 触发正则 FEAT_RE = ^feat[(][^)]+[)]?[!]?:（feat:/feat(scope):/feat!:/feat(scope)!:）
+    - message 中出现的全部 F-xxx 都必须存在 adopted scheme-RV（防挂靠包装）
+    - adopted 判据：档案 status=adopted 且 phase=scheme 且 feature 匹配（RV-23 口径 4：任一即可，保留多轮评审历史）
+    - adopted 为执行者按用户拍板填写 → 属诚实边界（防忘不防绕，RV-23 口径 3 方案 A）
+    - 方案档案与代码同次提交：check 读工作区档案，存在即通过（RV-23 口径 5 预期行为）
+    """
+    if not FEAT_RE.match(message.lstrip()):
+        print("[check-scheme] 非功能提交（不匹配 ^feat(...)!?: ），跳过")
+        return 0
+    fids = sorted(set("F-" + m for m in FID_RE.findall(message)))
+    if not fids:
+        print("✗ 功能提交（feat: 前缀）必须引用功能登记 F-xxx（如 F-20260923-01）", file=sys.stderr)
+        print("  流程：先跑 trace_gate.py preflight --desc \"...\" 立项 → 再 deepseek_gate.py --phase scheme 评审方案 → 批准后提交", file=sys.stderr)
+        return 1
+    for fid in fids:
+        rv = _find_scheme_rv(fid)
+        if not rv:
+            print(f"✗ {fid} 无已批准方案评审（phase=scheme 且 status=adopted）", file=sys.stderr)
+            print("  下一步：deepseek_gate.py --phase scheme --feature " + fid + " 发起方案评审 → 用户批准(adopted)后重提交", file=sys.stderr)
+            return 1
+        head = rv.read_text(encoding="utf-8", errors="replace")[:400]
+        idm = re.search(r"id:\s*(RV-\S+)", head)
+        print(f"[check-scheme] {fid} 已批准方案评审 {idm.group(1) if idm else rv.name}")
+    print("[check-scheme] 通过：全部功能均有已批准方案评审（方案先于实施，事前对齐成立）")
+    return 0
+
+
+def cmd_audit_scheme() -> int:
+    """事后审计（RV-22/23 修正）：对比方案评审入库时间 vs 功能代码首次提交时间，产出"方案后补"清单。
+
+    RV-23 口径：
+    - 评审时间锚点 = scheme-RV 档案首次入库的 git 提交时间（git log --diff-filter=A --format=%ci），
+      不可自填（frontmatter date 可被手工改，git 时间难伪造）——避免"同日/改时间"绕过
+    - 代码锚点 = 首次引用 F-xxx 的提交时间（git log main 分支，取最早一条；committer date）
+    - 评审时间 > 代码时间 = 方案后补（流程违规，exit 1）
+    - 不在 commit-msg 做墙钟比对（RV-22：commit 对象未创建，恒为假）
+    """
+    import subprocess
+    from datetime import datetime
+    if not FEATURE_DIR.exists():
+        print("[audit-scheme] 无功能登记目录，无审计对象")
+        return 0
+    print(f"{'F-ID':<14}{'方案评审入库':<22}{'代码首次提交':<22}判定")
+    print("-" * 72)
+    any_flag = False
+
+    def _ts(ci_line: str):
+        """%ci 行（2026-09-23 14:30:00 +0800）→ UTC epoch；时区偏移参与比较（RV-26）。
+
+        RV-27 修正：用 strptime %z（全 Python 版本可靠，%z 支持无冒号 +0800），
+        不用 fromisoformat（<3.11 对无冒号偏移抛 ValueError，naive/aware 处理也易错）。
+        %z 产出 aware datetime → timestamp() 为真实 UTC epoch。
+        """
+        try:
+            return datetime.strptime(ci_line.strip(), "%Y-%m-%d %H:%M:%S %z").timestamp()
+        except Exception:
+            return None
+
+    for f in sorted(FEATURE_DIR.glob("F-*.md")):
+        fid = f.stem
+        rv = _find_scheme_rv(fid)
+        rv_ts = None
+        if rv:
+            try:
+                # 档案首次入库 git 提交时间（不可自填）；档案在 project-trace 仓 → cwd=TRACE
+                # RV-24 修正：--reverse 取首条（最早入库），非默认最新；统一 committer date(%ci)
+                out = subprocess.run(
+                    ["git", "log", "--reverse", "--diff-filter=A", "--format=%ci", "--", rv.name],
+                    capture_output=True, text=True, cwd=TRACE,
+                ).stdout.strip().splitlines()
+                if out:
+                    rv_ts = _ts(out[0])
+            except Exception:
+                rv_ts = None
+        # 代码锚点：main 分支首次引用 F-xxx 的提交 committer date（--reverse 取首条；
+        # RV-24 口径 3：merge 进 main 的提交计入范围；--fixed-strings 防 F-xxx 正则歧义）
+        code_ts = None
+        try:
+            out = subprocess.run(
+                ["git", "log", "main", "--reverse", "--fixed-strings", "--grep=" + fid, "--format=%ci"],
+                capture_output=True, text=True, cwd=ROOT,
+            ).stdout.strip().splitlines()
+            if out:
+                code_ts = _ts(out[0])
+        except Exception:
+            code_ts = None
+        rv_time = datetime.fromtimestamp(rv_ts).strftime("%Y-%m-%d %H:%M:%S") if rv_ts else None
+        first_code = datetime.fromtimestamp(code_ts).strftime("%Y-%m-%d %H:%M:%S") if code_ts else None
+        # RV-24 口径 6：同次提交空锚点分支——档案与代码同一次提交时两者相等，判"方案先行"（<= 含相等）；
+        # rv_time 为空（档案未入库）= 待审计；first_code 为空（代码未提交）= 未提交代码
+        if rv_ts is not None and code_ts is not None:
+            verdict = "正常（方案先行）" if rv_ts <= code_ts else "方案后补 ⚠"
+        elif rv_ts is not None and code_ts is None:
+            verdict = "未提交代码"
+        elif rv_ts is None and code_ts is not None:
+            verdict = "档案未入库 ⚠"
+        else:
+            verdict = "未评审"
+        if verdict == "方案后补 ⚠":
+            any_flag = True
+        print(f"{fid:<14}{str(rv_time or '未评审'):<22}{str(first_code or '（无）'):<22}{verdict}")
+    print("-" * 72)
+    if any_flag:
+        print("[audit-scheme] 存在方案后补：功能代码提交早于方案评审入库——流程违规，下次功能开发须先 preflight + 方案评审")
+        return 1
+    print("[audit-scheme] 全部正常：方案评审均先于代码提交（事前对齐成立）")
+    return 0
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="项目硬门禁")
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -252,6 +436,9 @@ def main() -> int:
     i = sub.add_parser("ids"); i.add_argument("--grep", required=True)
     cl = sub.add_parser("classify"); cl.add_argument("--staged", action="store_true")
     cr = sub.add_parser("check-rv"); cr.add_argument("--message", required=True)
+    pf = sub.add_parser("preflight"); pf.add_argument("--desc", required=True)
+    cs = sub.add_parser("check-scheme"); cs.add_argument("--message", required=True)
+    au = sub.add_parser("audit-scheme")
     args = ap.parse_args()
     if args.cmd == "gate":
         return cmd_gate(args.task)
@@ -263,6 +450,12 @@ def main() -> int:
         return cmd_classify(args.staged)
     if args.cmd == "check-rv":
         return cmd_check_rv(args.message)
+    if args.cmd == "preflight":
+        return cmd_preflight(args.desc)
+    if args.cmd == "check-scheme":
+        return cmd_check_scheme(args.message)
+    if args.cmd == "audit-scheme":
+        return cmd_audit_scheme()
     return 0
 
 

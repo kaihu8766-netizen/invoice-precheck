@@ -50,12 +50,33 @@ python3 scripts/trace_gate.py check --message "你的 commit message"
 - `check`：校验 commit message 含合法 ID 引用（`GATE-|RV-|DEC-|ISS-` 之一），缺失 exit 1
 - 缺 GATE-ID 的大动作：用户应直接拒绝，不进入执行
 
-## 4. 与 DeepSeek 讨论（双闸门 + 自动落盘）
+## 4. 与 DeepSeek 讨论（事前对齐 + 事后复核 双保险，RV-22 定稿）
+
+**功能开发四步（事前对齐门禁，commit-msg 闸门 3 强制）**：
+1. `python3 scripts/trace_gate.py preflight --desc "<功能描述>"` → 立项，生成 `F-YYYYMMDD-NN` 功能登记（定位=发号器，RV-22 修正）
+2. 方案评审（事前对齐）：`deepseek_gate.py --phase scheme --feature F-xxx --topic "<方案>" --prompt "..."` → DeepSeek 评审方案 → 用户批准（档案 status=adopted）
+3. 开发实施
+4. 功能提交：message 以 `feat(` 开头且引用 `F-xxx` + 方案评审 `RV-ID`；钩子校验 F-xxx 存在已批准（adopted）的 phase=scheme 评审，缺失拒绝提交
+
+**事后复核**：实施后发 `deepseek_gate.py`（默认 --phase review）评审实施结果 → 用户拍板 → 提交带 RV-ID（红线改动走 diff_hash 双闸门）。
+
+**时间可审计**：`python3 scripts/trace_gate.py audit-scheme` 对比方案评审入库时间 vs 功能代码首次提交时间，产出"方案后补"清单（评审晚于代码=流程违规，exit 1）。不在 commit-msg 做墙钟比对（RV-22：commit 对象未创建，恒为假）。
+
+**事前对齐门禁口径（RV-23 落定，改代码/流程须先评审）**：
+1. 触发正则：`^feat(\([^)]+\))?!?:`（feat:/feat(scope):/feat!:/feat(scope)!: 均算功能提交）
+2. message 中出现的**全部** F-xxx 都必须有 adopted scheme-RV（防挂靠包装）
+3. adopted 由执行者按用户拍板填写——**属诚实边界：防忘不防绕**（RV-23 口径 3 方案 A；不自称防绕）
+4. 一个 feature 多个 scheme-RV：存在任一 adopted 即可（保留多轮评审历史）
+5. 方案档案与代码同次提交：check 读工作区档案，存在即通过（预期行为；**只证明工作区有档案，不证明档案随本次提交入库**——可"git add 后仅提交代码路径"制造通过，属方案 A 边界，接受）
+6. 评审时间锚点=档案首次入库 git 提交时间（--reverse 取首条、committer date、不可自填，git 时间难伪造），非 frontmatter date；档案与代码同次提交时两者相等，判"方案先行"（空锚点分支：档案未入库=待审计、代码未提交=未提交代码）
+7. 代码锚点=main 分支首次引用 F-xxx 的提交 committer date（--reverse 取首条；merge 进 main 的提交计入范围；--fixed-strings 防 F 号正则歧义）。**%ci（committer date）是全链路唯一时间源**（口径 6/7 统一），比较前按时区归一化为 UTC epoch（RV-26：+0800 与 +0000 不得直接比较字符串）；rebase/squash 会更新 committer date（代码时间被推后 → 只会判得更"安全"，不会漏判后补）。git 时间戳可被 filter-branch/环境变量改写——**无技术防线**，仅靠口径 9 的防绕声明（诚实边界，不构成技术分层兜底）
+8. audit-scheme 检索范围：main 分支（不扫 --all，避免 rebase 残留干扰）
+9. 同类绕过全部列入诚实边界：`--no-verify`、手工改 adopted、自行改钩子、fix 前缀包装功能提交、`git config core.hooksPath` 改指向、临时置空 hooks 目录、`git commit-tree`+`update-ref` plumbing 绕过、改 git 时间戳（filter-branch/环境变量）——均属防绕范畴，方案 A 不拦但列全
 
 - 大动作/里程碑：任务前方案评审 + 落地后评审（双闸门），都发 DeepSeek
 - **必须用受控脚本** `agent-communication-demo/deepseek_gate.py` 调用（自动存原始请求/响应 + 生成 RV 档案 + 更新索引 + 返回 RV-ID），禁止裸调 API 后不落盘
 - 评审结论：采纳/部分采纳/拒绝，由**用户拍板**；采纳后创建/更新 DEC；未决建 ISS
-- 归档位置：`project-trace/03-会议与日志/DeepSeek评审/`（索引 + 档案，YAML frontmatter）
+- 归档位置：`project-trace/03-会议与日志/DeepSeek评审/`（索引 + 档案，YAML frontmatter，含 phase/feature 字段）
 - 结论变更：更新档案状态 + DECISIONS，禁止只改一处
 
 ## 5. 提交规范
@@ -86,6 +107,7 @@ python3 scripts/trace_gate.py check --message "你的 commit message"
 ## 门禁边界（RV-14 诚实标注）
 - 门禁防"遗忘/误操作"，不防恶意绕过（git commit --no-verify、git -c core.hooksPath=/dev/null 等 git 原生逃逸通道存在，项目信任执行者）。
 - 门禁自改（scripts/trace_gate.py、.githooks/commit-msg、scripts/gate_rules.yaml、deepseek_gate.py）同样命中 gate_self 红线，必须评审。
+- 事前对齐门禁（RV-22 诚实定位）：闸门 3 强制"功能提交必须有已批准方案评审"（防遗忘）；方案是否真的事前由 audit-scheme 事后审计（时间戳可查）；无法防止"用 fix 前缀包装功能提交"——该行为会绕过闸门 3，但会被用户监督/审计发现，属于恶意绕过范畴（不防）。
 
 ## 执行者纪律（RV-15 采纳，用户批准后生效）
 - 不得主动使用 `git commit --no-verify`、`git -c core.hooksPath=/dev/null`、修改 gate_self 文件来绕过门禁。

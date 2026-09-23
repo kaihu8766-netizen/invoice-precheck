@@ -1,8 +1,10 @@
 #!/bin/sh
-# commit-msg 钩子（RV-9 建 + RV-13 升级）：双闸门
+# commit-msg 钩子（RV-9 建 + RV-13 升级 + RV-22 事前对齐门禁）：三闸门
 #  闸门 1（RV-9）：message 必须含合法 ID 引用（GATE/RV/DEC/ISS）
 #  闸门 2（RV-13）：命中评审红线（app/pdf.py/rules.py/parser.py/ocr.py/脱敏脚本 等）
 #    → 必须带已批准且 diff_hash 与当前 staged diff 完全一致的 RV-ID，否则拒绝提交
+#  闸门 3（RV-22 事前对齐门禁）：功能提交（message 以 feat( 开头）→ 必须引用 F-xxx
+#    且存在已批准(adopted)的方案评审 RV（phase=scheme 且 feature 匹配），否则拒绝提交
 # 安装：git config core.hooksPath .githooks
 
 MSG_FILE="$1"
@@ -17,6 +19,15 @@ fi
 # 闸门 2：红线分类 + RV diff_hash 校验（机器规则替代主观判断）
 if python3 -c "import yaml" 2>/dev/null && [ -f scripts/trace_gate.py ] && [ -f scripts/gate_rules.yaml ]; then
     python3 scripts/trace_gate.py check-rv --message "$MSG"
+    RC=$?
+    if [ $RC -ne 0 ]; then
+        exit $RC
+    fi
+fi
+
+# 闸门 3：事前对齐门禁——功能提交必须有已批准方案评审（RV-22 采纳）
+if [ -f scripts/trace_gate.py ]; then
+    python3 scripts/trace_gate.py check-scheme --message "$MSG"
     RC=$?
     if [ $RC -ne 0 ]; then
         exit $RC
