@@ -148,6 +148,13 @@
   .drill-note .clear{ margin-left:auto; font-size:12px; }
   .rule-link{ cursor:pointer; text-decoration:underline dotted; color:var(--brand); }
   .drift-warn{ font-size:12.5px; color:#9a6a2f; background:#fff7e8; border:1px solid #f0d9a8; border-radius:8px; padding:8px 12px; margin-bottom:12px; }
+  /* F-08b 解析失败清单（RV-64）：文件级失败原因，与发票列表分离 */
+  .fail-list{ margin-top:8px; display:flex; flex-direction:column; gap:8px; }
+  .fail-row{ border:1px solid var(--line-soft); border-radius:8px; padding:10px 12px; background:#fff; }
+  .fail-file{ font-weight:700; font-size:13px; word-break:break-all; }
+  .fail-err{ font-size:12.5px; color:var(--high); margin-top:4px; line-height:1.5; word-break:break-all; }
+  .fail-act{ font-size:12px; color:var(--sub); margin-top:4px; }
+  .fail-missing{ color:var(--mid); font-style:italic; }
   .rule-card.flash{ animation:flashRule .9s ease 2; }
   @keyframes flashRule{ 0%,100%{ background:transparent; } 50%{ background:#fff3bf; } }
   /* 触摸反馈：可点元素按压微缩放（DeepSeek Week1 痛点） */
@@ -1269,13 +1276,34 @@ function invoiceViewHtml(d, metaMap) {
   let drillNote = "";
   if (drill.kpi === "fail") {
     const n = (d.summary || {}).failed_count || 0;
-    drillNote = `<div class="drill-note"><span><b>解析失败 ${n} 个文件</b>：解析失败无结构化数据可下钻（不生成发票行）。建议重传或检查文件格式（PDF 需可提取文本，图片需清晰）。</span><button class="btn-ghost drill-clear">清除筛选</button></div>`;
+    drillNote = `<div class="drill-note"><span><b>解析失败 ${n} 个文件</b>：解析失败无结构化数据（不生成发票行）。</span><button class="btn-ghost drill-clear">清除筛选</button></div>`;
   } else if (drill.kpi === "review") {
     drillNote = `<div class="drill-note"><span>已筛选：<b>待复核</b>（有命中/字段缺失/数据不完整，口径=非"未见异常"）</span><button class="btn-ghost drill-clear">清除筛选</button></div>`;
   } else if (drill.kpi === "pass") {
     drillNote = `<div class="drill-note"><span>已筛选：<b>自动通过</b>（口径=状态"未见异常"）</span><button class="btn-ghost drill-clear">清除筛选</button></div>`;
   } else if (drill.rule) {
     drillNote = `<div class="drill-note"><span>已按规则 <b>${esc(drill.rule)}</b> 筛选（仅含命中该规则的发票）</span><button class="btn-ghost drill-clear">清除筛选</button></div>`;
+  }
+  // F-08b（RV-64 B1）：解析失败三态判定——先判 failed_count，再判明细可用性；B2 部分明细补行；B3 字段保护
+  if (drill.kpi === "fail") {
+    const fc = ((d.summary || {}).failed_count) || 0;
+    const fl = d.failed || [];
+    let failBody;
+    if (fc === 0) {
+      failBody = `<div class="card card-pad"><div class="hint">当前无解析失败文件。</div></div>`;
+    } else if (fl.length > 0) {
+      const rows = fl.map((f) => {
+        const file = f && f.file ? esc(f.file) : "（文件信息缺失）";
+        const err = f && f.error ? esc(f.error) : "（失败原因未提供）";
+        return `<div class="fail-row"><div class="fail-file">📄 ${file}</div><div class="fail-err">${err}</div><div class="fail-act">建议：重传或检查文件格式（PDF 需可提取文本，图片需清晰）</div></div>`;
+      });
+      const missing = fc - fl.length;
+      if (missing > 0) rows.push(`<div class="fail-row fail-missing">另有 ${missing} 条失败明细未提供（数字与清单不一致，待后端补齐）</div>`);
+      failBody = `<div class="card card-pad"><div class="hint"><b>解析失败 ${fc} 个文件</b>，以下为失败明细：</div><div class="fail-list">${rows.join("")}</div></div>`;
+    } else {
+      failBody = `<div class="card card-pad"><div class="hint"><b>解析失败 ${fc} 个文件</b>，但失败明细缺失，无法展示具体原因（请反馈维护者核查报告数据）。</div></div>`;
+    }
+    return `${drillNote}${failBody}`;
   }
   const invs = (d.invoices || []).map((i) => {
     const fs = (byInv[i.invoice_no] || []).slice().sort((a, b) => {
@@ -1427,9 +1455,9 @@ function __origRender(d) {
     <div class="kpis">
       <div class="kpi total main"><div class="n">${esc((_c = s.file_count) != null ? _c : 0)}</div><div class="l">文件数</div></div>
       <div class="kpi total main"><div class="n">${fmtMoney(s.total_amount)}</div><div class="l">价税合计</div></div>
-      <div class="kpi${drillCls("review")}" data-drill="review" role="button" tabindex="0" aria-pressed="${_drill.kpi === "review"}" title="查看待复核发票"><div class="n mid">${esc((_d = s.review_count) != null ? _d : 0)}${((_e = s.human_review_count) != null ? _e : 0) > 0 ? `<span class="mini">含人工${esc(s.human_review_count)}</span>` : ""}</div><div class="l">待复核</div><span class="drill-hint">点击下钻 ↓</span></div>
-      <div class="kpi${drillCls("pass")}" data-drill="pass" role="button" tabindex="0" aria-pressed="${_drill.kpi === "pass"}" title="查看自动通过发票"><div class="n ok">${esc(autoPass)}</div><div class="l">自动通过</div><span class="drill-hint">点击下钻 ↓</span></div>
-      <div class="kpi${drillCls("fail")}" data-drill="fail" role="button" tabindex="0" aria-pressed="${_drill.kpi === "fail"}" title="解析失败文件（无结构化数据）"><div class="n high">${esc((_f = s.failed_count) != null ? _f : 0)}</div><div class="l">解析失败</div><span class="drill-hint">点击下钻 ↓</span></div>
+      <div class="kpi${drillCls("review")}" data-drill="review" role="button" tabindex="0" aria-pressed="${_drill.kpi === "review"}" title="查看待复核发票"><div class="n mid">${esc((_d = s.review_count) != null ? _d : 0)}${((_e = s.human_review_count) != null ? _e : 0) > 0 ? `<span class="mini">含人工${esc(s.human_review_count)}</span>` : ""}</div><div class="l">待复核</div><span class="drill-hint">点击查看明细 ↓</span></div>
+      <div class="kpi${drillCls("pass")}" data-drill="pass" role="button" tabindex="0" aria-pressed="${_drill.kpi === "pass"}" title="查看自动通过发票"><div class="n ok">${esc(autoPass)}</div><div class="l">自动通过</div><span class="drill-hint">点击查看明细 ↓</span></div>
+      <div class="kpi${drillCls("fail")}" data-drill="fail" role="button" tabindex="0" aria-pressed="${_drill.kpi === "fail"}" title="查看解析失败文件及原因"><div class="n high">${esc((_f = s.failed_count) != null ? _f : 0)}</div><div class="l">解析失败</div><span class="drill-hint">点击查看原因 ↓</span></div>
     </div>
     <div class="ctxmeta" title="批次/生成时间/口径">批次 ${esc(d.batch_id || "—")} · 生成 ${esc((d.generated_at || "").slice(0, 16) || "—")} · 口径：待复核+自动通过+解析失败=文件数；人工为待复核子集不参与求和；价税合计=仅成功解析票金额</div>
   </div>`;
