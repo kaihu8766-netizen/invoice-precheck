@@ -36,6 +36,7 @@
   .badge{ font-size:11px; padding:2px 10px; border-radius:10px; border:1px solid; font-weight:600; }
   .badge.demo{ background:var(--mid-bg); color:var(--mid); border-color:#fcd34d; }
   .badge.live{ background:var(--ok-bg); color:var(--ok); border-color:var(--ok); }
+  .badge.review{ background:var(--high-bg); color:var(--high); border-color:var(--high); margin-left:6px; cursor:help; }
 
   /* ---------- 工作台：左右分栏 ---------- */
   .layout{ display:grid; grid-template-columns:340px 1fr; gap:16px; align-items:start; }
@@ -104,7 +105,7 @@
   @media (max-width:720px){ .kpis{ grid-template-columns:repeat(3,1fr); } }
   .kpi{ background:#fafbfc; border:1px solid var(--line-soft); border-radius:var(--r-md); padding:10px 12px; }
   .kpi .n{ font-size:20px; font-weight:800; line-height:1.2; }
-  .kpi .l{ font-size:11.5px; color:var(--sub); margin-top:2px; }
+  .kpi .l{ font-size:11.5px; color:var(--sub); margin-top:2px; word-break:keep-all; line-height:1.4; }
   .kpi .n.ok{ color:var(--ok); } .kpi .n.mid{ color:var(--mid); } .kpi .n.high{ color:var(--high); }
   .kpi.main{ background:var(--brand-weak); border-color:#d6e2ff; }
   .kpi.main .l{ color:#3d5bb3; }
@@ -373,7 +374,7 @@ function demoReport() {
   return {
     "summary": {
       "file_count": 5, "total_count": 5, "total_amount": "2161.40",
-      "no_finding_count": 1, "review_count": 4, "failed_count": 1
+      "no_finding_count": 1, "review_count": 4, "failed_count": 1, "human_review_count": 1
     },
     "findings": [
       {"rule_id":"R10","severity":"高","confidence":"确定","invoice_no":"26440000000000100002","field":"items[2].ComTaxAm",
@@ -412,7 +413,7 @@ function demoReport() {
       {"invoice_no":"26440000000000100001","invoice_type":"增值税电子普通发票","issue_date":"2026-08-01","amount":"800.00","tax":"48.00","total":"848.00","seller_name":"示例服务有限公司","status":"待复核","warning_count":0,"item_count":2},
       {"invoice_no":"26440000000000100002","invoice_type":"增值税电子普通发票","issue_date":"2026-08-02","amount":"1500.00","tax":"90.00","total":"1590.00","seller_name":"示例制造集团有限公司","status":"待复核","warning_count":0,"item_count":3},
       {"invoice_no":"26440000000000100003","invoice_type":"增值税电子普通发票（差额征税）","issue_date":"2026-08-03","amount":"86.20","tax":"5.17","total":"91.37","seller_name":"示例票务代理有限公司","status":"待复核","warning_count":0,"item_count":1},
-      {"invoice_no":"26440000000000100004","invoice_type":"增值税电子普通发票（红字）","issue_date":"2026-08-04","amount":"-500.00","tax":"-30.00","total":"-530.00","seller_name":"示例物流有限公司","status":"待复核","warning_count":0,"item_count":2},
+      {"invoice_no":"26440000000000100004","invoice_type":"增值税电子普通发票（红字）","issue_date":"2026-08-04","amount":"-500.00","tax":"-30.00","total":"-530.00","seller_name":"示例物流有限公司","status":"待复核","warning_count":0,"item_count":2,"review_needed":true,"review_reason":"OCR 关键字段置信度偏低（最低 0.62）；价税勾稽不符（金额+税额≠价税合计）"},
       {"invoice_no":"26440000000000100005","invoice_type":"增值税电子普通发票","issue_date":"2026-08-05","amount":"120.00","tax":"7.20","total":"127.20","seller_name":"示例咨询有限公司","status":"未见异常","warning_count":0,"item_count":1}
     ],
     "failed": [{"file":"upload.pdf","error":"不支持的输入类型（仅支持数电票 XML 与 OFD 容器）"}],
@@ -619,6 +620,7 @@ function invoiceViewHtml(d, metaMap) {
         ${i.clean
           ? (notExec ? `<span class="stb q">？ 未完全检查</span>` : `<span class="stb ok">✓ 无命中</span>`)
           : `<span class="stb warn">${i.fs.length} 条命中</span>`}
+        ${i.review_needed ? `<span class="badge review" title="${esc(i.review_reason || "OCR 低置信度/勾稽不符等")}">需人工复核</span>` : ""}
         <span class="caret">▸</span>
       </summary>
       <div class="inv-body">
@@ -705,8 +707,9 @@ function __origRender(d) {
   const kpis = `
   <div class="kpis">
     <div class="kpi main"><div class="n">${esc(s.file_count ?? 0)}</div><div class="l">文件数</div></div>
-    <div class="kpi main"><div class="n">¥${esc(s.total_amount ?? "—")}</div><div class="l">金额合计（价税）</div></div>
+    <div class="kpi main"><div class="n">¥${esc(s.total_amount ?? "—")}</div><div class="l">价税合计</div></div>
     <div class="kpi main"><div class="n mid">${esc(s.review_count ?? 0)}</div><div class="l">待复核</div></div>
+    <div class="kpi"><div class="n ${(s.human_review_count ?? 0) > 0 ? "high" : ""}">${esc(s.human_review_count ?? 0)}</div><div class="l">需人工复核</div></div>
     <div class="kpi"><div class="n">${esc(s.total_count ?? 0)}</div><div class="l">成功解析</div></div>
     <div class="kpi"><div class="n ok">${esc(s.no_finding_count ?? 0)}</div><div class="l">未见异常</div></div>
     <div class="kpi"><div class="n high">${esc(s.failed_count ?? 0)}</div><div class="l">解析失败</div></div>
@@ -740,7 +743,7 @@ function __origRender(d) {
           return `<tr><td>${esc(i.invoice_no)}</td><td>${esc(i.issue_date)}</td><td>${esc(i.invoice_type)}</td>
             <td>${esc(i.amount)}</td><td>${esc(i.tax)}</td><td>${esc(i.total)}</td>
             <td>${esc(i.item_count ?? 0)}${i.warning_count ? `<span class="hint">（${i.warning_count} 告警）</span>` : ""}</td>
-            <td class="${stCls}">${esc(i.status)}</td></tr>`;
+            <td class="${stCls}">${esc(i.status)}${i.review_needed ? `<span class="badge review" title="${esc(i.review_reason || "OCR 低置信度/勾稽不符等")}">需人工复核</span>` : ""}</td></tr>`;
         }).join("") || `<tr><td colspan="8" class="hint">无成功解析的发票</td></tr>`}
       </table>
       ${(d.failed||[]).length ? `<div class="hint" style="margin-top:8px;">解析失败：${d.failed.map(f => `<span class="fail">${esc(f.file)}</span>：${esc(f.error)}`).join("；")}</div>` : ""}
