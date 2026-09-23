@@ -392,38 +392,61 @@
 
 <script>
 "use strict";
-window.addEventListener("error", function (ev) {
+var __defProp = Object.defineProperty;
+var __defProps = Object.defineProperties;
+var __getOwnPropDescs = Object.getOwnPropertyDescriptors;
+var __getOwnPropSymbols = Object.getOwnPropertySymbols;
+var __hasOwnProp = Object.prototype.hasOwnProperty;
+var __propIsEnum = Object.prototype.propertyIsEnumerable;
+var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
+var __spreadValues = (a, b) => {
+  for (var prop in b || (b = {}))
+    if (__hasOwnProp.call(b, prop))
+      __defNormalProp(a, prop, b[prop]);
+  if (__getOwnPropSymbols)
+    for (var prop of __getOwnPropSymbols(b)) {
+      if (__propIsEnum.call(b, prop))
+        __defNormalProp(a, prop, b[prop]);
+    }
+  return a;
+};
+var __spreadProps = (a, b) => __defProps(a, __getOwnPropDescs(b));
+window.addEventListener("error", function(ev) {
   try {
     var bar = document.getElementById("errbar");
-    if (!bar) { bar = document.createElement("div"); bar.id = "errbar"; bar.style.cssText = "position:fixed;top:0;left:0;right:0;z-index:9999;background:#7f1d1d;color:#fff;font:12px/1.5 monospace;padding:6px 10px;white-space:pre-wrap;max-height:90px;overflow:auto;"; document.body.appendChild(bar); }
+    if (!bar) {
+      bar = document.createElement("div");
+      bar.id = "errbar";
+      bar.style.cssText = "position:fixed;top:0;left:0;right:0;z-index:9999;background:#7f1d1d;color:#fff;font:12px/1.5 monospace;padding:6px 10px;white-space:pre-wrap;max-height:90px;overflow:auto;";
+      document.body.appendChild(bar);
+    }
     bar.textContent = "[页面错误] " + (ev.message || ev.type || "未知") + (ev.filename ? " @ " + ev.filename.split("/").pop() + ":" + ev.lineno : "");
-  } catch (_) {}
+  } catch (_) {
+  }
 });
-const $ = id => document.getElementById(id);
-const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
-const SEV_CLS = {"高":"high","中":"mid","低":"low"};
-const CONF_ALLOW = new Set(["确定","疑似"]);
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s != null ? s : "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+const SEV_CLS = { "高": "high", "中": "mid", "低": "low" };
+const CONF_ALLOW = /* @__PURE__ */ new Set(["确定", "疑似"]);
 const DISCLAIMER = "基于 XML 结构化数据的规则预审，不替代人工复核与税务判断；命中项需核原始凭证，未命中不等于合规；规则版本与覆盖范围已列明。";
 const SCOPE_NOTE = "本报告基于数电票 XML 结构化数据的确定性规则生成；公开+合成集验证通过，真实分布未验证。";
-/* 演示快照数据源（与后端 RULESET_META 同构，非生产权威；生产名称解析走响应 d.rules） */
 const RULES_META = [
-  {rule_id:"R1", name:"重复报销 / 整文件重复", severity:"高"},
-  {rule_id:"R2", name:"抬头/税号校验", severity:"高"},
-  {rule_id:"R3", name:"连号异常", severity:"中"},
-  {rule_id:"R4", name:"超标准（类别限额）", severity:"中"},
-  {rule_id:"R6", name:"供应商集中度异常", severity:"中"},
-  {rule_id:"R7", name:"日期异常", severity:"中"},
-  {rule_id:"R8", name:"金额异常类型化", severity:"高"},
-  {rule_id:"R9", name:"差额征税专项", severity:"中"},
-  {rule_id:"R10", name:"明细行勾稽（行级一致性）", severity:"高"},
-  {rule_id:"R11", name:"红冲关联（占位）", severity:"中"},
+  { rule_id: "R1", name: "重复报销 / 整文件重复", severity: "高" },
+  { rule_id: "R2", name: "抬头/税号校验", severity: "高" },
+  { rule_id: "R3", name: "连号异常", severity: "中" },
+  { rule_id: "R4", name: "超标准（类别限额）", severity: "中" },
+  { rule_id: "R6", name: "供应商集中度异常", severity: "中" },
+  { rule_id: "R7", name: "日期异常", severity: "中" },
+  { rule_id: "R8", name: "金额异常类型化", severity: "高" },
+  { rule_id: "R9", name: "差额征税专项", severity: "中" },
+  { rule_id: "R10", name: "明细行勾稽（行级一致性）", severity: "高" },
+  { rule_id: "R11", name: "红冲关联（占位）", severity: "中" }
 ];
-/* 规则元数据解析（DeepSeek 评审：按响应绑定，不用全局可变 map）：
-   生产（live）只信本次响应 d.rules 构建的 map；未命中显示 rule_id + console.warn；
-   演示（demo）用演示快照 RULES_META。findings[].rule 是 rule_id，业务名从同响应 rules 解析（契约）。 */
 function buildRuleMetaMap(rules) {
   const m = {};
-  (rules || []).forEach(r => { if (r && r.rule_id) m[r.rule_id] = r; });
+  (rules || []).forEach((r) => {
+    if (r && r.rule_id) m[r.rule_id] = r;
+  });
   return m;
 }
 function resolveRuleMeta(ruleId, map) {
@@ -432,14 +455,14 @@ function resolveRuleMeta(ruleId, map) {
   console.warn("未知规则（响应 rules 未覆盖）:", ruleId);
   return ruleId;
 }
-function demoRuleName(id) { return (RULES_META.find(r => r.rule_id === id) || {}).name || id; }
-
-/* ---------- 内置样例报告（ruleset 0.3.0 结构：证据链 + 行级明细 + R9-R11） ---------- */
+function demoRuleName(id) {
+  return (RULES_META.find((r) => r.rule_id === id) || {}).name || id;
+}
 function demoReport() {
-  const now = new Date();
-  const ts = now.getFullYear() + "-" + String(now.getMonth()+1).padStart(2,"0") + "-" + String(now.getDate()).padStart(2,"0") + " " + String(now.getHours()).padStart(2,"0") + ":" + String(now.getMinutes()).padStart(2,"0") + ":" + String(now.getSeconds()).padStart(2,"0");
-  const rules = RULES_META.map(m => ({...m, basis:"政策依据按主题引用（见 ruleset scope_note）", scope_note:"", state:"未命中"})); // 演示快照，非生产权威
-  const byId = id => rules.find(r => r.rule_id === id);
+  const now = /* @__PURE__ */ new Date();
+  const ts = now.getFullYear() + "-" + String(now.getMonth() + 1).padStart(2, "0") + "-" + String(now.getDate()).padStart(2, "0") + " " + String(now.getHours()).padStart(2, "0") + ":" + String(now.getMinutes()).padStart(2, "0") + ":" + String(now.getSeconds()).padStart(2, "0");
+  const rules = RULES_META.map((m) => __spreadProps(__spreadValues({}, m), { basis: "政策依据按主题引用（见 ruleset scope_note）", scope_note: "", state: "未命中" }));
+  const byId = (id) => rules.find((r) => r.rule_id === id);
   byId("R1").state = "命中";
   byId("R9").state = "命中";
   byId("R10").state = "命中";
@@ -448,60 +471,93 @@ function demoReport() {
   byId("R4").state = "未执行（未提供报销类别）";
   return {
     "summary": {
-      "file_count": 5, "total_count": 4, "total_amount": "2161.40",
-      "no_finding_count": 1, "review_count": 4, "failed_count": 1, "human_review_count": 1
+      "file_count": 5,
+      "total_count": 4,
+      "total_amount": "2161.40",
+      "no_finding_count": 1,
+      "review_count": 4,
+      "failed_count": 1,
+      "human_review_count": 1
     },
     "findings": [
-      {"rule_id":"R10","severity":"高","confidence":"确定","invoice_no":"26440000000000100002","field":"items[2].ComTaxAm",
-       "message":"明细行税额与 金额×税率 不一致：行 3 金额 300.00×税率 0.06=18.00，票面税额 25.50，差 7.50",
-       "evidence":"0.09 与票面税率 0.06 冲突","suggestion":"核对原始凭证行 3 的金额/税率/税额录入，确认是否手工改数",
-       "evidence_chain":[
-         {"field":"items[2].Amount","raw":"300.00","value":"300.00","row":3,"note":"行金额"},
-         {"field":"items[2].TaxRate","raw":"0.09","value":"0.09","row":3,"note":"行税率（票面 0.06）"},
-         {"field":"items[2].ComTaxAm","raw":"25.50","value":"25.50","row":3,"note":"行税额 ≠ 300.00×0.06=18.00"}
-       ],
-       "explanation":{"what":"这张发票第三行明细对不上账：按行金额 300.00 元乘票面税率 6% 应为 18.00 元税额，但票面行税额写了 25.50 元，且行内税率标的是 9%，三个数互相矛盾。","impact":"明细与合计勾稽断裂，直接影响进项税抵扣金额与入账金额；直接入账可能被税务比对异常，导致进项转出或报销被退回重开。","action":"1）确认该行业务适用税率到底是 6% 还是 9%；2）核对是否录错金额/税率/税额；3）属开票方错误则请销方作废或红冲重开；4）修正后重新做勾稽校验并核对合计税额。","who":"先由经办人核对业务实际税率，销方财务更正开票，本企业财务复核岗入账前复核。","source":"llm:demo:synthetic","prompt_version":"explain-v1"}},
-      {"rule_id":"R1","severity":"高","confidence":"确定","invoice_no":"26440000000000100001","field":"source_hash",
-       "message":"整文件重复：source_hash 与 26440000000000100001（第 2 份）一致，疑似重复报销",
-       "evidence":"sha256 完全一致","suggestion":"核对两笔是否为同一次报销误传；重复报销入账前需剔除",
-       "evidence_chain":[
-         {"field":"source_hash","raw":"a3f2…c9d1","value":"a3f2…c9d1","row":null,"note":"两份文件哈希一致"}
-       ],
-       "explanation":{"what":"这张发票和本批次另一份文件内容完全相同（文件指纹一致），系统怀疑是同一张票被重复提交了两次。","impact":"若两笔都入账，会造成同一笔费用重复报销、进项税重复抵扣，审计和税务检查时属于典型问题。","action":"核对两笔是否为同一次报销误传；确认重复后只保留一笔，另一笔作废处理。","who":"报销经办人核对来源，财务复核岗剔除重复后入账。","source":"llm:demo:synthetic","prompt_version":"explain-v1"}},
-      {"rule_id":"R9","severity":"中","confidence":"疑似","invoice_no":"26440000000000100003","field":"备注",
-       "message":"差额征税票（KCE 存在）但备注未含『差额征税：』声明，征收方式存疑",
-       "evidence":"KCE=0.07 / 备注=票务代理服务费","suggestion":"补充差额征税声明或核对征收方式",
-       "evidence_chain":[
-         {"field":"KCE","raw":"0.07","value":"0.07","row":null,"note":"差额征税标识存在"},
-         {"field":"备注","raw":"票务代理服务费","value":"票务代理服务费","row":null,"note":"未匹配『差额征税：』"}
-       ],
-       "explanation":{"what":"这张票按差额征税方式开具（票面有差额征税标识），但备注栏没有写『差额征税：』的固定声明文字，征收方式在票面上不完整。","impact":"差额征税票的征收方式声明是开票规范要求；声明缺失可能导致税务系统比对不通过或报销时被质疑计税方式。","action":"向开票方确认征收方式并补开发票或补充备注；核对差额扣除金额是否在票面完整反映。","who":"开票方财务核对征收方式，本企业财务复核岗确认计税口径。","source":"llm:demo:synthetic","prompt_version":"explain-v1"}},
-      {"rule_id":"R11","severity":"中","confidence":"疑似","invoice_no":"26440000000000100004","field":"红字发票对应的蓝字发票号码",
-       "message":"红字发票关联的蓝字票号 26440000000000009999 不在本批次（历史库未接入，占位规则）",
-       "evidence":"红字票：对应蓝票号存在但不可查","suggestion":"接入历史票库后核验红冲合法性；当前仅提示",
-       "evidence_chain":[
-         {"field":"红字发票对应的蓝字发票号码","raw":"26440000000000009999","value":"26440000000000009999","row":null,"note":"历史库未接入，存在性未验证"}
-       ],
-       "explanation":{"what":"这是一张红字（负数）发票，它声明冲销一张蓝字发票，但那张被冲的蓝字发票不在本次上传的批次里，系统暂时无法验证红冲关系是否真实成立。","impact":"红冲关系不成立可能导致负数发票入账后无对应蓝票，影响进项转出与申报数据的一致性。","action":"从历史票库中找到对应蓝字发票核对红冲金额是否一致；当前版本未接入历史库，需人工确认。","who":"财务复核岗核对红冲对应蓝票与金额。","source":"llm:demo:synthetic","prompt_version":"explain-v1"}}
+      {
+        "rule_id": "R10",
+        "severity": "高",
+        "confidence": "确定",
+        "invoice_no": "26440000000000100002",
+        "field": "items[2].ComTaxAm",
+        "message": "明细行税额与 金额×税率 不一致：行 3 金额 300.00×税率 0.06=18.00，票面税额 25.50，差 7.50",
+        "evidence": "0.09 与票面税率 0.06 冲突",
+        "suggestion": "核对原始凭证行 3 的金额/税率/税额录入，确认是否手工改数",
+        "evidence_chain": [
+          { "field": "items[2].Amount", "raw": "300.00", "value": "300.00", "row": 3, "note": "行金额" },
+          { "field": "items[2].TaxRate", "raw": "0.09", "value": "0.09", "row": 3, "note": "行税率（票面 0.06）" },
+          { "field": "items[2].ComTaxAm", "raw": "25.50", "value": "25.50", "row": 3, "note": "行税额 ≠ 300.00×0.06=18.00" }
+        ],
+        "explanation": { "what": "这张发票第三行明细对不上账：按行金额 300.00 元乘票面税率 6% 应为 18.00 元税额，但票面行税额写了 25.50 元，且行内税率标的是 9%，三个数互相矛盾。", "impact": "明细与合计勾稽断裂，直接影响进项税抵扣金额与入账金额；直接入账可能被税务比对异常，导致进项转出或报销被退回重开。", "action": "1）确认该行业务适用税率到底是 6% 还是 9%；2）核对是否录错金额/税率/税额；3）属开票方错误则请销方作废或红冲重开；4）修正后重新做勾稽校验并核对合计税额。", "who": "先由经办人核对业务实际税率，销方财务更正开票，本企业财务复核岗入账前复核。", "source": "llm:demo:synthetic", "prompt_version": "explain-v1" }
+      },
+      {
+        "rule_id": "R1",
+        "severity": "高",
+        "confidence": "确定",
+        "invoice_no": "26440000000000100001",
+        "field": "source_hash",
+        "message": "整文件重复：source_hash 与 26440000000000100001（第 2 份）一致，疑似重复报销",
+        "evidence": "sha256 完全一致",
+        "suggestion": "核对两笔是否为同一次报销误传；重复报销入账前需剔除",
+        "evidence_chain": [
+          { "field": "source_hash", "raw": "a3f2…c9d1", "value": "a3f2…c9d1", "row": null, "note": "两份文件哈希一致" }
+        ],
+        "explanation": { "what": "这张发票和本批次另一份文件内容完全相同（文件指纹一致），系统怀疑是同一张票被重复提交了两次。", "impact": "若两笔都入账，会造成同一笔费用重复报销、进项税重复抵扣，审计和税务检查时属于典型问题。", "action": "核对两笔是否为同一次报销误传；确认重复后只保留一笔，另一笔作废处理。", "who": "报销经办人核对来源，财务复核岗剔除重复后入账。", "source": "llm:demo:synthetic", "prompt_version": "explain-v1" }
+      },
+      {
+        "rule_id": "R9",
+        "severity": "中",
+        "confidence": "疑似",
+        "invoice_no": "26440000000000100003",
+        "field": "备注",
+        "message": "差额征税票（KCE 存在）但备注未含『差额征税：』声明，征收方式存疑",
+        "evidence": "KCE=0.07 / 备注=票务代理服务费",
+        "suggestion": "补充差额征税声明或核对征收方式",
+        "evidence_chain": [
+          { "field": "KCE", "raw": "0.07", "value": "0.07", "row": null, "note": "差额征税标识存在" },
+          { "field": "备注", "raw": "票务代理服务费", "value": "票务代理服务费", "row": null, "note": "未匹配『差额征税：』" }
+        ],
+        "explanation": { "what": "这张票按差额征税方式开具（票面有差额征税标识），但备注栏没有写『差额征税：』的固定声明文字，征收方式在票面上不完整。", "impact": "差额征税票的征收方式声明是开票规范要求；声明缺失可能导致税务系统比对不通过或报销时被质疑计税方式。", "action": "向开票方确认征收方式并补开发票或补充备注；核对差额扣除金额是否在票面完整反映。", "who": "开票方财务核对征收方式，本企业财务复核岗确认计税口径。", "source": "llm:demo:synthetic", "prompt_version": "explain-v1" }
+      },
+      {
+        "rule_id": "R11",
+        "severity": "中",
+        "confidence": "疑似",
+        "invoice_no": "26440000000000100004",
+        "field": "红字发票对应的蓝字发票号码",
+        "message": "红字发票关联的蓝字票号 26440000000000009999 不在本批次（历史库未接入，占位规则）",
+        "evidence": "红字票：对应蓝票号存在但不可查",
+        "suggestion": "接入历史票库后核验红冲合法性；当前仅提示",
+        "evidence_chain": [
+          { "field": "红字发票对应的蓝字发票号码", "raw": "26440000000000009999", "value": "26440000000000009999", "row": null, "note": "历史库未接入，存在性未验证" }
+        ],
+        "explanation": { "what": "这是一张红字（负数）发票，它声明冲销一张蓝字发票，但那张被冲的蓝字发票不在本次上传的批次里，系统暂时无法验证红冲关系是否真实成立。", "impact": "红冲关系不成立可能导致负数发票入账后无对应蓝票，影响进项转出与申报数据的一致性。", "action": "从历史票库中找到对应蓝字发票核对红冲金额是否一致；当前版本未接入历史库，需人工确认。", "who": "财务复核岗核对红冲对应蓝票与金额。", "source": "llm:demo:synthetic", "prompt_version": "explain-v1" }
+      }
     ],
     "invoices": [
-      {"invoice_no":"26440000000000100001","invoice_type":"增值税电子普通发票","issue_date":"2026-08-01","amount":"800.00","tax":"48.00","total":"848.00","seller_name":"示例服务有限公司","status":"待复核","warning_count":0,"item_count":2},
-      {"invoice_no":"26440000000000100002","invoice_type":"增值税电子普通发票","issue_date":"2026-08-02","amount":"1500.00","tax":"90.00","total":"1590.00","seller_name":"示例制造集团有限公司","status":"待复核","warning_count":0,"item_count":3},
-      {"invoice_no":"26440000000000100003","invoice_type":"增值税电子普通发票（差额征税）","issue_date":"2026-08-03","amount":"86.20","tax":"5.17","total":"91.37","seller_name":"示例票务代理有限公司","status":"待复核","warning_count":0,"item_count":1},
-      {"invoice_no":"26440000000000100004","invoice_type":"增值税电子普通发票（红字）","issue_date":"2026-08-04","amount":"-500.00","tax":"-30.00","total":"-530.00","seller_name":"示例物流有限公司","status":"待复核","warning_count":0,"item_count":2,"review_needed":true,"review_reason":"OCR 关键字段置信度偏低（最低 0.62）；价税勾稽不符（金额+税额≠价税合计）"},
-      {"invoice_no":"26440000000000100005","invoice_type":"增值税电子普通发票","issue_date":"2026-08-05","amount":"120.00","tax":"7.20","total":"127.20","seller_name":"示例咨询有限公司","status":"未见异常","warning_count":0,"item_count":1}
+      { "invoice_no": "26440000000000100001", "invoice_type": "增值税电子普通发票", "issue_date": "2026-08-01", "amount": "800.00", "tax": "48.00", "total": "848.00", "seller_name": "示例服务有限公司", "status": "待复核", "warning_count": 0, "item_count": 2 },
+      { "invoice_no": "26440000000000100002", "invoice_type": "增值税电子普通发票", "issue_date": "2026-08-02", "amount": "1500.00", "tax": "90.00", "total": "1590.00", "seller_name": "示例制造集团有限公司", "status": "待复核", "warning_count": 0, "item_count": 3 },
+      { "invoice_no": "26440000000000100003", "invoice_type": "增值税电子普通发票（差额征税）", "issue_date": "2026-08-03", "amount": "86.20", "tax": "5.17", "total": "91.37", "seller_name": "示例票务代理有限公司", "status": "待复核", "warning_count": 0, "item_count": 1 },
+      { "invoice_no": "26440000000000100004", "invoice_type": "增值税电子普通发票（红字）", "issue_date": "2026-08-04", "amount": "-500.00", "tax": "-30.00", "total": "-530.00", "seller_name": "示例物流有限公司", "status": "待复核", "warning_count": 0, "item_count": 2, "review_needed": true, "review_reason": "OCR 关键字段置信度偏低（最低 0.62）；价税勾稽不符（金额+税额≠价税合计）" },
+      { "invoice_no": "26440000000000100005", "invoice_type": "增值税电子普通发票", "issue_date": "2026-08-05", "amount": "120.00", "tax": "7.20", "total": "127.20", "seller_name": "示例咨询有限公司", "status": "未见异常", "warning_count": 0, "item_count": 1 }
     ],
-    "failed": [{"file":"扫描件-无文本层.pdf","error":"PDF 无可提取文本且本地 OCR 不可用，疑似扫描件"}],
-    "ruleset_version":"0.3.0",
-    "ruleset":{"version":"0.3.0","name":"invoice-precheck 规则包","effective_date":"2026-09-23","scope_note":"政策依据按主题引用；规则阈值（限额/连号窗口/大额上限）为占位口径，待真实业务数据校准"},
+    "failed": [{ "file": "扫描件-无文本层.pdf", "error": "PDF 无可提取文本且本地 OCR 不可用，疑似扫描件" }],
+    "ruleset_version": "0.3.0",
+    "ruleset": { "version": "0.3.0", "name": "invoice-precheck 规则包", "effective_date": "2026-09-23", "scope_note": "政策依据按主题引用；规则阈值（限额/连号窗口/大额上限）为占位口径，待真实业务数据校准" },
     "rules": rules,
-    "rules_summary":{"enabled_count":10,"命中":4,"未命中":4,"未执行":2,"note":"未执行的规则因数据不足或未配置未判定，不计入命中"},
-    "generated_at": ts, "batch_id":"demo-20260923-0001",
-    "scope_note": SCOPE_NOTE, "disclaimer": DISCLAIMER
+    "rules_summary": { "enabled_count": 10, "命中": 4, "未命中": 4, "未执行": 2, "note": "未执行的规则因数据不足或未配置未判定，不计入命中" },
+    "generated_at": ts,
+    "batch_id": "demo-20260923-0001",
+    "scope_note": SCOPE_NOTE,
+    "disclaimer": DISCLAIMER
   };
 }
-
-/* 通俗解释区块（F）：有 explanation → 展示；无 → 空。source 标注来源。 */
 function explainBlock(f) {
   const e = f.explanation;
   if (!e) return "";
@@ -514,83 +570,94 @@ function explainBlock(f) {
     <b>怎么处理：</b>${esc(e.action)}<br/>
     <b>该谁处理：</b>${esc(e.who)}</div>`;
 }
-
-/* ---------- 处置状态闭环（P1①，DeepSeek 任务卡落地） ---------- */
 const DISP_KEY = "fap:dispositions:v1";
-/* riskId 契约（DeepSeek 评审 C1/C2，2026-09-23 冻结）：
-   - 输入拼接（顺序固定）：rule_id | invoice_no | RULE_VERSION | evidence_path
-   - evidence_path：evidence_chain 按数组顺序，每项 field+":"+raw，| 连接（顺序=规则引擎输出顺序，不得排序——排序会改变语义）
-   - 编码：UTF-8；票号不得 trim 后拼接（票号本身无空白，保持原样）
-   - 前缀 v1: 预留哈希算法升级退路（换 sha256 时新旧键共存+一次性迁移）
-   - 规则版本进入哈希：规则升版 → 结论可能变 → 处置状态重置属有意语义（见 KPI 口径说明） */
 const RID_SCHEMA = "v1";
 function fnv1a64(s) {
-  let h1 = 0x811c9dc5, h2 = 0x01000193 >>> 0; // 简化：用两个 32 位 FNV 变体拼 16 hex
-  let a = 0x811c9dc5, b = 0x01000193;
+  let h1 = 2166136261, h2 = 16777619 >>> 0;
+  let a = 2166136261, b = 16777619;
   for (let i = 0; i < s.length; i++) {
     const c = s.charCodeAt(i);
-    a ^= c; a = Math.imul(a, 0x01000193) >>> 0;
-    b = (b + c) | 0; b = Math.imul(b, 0x85ebca6b) >>> 0;
+    a ^= c;
+    a = Math.imul(a, 16777619) >>> 0;
+    b = b + c | 0;
+    b = Math.imul(b, 2246822507) >>> 0;
   }
   return a.toString(16).padStart(8, "0") + b.toString(16).padStart(8, "0");
 }
 function riskId(f) {
-  const path = (f.evidence_chain || []).map(e => e.field + ":" + (e.raw ?? "")).join("|");
+  const path = (f.evidence_chain || []).map((e) => {
+    var _a;
+    return e.field + ":" + ((_a = e.raw) != null ? _a : "");
+  }).join("|");
   return RID_SCHEMA + ":" + fnv1a64([f.rule_id, f.invoice_no || "", "0.3.0", path].join("|"));
 }
-function loadDisp() { try { return JSON.parse(localStorage.getItem(DISP_KEY) || "{}"); } catch (e) { return {}; } }
+function loadDisp() {
+  try {
+    return JSON.parse(localStorage.getItem(DISP_KEY) || "{}");
+  } catch (e) {
+    return {};
+  }
+}
 const DISP_MAX = 500;
 function saveDisp(d) {
   const keys = Object.keys(d);
-  if (keys.length > DISP_MAX) { // 上限淘汰最旧（按 updatedAt）
-    const sorted = keys.filter(k => d[k] && d[k].updatedAt)
-      .sort((a, b) => (d[a].updatedAt < d[b].updatedAt ? -1 : 1));
+  if (keys.length > DISP_MAX) {
+    const sorted = keys.filter((k) => d[k] && d[k].updatedAt).sort((a, b) => d[a].updatedAt < d[b].updatedAt ? -1 : 1);
     const drop = keys.length - DISP_MAX;
-    sorted.slice(0, drop).forEach(k => delete d[k]);
+    sorted.slice(0, drop).forEach((k) => delete d[k]);
   }
-  try { localStorage.setItem(DISP_KEY, JSON.stringify(d)); return true; }
-  catch (e) { window.__dispStoreFail = true; return false; } // 隐私模式/配额满：处置不保留
+  try {
+    localStorage.setItem(DISP_KEY, JSON.stringify(d));
+    return true;
+  } catch (e) {
+    window.__dispStoreFail = true;
+    return false;
+  }
 }
-function getDisp(id) { return loadDisp()[id] || null; } // 不变式：永不返回 undefined 状态
+function getDisp(id) {
+  return loadDisp()[id] || null;
+}
 function setDisp(id, status) {
   const d = loadDisp();
   if (status === "pending") delete d[id];
-  else d[id] = { status, updatedAt: new Date().toISOString() };
+  else d[id] = { status, updatedAt: (/* @__PURE__ */ new Date()).toISOString() };
   if (!saveDisp(d)) window.__dispStoreFail = true;
 }
-window.addEventListener("storage", e => { // 多标签页同步（深评中4）
+window.addEventListener("storage", (e) => {
   if (e.key === DISP_KEY && __lastReport) renderReport();
 });
-
-/* ---------- 复核工作台 v2（RV-17 事前评审采纳，2026-09-23） ----------
-   三态：reviewStatus = pending(数据待复核) | confirmed(数据已确认) | corrected(数据已修正)
-   复核≠处置：复核=发票级数据可信度；处置=findings级风险处理，两者不混、不自动联动。
-   留痕：每条记录存 original 原始快照 + current 当前值 + auditLog 操作流水（从哪到哪）。
-   MVP 边界：localStorage 本地，可清空/可篡改——审计留痕以导出 CSV 为准（诚实标注）。
-   B2 语义（RV-18/19/20 定稿）：reviewedAt=最近一次复核动作时间（保存/确认）；重置=软删复核层
-   （底层解析 __lastReport 数据仍在，仅删除复核记录→回滚到数据待复核；corrected/corrected_fields/
-   auditLog 随记录一并清空，reviewedAt 清空；导出不再落旧修正值）；clear 前弹确认防误删。
-   B4 语义（RV-18/19 定稿）：修正值不参与规则判定与处置（处置基于解析原始值）；修正仅用于
-   人工留痕与导出清单；处置后修正=导出清单与处置清单独立可对账（口径=分别以各自时间为准）。 */
 const REV_KEY = "fap:review:v1";
 const REV_FIELDS = [
-  {k:"invoice_no", label:"发票号码"},
-  {k:"invoice_type", label:"票种"},
-  {k:"issue_date", label:"开票日期"},
-  {k:"amount", label:"金额（不含税）"},
-  {k:"tax", label:"税额"},
-  {k:"total", label:"价税合计"},
-  {k:"seller_name", label:"销售方名称"},
-  {k:"seller_taxid", label:"销售方税号"},
-  {k:"buyer_name", label:"购买方名称"},
-  {k:"buyer_taxid", label:"购买方税号"},
+  { k: "invoice_no", label: "发票号码" },
+  { k: "invoice_type", label: "票种" },
+  { k: "issue_date", label: "开票日期" },
+  { k: "amount", label: "金额（不含税）" },
+  { k: "tax", label: "税额" },
+  { k: "total", label: "价税合计" },
+  { k: "seller_name", label: "销售方名称" },
+  { k: "seller_taxid", label: "销售方税号" },
+  { k: "buyer_name", label: "购买方名称" },
+  { k: "buyer_taxid", label: "购买方税号" }
 ];
-function loadRev() { try { return JSON.parse(localStorage.getItem(REV_KEY) || "{}"); } catch (e) { return {}; } }
-function saveRev(d) {
-  try { localStorage.setItem(REV_KEY, JSON.stringify(d)); return true; }
-  catch (e) { window.__revStoreFail = true; return false; }
+function loadRev() {
+  try {
+    return JSON.parse(localStorage.getItem(REV_KEY) || "{}");
+  } catch (e) {
+    return {};
+  }
 }
-function getRev(invNo) { return loadRev()[invNo] || null; }
+function saveRev(d) {
+  try {
+    localStorage.setItem(REV_KEY, JSON.stringify(d));
+    return true;
+  } catch (e) {
+    window.__revStoreFail = true;
+    return false;
+  }
+}
+function getRev(invNo) {
+  return loadRev()[invNo] || null;
+}
 function setRev(invNo, rec) {
   const d = loadRev();
   if (rec === null) delete d[invNo];
@@ -599,19 +666,20 @@ function setRev(invNo, rec) {
   closeRevModal();
   if (__lastReport) renderReport();
 }
-function _findInv(invNo) { return (__lastReport && (__lastReport.invoices||[]).find(x => x.invoice_no === invNo)) || null; }
-/* 复核弹窗（modal：不在卡片内平铺输入框） */
+function _findInv(invNo) {
+  return __lastReport && (__lastReport.invoices || []).find((x) => x.invoice_no === invNo) || null;
+}
 function openReviewModal(invNo) {
-  const i = _findInv(invNo); if (!i) return;
+  const i = _findInv(invNo);
+  if (!i) return;
   const rec = getRev(invNo);
   const reason = esc(i.review_reason || "OCR 低置信度 / 勾稽不一致 / 字段缺失");
-  const fields = REV_FIELDS.map(f => {
-    const val = rec ? (rec.current[f.k] ?? i[f.k] ?? "") : (i[f.k] ?? "");
+  const fields = REV_FIELDS.map((f) => {
+    var _a, _b, _c;
+    const val = rec ? (_b = (_a = rec.current[f.k]) != null ? _a : i[f.k]) != null ? _b : "" : (_c = i[f.k]) != null ? _c : "";
     return `<div class="rev-row"><label>${f.label}</label><input class="rev-in" data-f="${f.k}" value="${esc(val)}"></div>`;
   }).join("");
-  const statusNote = rec
-    ? `<div class="rev-done-note">${rec.corrected ? "已修正 " + Object.keys(rec.corrected_fields||{}).length + " 项" : "已确认无误"} · ${esc((rec.reviewedAt||"").slice(0,16))}</div>`
-    : `<div class="rev-todo-note">数据待复核：${reason}</div>`;
+  const statusNote = rec ? `<div class="rev-done-note">${rec.corrected ? "已修正 " + Object.keys(rec.corrected_fields || {}).length + " 项" : "已确认无误"} · ${esc((rec.reviewedAt || "").slice(0, 16))}</div>` : `<div class="rev-todo-note">数据待复核：${reason}</div>`;
   const ov = document.createElement("div");
   ov.className = "rev-overlay";
   ov.id = "revOverlay";
@@ -629,307 +697,378 @@ function openReviewModal(invNo) {
   </div>`;
   document.body.appendChild(ov);
 }
-function closeRevModal() { const o = document.getElementById("revOverlay"); if (o) o.remove(); }
+function closeRevModal() {
+  const o = document.getElementById("revOverlay");
+  if (o) o.remove();
+}
 function auditHtml(rec) {
-  const rows = (rec.auditLog||[]).map(a =>
-    `<div class="rev-audit-row"><b>${esc(a.t||"")}</b> ${esc(a.op||"")}：${esc(a.field||"")} "${esc(a.from ?? "")}" → "${esc(a.to ?? "")}"</div>`).join("");
+  const rows = (rec.auditLog || []).map((a) => {
+    var _a, _b;
+    return `<div class="rev-audit-row"><b>${esc(a.t || "")}</b> ${esc(a.op || "")}：${esc(a.field || "")} "${esc((_a = a.from) != null ? _a : "")}" → "${esc((_b = a.to) != null ? _b : "")}"</div>`;
+  }).join("");
   return `<div class="rev-audit-title">操作流水</div>${rows || `<div class="hint">（无流水）</div>`}`;
 }
-/* reviewAction：RV-19 阻断1修复——复核动作与修正事实拆成两个维度：
-   reviewed: bool（是否已执行复核动作=确认/保存）——筛选/统计"待复核"用
-   corrected: bool（是否存在修正事实）——徽标显示"修正N项"用
-   corrected_fields：最终差异（original→current 每字段一条，过程流水在 auditLog） */
 function reviewAction(invNo, action) {
-  const ov = document.getElementById("revOverlay"); if (!ov) return;
-  const i = _findInv(invNo); if (!i) return;
+  const ov = document.getElementById("revOverlay");
+  if (!ov) return;
+  const i = _findInv(invNo);
+  if (!i) return;
   const oldRec = getRev(invNo);
-  const original = (oldRec && oldRec.original) || (() => { const o = {}; REV_FIELDS.forEach(f => o[f.k] = i[f.k] ?? ""); return o; })();
+  const original = oldRec && oldRec.original || (() => {
+    const o = {};
+    REV_FIELDS.forEach((f) => {
+      var _a;
+      return o[f.k] = (_a = i[f.k]) != null ? _a : "";
+    });
+    return o;
+  })();
   const current = {}, corrected_fields = {}, auditLog = (oldRec && oldRec.auditLog || []).slice();
   let changed = false;
-  ov.querySelectorAll(".rev-in").forEach(inp => {
-    const k = inp.dataset.f; const v = inp.value.trim();
+  ov.querySelectorAll(".rev-in").forEach((inp) => {
+    var _a, _b;
+    const k = inp.dataset.f;
+    const v = inp.value.trim();
     current[k] = v;
-    const from = (oldRec && oldRec.current) ? (oldRec.current[k] ?? "") : (original[k] ?? "");
-    if (String(from ?? "") !== v) {
+    const from = oldRec && oldRec.current ? (_a = oldRec.current[k]) != null ? _a : "" : (_b = original[k]) != null ? _b : "";
+    if (String(from != null ? from : "") !== v) {
       corrected_fields[k] = { from, to: v };
-      auditLog.push({ t: new Date().toISOString(), op: action === "confirm" ? "自动对齐" : "人工修正", field: k, from, to: v });
+      auditLog.push({ t: (/* @__PURE__ */ new Date()).toISOString(), op: action === "confirm" ? "自动对齐" : "人工修正", field: k, from, to: v });
       changed = true;
     }
   });
   if (action === "clear") {
     if (!window.confirm("重置将删除本票复核记录（含修正与流水），回滚到数据待复核；底层解析结果不受影响。继续？")) return;
-    setRev(invNo, null); return;  // 软删复核层，__lastReport 解析数据仍在
+    setRev(invNo, null);
+    return;
   }
-  const reviewed = true;                       // 本次=复核动作（确认或保存）
+  const reviewed = true;
   let corrected = Boolean(changed) || !!(oldRec && oldRec.corrected);
-  if (!changed && oldRec) {                    // 未变更：保留既有修正差异
+  if (!changed && oldRec) {
     Object.assign(corrected_fields, oldRec.corrected_fields || {});
     corrected = corrected || Boolean(oldRec.corrected);
   }
   if (action === "confirm" && oldRec && oldRec.corrected) {
-    auditLog.push({ t: new Date().toISOString(), op: "复核确认（保留修正）", field: "—", from: "corrected", to: "corrected" });
+    auditLog.push({ t: (/* @__PURE__ */ new Date()).toISOString(), op: "复核确认（保留修正）", field: "—", from: "corrected", to: "corrected" });
   }
-  setRev(invNo, { invoice_no: invNo, original, current, corrected_fields, reviewed, corrected, reviewedAt: new Date().toISOString(), auditLog });
+  setRev(invNo, { invoice_no: invNo, original, current, corrected_fields, reviewed, corrected, reviewedAt: (/* @__PURE__ */ new Date()).toISOString(), auditLog });
 }
-/* fmtMoney：金额千分位格式化（RV-37 财务信任点：统一小数位、千分位、负号保留）
-   "2161.40"→"¥2,161.40"；"-530.00"→"-¥530.00"；空/非法→"—" */
 function fmtMoney(v) {
-  if (v === null || v === undefined || v === "") return "—";
+  if (v === null || v === void 0 || v === "") return "—";
   const s = String(v).trim();
   if (!/^-?\d+(\.\d+)?$/.test(s)) return esc(v);
   const neg = s.startsWith("-");
   const [i, d] = (neg ? s.slice(1) : s).split(".");
   const g = i.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
-  return (neg ? "-" : "") + "¥" + g + (d !== undefined ? "." + d : "");
+  return (neg ? "-" : "") + "¥" + g + (d !== void 0 ? "." + d : "");
 }
-
-/* ---------- 导出共用模型（RV-35 方案 D 采纳） ----------
-   EXPORT_COLUMNS：列定义（key/表头/类型）；buildExportRows() 生成行数据。
-   CSV 与 XLSX 共用同一模型，渲染层各自适配（列名/顺序/修正值优先级严格一致）。 */
 const EXPORT_COLUMNS = [
-  { k: "invoice_no",   h: "发票号码",   t: "text" },
-  { k: "invoice_type", h: "票种",       t: "text" },
-  { k: "issue_date",   h: "开票日期",   t: "text" },
-  { k: "amount",       h: "金额",       t: "number" },
-  { k: "tax",          h: "税额",       t: "number" },
-  { k: "total",        h: "价税合计",   t: "number" },
-  { k: "seller_name",  h: "销售方",     t: "text" },
+  { k: "invoice_no", h: "发票号码", t: "text" },
+  { k: "invoice_type", h: "票种", t: "text" },
+  { k: "issue_date", h: "开票日期", t: "text" },
+  { k: "amount", h: "金额", t: "number" },
+  { k: "tax", h: "税额", t: "number" },
+  { k: "total", h: "价税合计", t: "number" },
+  { k: "seller_name", h: "销售方", t: "text" },
   { k: "seller_taxid", h: "销售方税号", t: "text" },
-  { k: "buyer_name",   h: "购买方",     t: "text" },
+  { k: "buyer_name", h: "购买方", t: "text" },
   { k: "review_state", h: "数据可信度", t: "text" },
-  { k: "corrected",    h: "修正字段",   t: "text" },
-  { k: "audit_log",    h: "修正流水",   t: "text" },
-  { k: "reviewed_at",  h: "复核时间",   t: "text" },
+  { k: "corrected", h: "修正字段", t: "text" },
+  { k: "audit_log", h: "修正流水", t: "text" },
+  { k: "reviewed_at", h: "复核时间", t: "text" }
 ];
 function buildExportRows() {
-  const d = __lastReport; if (!d || !(d.invoices||[]).length) return null;
+  const d = __lastReport;
+  if (!d || !(d.invoices || []).length) return null;
   const rows = [];
-  (d.invoices||[]).forEach(i => {
+  (d.invoices || []).forEach((i) => {
     const rec = getRev(i.invoice_no);
-    const st = rec ? (rec.corrected ? "数据已修正" : "数据已确认") : (i.review_needed ? "数据待复核" : "自动通过");
-    const cf = rec ? Object.keys(rec.corrected_fields||{}).join(";") : "";
-    const log = rec ? (rec.auditLog||[]).map(a => `${a.field}:${a.from}→${a.to}`).join(" | ") : "";
-    const cur = rec ? rec.current : i; // 数值列=修正后最终值（B4"修正用于导出清单"）
+    const st = rec ? rec.corrected ? "数据已修正" : "数据已确认" : i.review_needed ? "数据待复核" : "自动通过";
+    const cf = rec ? Object.keys(rec.corrected_fields || {}).join(";") : "";
+    const log = rec ? (rec.auditLog || []).map((a) => `${a.field}:${a.from}→${a.to}`).join(" | ") : "";
+    const cur = rec ? rec.current : i;
     rows.push({
-      invoice_no: i.invoice_no, invoice_type: i.invoice_type, issue_date: i.issue_date,
-      amount: cur.amount, tax: cur.tax, total: cur.total,
-      seller_name: cur.seller_name, seller_taxid: cur.seller_taxid||"", buyer_name: cur.buyer_name||"",
-      review_state: st, corrected: cf, audit_log: log,
-      reviewed_at: rec ? (rec.reviewedAt||"").slice(0,16) : "",
+      invoice_no: i.invoice_no,
+      invoice_type: i.invoice_type,
+      issue_date: i.issue_date,
+      amount: cur.amount,
+      tax: cur.tax,
+      total: cur.total,
+      seller_name: cur.seller_name,
+      seller_taxid: cur.seller_taxid || "",
+      buyer_name: cur.buyer_name || "",
+      review_state: st,
+      corrected: cf,
+      audit_log: log,
+      reviewed_at: rec ? (rec.reviewedAt || "").slice(0, 16) : ""
     });
   });
   return rows;
 }
-
-/* ---------- 最小 XLSX 生成器（RV-35 方案 D：零依赖、离线、真 .xlsx、数据不出本机） ----------
-   结构：ZIP(store) + OOXML 最小集。文本单元格用 inlineStr（天然防公式注入，即使内容以 = 开头
-   也不会被 Excel 当公式执行）；合法数值写 t="n"；金额列 numFmtId=4（#,##0.00 可求和）。 */
-const XL_CRC_TABLE = (() => { const tt = new Uint32Array(256); for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1); tt[n] = c >>> 0; } return tt; })();
-function xlCrc32(bytes) { let c = 0xFFFFFFFF; for (let i = 0; i < bytes.length; i++) c = XL_CRC_TABLE[(c ^ bytes[i]) & 0xFF] ^ (c >>> 8); return (c ^ 0xFFFFFFFF) >>> 0; }
-/* xlXmlSan：XML 1.0 合法化 + 转义（RV-36 P0-2/P1-1/P1-2）
-   ① 剥离控制字符 \x00-\x08 \x0B \x0C \x0E-\x1F \x7F-\x9F（OCR/PDF 抽取常见残留，
-      Excel 遇非法字符弹"发现不可读取的内容"并丢弃整行）
-   ② 未配对代理对 → U+FFFD（for...of 按码点遍历，天然不切半代理对）
-   ③ 32767 字符上限按码点截断（超长修正流水/JSON 不触发修复提示）
-   ④ XML 实体转义；返回 {text, hasSpace}（hasSpace→<t> 加 xml:space="preserve" 防首尾空格被 trim） */
+const XL_CRC_TABLE = (() => {
+  const tt = new Uint32Array(256);
+  for (let n = 0; n < 256; n++) {
+    let c = n;
+    for (let k = 0; k < 8; k++) c = c & 1 ? 3988292384 ^ c >>> 1 : c >>> 1;
+    tt[n] = c >>> 0;
+  }
+  return tt;
+})();
+function xlCrc32(bytes) {
+  let c = 4294967295;
+  for (let i = 0; i < bytes.length; i++) c = XL_CRC_TABLE[(c ^ bytes[i]) & 255] ^ c >>> 8;
+  return (c ^ 4294967295) >>> 0;
+}
 function xlXmlSan(v) {
-  let s = String(v ?? "");
+  let s = String(v != null ? v : "");
   if (/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F-\x9F]/.test(s)) s = s.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F-\x9F]/g, "");
   let out = "", first = true;
   for (const ch of s) {
     const c = ch.codePointAt(0);
-    if (c >= 0xD800 && c <= 0xDFFF) { out += "\uFFFD"; continue; }
+    if (c >= 55296 && c <= 57343) {
+      out += "�";
+      continue;
+    }
     if (first) first = false;
     if (out.length >= 32767) break;
     out += ch;
   }
-  return { text: out.replace(/[<>&'"]/g, m => ({ "<":"&lt;", ">":"&gt;", "&":"&amp;", "'":"&apos;", '"':"&quot;" }[m])), hasSpace: /^\s|\s$/.test(s) };
+  return { text: out.replace(/[<>&'"]/g, (m) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", "'": "&apos;", '"': "&quot;" })[m]), hasSpace: /^\s|\s$/.test(s) };
 }
-function xlColName(idx) { let s = ""; idx++; while (idx > 0) { const m = (idx - 1) % 26; s = String.fromCharCode(65 + m) + s; idx = Math.floor((idx - 1) / 26); } return s; }
+function xlColName(idx) {
+  let s = "";
+  idx++;
+  while (idx > 0) {
+    const m = (idx - 1) % 26;
+    s = String.fromCharCode(65 + m) + s;
+    idx = Math.floor((idx - 1) / 26);
+  }
+  return s;
+}
 function xlZip(files) {
   const enc = new TextEncoder();
-  const parts = []; let offset = 0; const central = [];
+  const parts = [];
+  let offset = 0;
+  const central = [];
   for (const name in files) {
     const nb = enc.encode(name), db = files[name], crc = xlCrc32(db);
-    // local file header：0 sig /4 ver /6 flags /8 comp /10 mtime /12 mdate /14 crc /18 csize /22 usize /26 nlen /28 xlen
     const lh = new DataView(new ArrayBuffer(30 + nb.length));
-    lh.setUint32(0, 0x04034b50, true); lh.setUint16(4, 20, true); lh.setUint16(6, 0x0800, true);
-    lh.setUint16(8, 0, true); lh.setUint16(10, 0, true); lh.setUint16(12, 0, true);
-    lh.setUint32(14, crc, true); lh.setUint32(18, db.length, true); lh.setUint32(22, db.length, true);
-    lh.setUint16(26, nb.length, true); lh.setUint16(28, 0, true);
+    lh.setUint32(0, 67324752, true);
+    lh.setUint16(4, 20, true);
+    lh.setUint16(6, 2048, true);
+    lh.setUint16(8, 0, true);
+    lh.setUint16(10, 0, true);
+    lh.setUint16(12, 0, true);
+    lh.setUint32(14, crc, true);
+    lh.setUint32(18, db.length, true);
+    lh.setUint32(22, db.length, true);
+    lh.setUint16(26, nb.length, true);
+    lh.setUint16(28, 0, true);
     nb.forEach((b, i) => lh.setUint8(30 + i, b));
     const lhB = new Uint8Array(lh.buffer);
     parts.push(lhB, db);
     central.push({ nb, crc, size: db.length, offset });
     offset += lhB.length + db.length;
   }
-  const cdStart = offset; let cdSize = 0;
+  const cdStart = offset;
+  let cdSize = 0;
   for (const c of central) {
-    // central dir：0 sig /4 verMade /6 verNeed /8 flags /10 comp /12 mtime /14 mdate /16 crc /20 csize /24 usize /28 nlen /30 xlen /32 clen /34 disk /36 iattr /38 eattr /42 off /46 name
     const ch = new DataView(new ArrayBuffer(46 + c.nb.length));
-    ch.setUint32(0, 0x02014b50, true); ch.setUint16(4, 20, true); ch.setUint16(6, 20, true); ch.setUint16(8, 0x0800, true);
-    ch.setUint16(10, 0, true); ch.setUint16(12, 0, true); ch.setUint16(14, 0, true);
-    ch.setUint32(16, c.crc, true); ch.setUint32(20, c.size, true); ch.setUint32(24, c.size, true);
-    ch.setUint16(28, c.nb.length, true); ch.setUint16(30, 0, true); ch.setUint16(32, 0, true);
-    ch.setUint16(34, 0, true); ch.setUint16(36, 0, true); ch.setUint32(38, 0, true);
+    ch.setUint32(0, 33639248, true);
+    ch.setUint16(4, 20, true);
+    ch.setUint16(6, 20, true);
+    ch.setUint16(8, 2048, true);
+    ch.setUint16(10, 0, true);
+    ch.setUint16(12, 0, true);
+    ch.setUint16(14, 0, true);
+    ch.setUint32(16, c.crc, true);
+    ch.setUint32(20, c.size, true);
+    ch.setUint32(24, c.size, true);
+    ch.setUint16(28, c.nb.length, true);
+    ch.setUint16(30, 0, true);
+    ch.setUint16(32, 0, true);
+    ch.setUint16(34, 0, true);
+    ch.setUint16(36, 0, true);
+    ch.setUint32(38, 0, true);
     ch.setUint32(42, c.offset, true);
     c.nb.forEach((b, i) => ch.setUint8(46 + i, b));
-    parts.push(new Uint8Array(ch.buffer)); cdSize += 46 + c.nb.length;
+    parts.push(new Uint8Array(ch.buffer));
+    cdSize += 46 + c.nb.length;
   }
-  // EOCD：0 sig /4 disk /6 cdDisk /8 nEntries /10 nEntries /12 cdSize /16 cdOff /20 clen
   const eocd = new DataView(new ArrayBuffer(22));
-  eocd.setUint32(0, 0x06054b50, true); eocd.setUint16(4, 0, true); eocd.setUint16(6, 0, true);
-  eocd.setUint16(8, central.length, true); eocd.setUint16(10, central.length, true);
-  eocd.setUint32(12, cdSize, true); eocd.setUint32(16, cdStart, true); eocd.setUint16(20, 0, true);
+  eocd.setUint32(0, 101010256, true);
+  eocd.setUint16(4, 0, true);
+  eocd.setUint16(6, 0, true);
+  eocd.setUint16(8, central.length, true);
+  eocd.setUint16(10, central.length, true);
+  eocd.setUint32(12, cdSize, true);
+  eocd.setUint32(16, cdStart, true);
+  eocd.setUint16(20, 0, true);
   parts.push(new Uint8Array(eocd.buffer));
   const total = parts.reduce((s, u) => s + u.length, 0), out = new Uint8Array(total);
-  let o = 0; for (const u of parts) { out.set(u, o); o += u.length; }
+  let o = 0;
+  for (const u of parts) {
+    out.set(u, o);
+    o += u.length;
+  }
   return out;
 }
 function exportInvoicesXLSX() {
-  const rows = buildExportRows(); if (!rows) { alert("无发票数据可导出"); return; }
+  const rows = buildExportRows();
+  if (!rows) {
+    alert("无发票数据可导出");
+    return;
+  }
   const enc = (s) => new TextEncoder().encode(s);
   let sheetXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>';
   const cell = (ref, col, v) => {
-    if (v === null || v === undefined || v === "") return `<c r="${ref}"/>`; // 空值→空单元格（P1-5：<v></v> 非法）
+    if (v === null || v === void 0 || v === "") return `<c r="${ref}"/>`;
     let s = String(v);
     if (col.t === "number") {
       const tr = s.trim();
-      // 数值白名单 + 有效数字 ≤15（P1-4：超长数字串会 <v> 溢出→降级文本）；列元数据驱动（P0-1：票号等 text 列永不走此分支）
       if (/^-?\d+(\.\d+)?$/.test(tr) && tr.replace(/[^0-9]/g, "").length <= 15)
-        return `<c r="${ref}" s="1"><v>${tr}</v></c>`; // 数值+金额样式
-      const t1 = xlXmlSan(s); return `<c r="${ref}" t="inlineStr"><is><t${t1.hasSpace ? ' xml:space="preserve"' : ""}>${t1.text}</t></is></c>`;
+        return `<c r="${ref}" s="1"><v>${tr}</v></c>`;
+      const t1 = xlXmlSan(s);
+      return `<c r="${ref}" t="inlineStr"><is><t${t1.hasSpace ? ' xml:space="preserve"' : ""}>${t1.text}</t></is></c>`;
     }
-    const t2 = xlXmlSan(s); return `<c r="${ref}" t="inlineStr"><is><t${t2.hasSpace ? ' xml:space="preserve"' : ""}>${t2.text}</t></is></c>`;
+    const t2 = xlXmlSan(s);
+    return `<c r="${ref}" t="inlineStr"><is><t${t2.hasSpace ? ' xml:space="preserve"' : ""}>${t2.text}</t></is></c>`;
   };
   let rowXml = '<row r="1">';
-  EXPORT_COLUMNS.forEach((c, i) => { const th = xlXmlSan(c.h); rowXml += `<c r="${xlColName(i)}1" t="inlineStr"><is><t${th.hasSpace ? ' xml:space="preserve"' : ""}>${th.text}</t></is></c>`; });
-  sheetXml += rowXml + '</row>';
+  EXPORT_COLUMNS.forEach((c, i) => {
+    const th = xlXmlSan(c.h);
+    rowXml += `<c r="${xlColName(i)}1" t="inlineStr"><is><t${th.hasSpace ? ' xml:space="preserve"' : ""}>${th.text}</t></is></c>`;
+  });
+  sheetXml += rowXml + "</row>";
   rows.forEach((r, ri) => {
     let rx = `<row r="${ri + 2}">`;
-    EXPORT_COLUMNS.forEach((c, ci) => { rx += cell(xlColName(ci) + (ri + 2), c, r[c.k]); });
-    sheetXml += rx + '</row>';
+    EXPORT_COLUMNS.forEach((c, ci) => {
+      rx += cell(xlColName(ci) + (ri + 2), c, r[c.k]);
+    });
+    sheetXml += rx + "</row>";
   });
-  sheetXml += '</sheetData></worksheet>';
+  sheetXml += "</sheetData></worksheet>";
   const files = {
     "[Content_Types].xml": enc('<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>'),
     "_rels/.rels": enc('<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>'),
     "xl/workbook.xml": enc('<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="发票清单" sheetId="1" r:id="rId1"/></sheets></workbook>'),
     "xl/_rels/workbook.xml.rels": enc('<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>'),
     "xl/worksheets/sheet1.xml": enc(sheetXml),
-    "xl/styles.xml": enc('<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><numFmts count="0"/><fonts count="1"><font><sz val="11"/><name val="Calibri"/></font></fonts><fills count="1"><fill><patternFill patternType="none"/></fill></fills><borders count="1"><border/></borders><cellStyleXfs count="1"><xf/></cellStyleXfs><cellXfs count="2"><xf xfId="0"/><xf xfId="0" numFmtId="4" applyNumberFormat="1"/></cellXfs></styleSheet>'),
+    "xl/styles.xml": enc('<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><numFmts count="0"/><fonts count="1"><font><sz val="11"/><name val="Calibri"/></font></fonts><fills count="1"><fill><patternFill patternType="none"/></fill></fills><borders count="1"><border/></borders><cellStyleXfs count="1"><xf/></cellStyleXfs><cellXfs count="2"><xf xfId="0"/><xf xfId="0" numFmtId="4" applyNumberFormat="1"/></cellXfs></styleSheet>')
   };
   const zip = xlZip(files);
-  const blob = new Blob([zip], {type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
+  const blob = new Blob([zip], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
-  a.download = "invoice-precheck-ledger-" + new Date().toISOString().slice(0,10) + ".xlsx";
-  document.body.appendChild(a); a.click(); a.remove();
-  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+  a.download = "invoice-precheck-ledger-" + (/* @__PURE__ */ new Date()).toISOString().slice(0, 10) + ".xlsx";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 5e3);
 }
-
-/* 导出发票清单 CSV（含复核状态、修正前后值；财务留痕；与 Excel 共用 EXPORT_COLUMNS 模型） */
 function exportInvoicesCSV() {
-  const data = buildExportRows(); if (!data) { alert("无发票数据可导出"); return; }
-  const lines = [["# 发票清单（" + data.length + " 张） · 生成 " + new Date().toISOString() + " · 复核记录来源=本浏览器localStorage(可清空,审计以本导出为准)"]];
-  lines.push(EXPORT_COLUMNS.map(c => c.h));
-  data.forEach(r => {
-    lines.push(EXPORT_COLUMNS.map(c => c.t === "number" ? csvNumberCell(r[c.k]) : csvCell(r[c.k], true)));
+  const data = buildExportRows();
+  if (!data) {
+    alert("无发票数据可导出");
+    return;
+  }
+  const lines = [["# 发票清单（" + data.length + " 张） · 生成 " + (/* @__PURE__ */ new Date()).toISOString() + " · 复核记录来源=本浏览器localStorage(可清空,审计以本导出为准)"]];
+  lines.push(EXPORT_COLUMNS.map((c) => c.h));
+  data.forEach((r) => {
+    lines.push(EXPORT_COLUMNS.map((c) => c.t === "number" ? csvNumberCell(r[c.k]) : csvCell(r[c.k], true)));
   });
-  const csv = "\uFEFF" + lines.map(r => r.join(",")).join("\n");
-  const blob = new Blob([csv], {type: "text/csv;charset=utf-8"});
+  const csv = "\uFEFF" + lines.map((r) => r.join(",")).join("\n");
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
-  a.download = "invoice-precheck-list-" + new Date().toISOString().slice(0,10) + ".csv";
-  document.body.appendChild(a); a.click(); a.remove();
+  a.download = "invoice-precheck-list-" + (/* @__PURE__ */ new Date()).toISOString().slice(0, 10) + ".csv";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
 }
 function shortNo(n) {
-  n = String(n ?? "");
-  return n.length > 14 ? n.slice(0,4) + "…" + n.slice(-8) : n;
+  n = String(n != null ? n : "");
+  return n.length > 14 ? n.slice(0, 4) + "…" + n.slice(-8) : n;
 }
-
-/* 导出 CSV（DeepSeek 评审 P0：财务需留痕/导出） */
-/* CSV 注入防护（DeepSeek P1）：字段以 = + - @ 开头时加 ' 前缀（防 Excel/WPS 公式执行）；
-   剥离 tab/换行（防单元格注入）；双引号包裹 + 转义 */
-/* csvCell(v, defend)：defend=true 文本列注入防护（票号/票种/购销方等）；
-   defend=false 数值列只转义不防护（RV-18 B3：金额/税额/合计可为负，红冲 -530.00
-   不得被加前缀成文本；转义在拼接前发生）。 */
 function csvCell(v, defend) {
-  let s = String(v ?? "");
+  let s = String(v != null ? v : "");
   if (/[\t\r\n]/.test(s)) s = s.replace(/[\t\r\n]+/g, " ");
   if (defend !== false && /^[=+\-@]/.test(s)) s = "'" + s;
   return `"${s.replace(/"/g, '""')}"`;
 }
-/* csvNumberCell(v)：数值列专用（RV-19 阻断2，RV-20 收紧记录）——
-   调用顺序固定：先数值类型判定（/^-?\d+(\.\d+)?$/），通过才原样输出；不通过降级文本+防护。
-   有意降级为文本的形态（边界收紧，勿放宽）：1e5、.5、+1、1,234.56、空串/None、=1+1 等。
-   locale 逗号小数点（-530,00）：非本正则 → 降级文本，双引号包裹+转义与 CSV 分隔符不冲突。 */
 function csvNumberCell(v) {
-  const s = String(v ?? "");
+  const s = String(v != null ? v : "");
   if (/^-?\d+(\.\d+)?$/.test(s)) return `"${s.replace(/"/g, '""')}"`;
   return csvCell(s, true);
 }
 function exportCSV(findings, metaMap) {
-  const rows = [["# 导出范围：全量命中清单（N 条，不随视图切换变化） · 生成 " + new Date().toISOString()]];
+  const rows = [["# 导出范围：全量命中清单（N 条，不随视图切换变化） · 生成 " + (/* @__PURE__ */ new Date()).toISOString()]];
   rows.push(["规则", "规则名", "严重度", "置信度", "票号", "字段", "问题", "建议", "处置状态", "处置时间"]);
-  (findings || []).forEach(f => {
+  (findings || []).forEach((f) => {
     const d = getDisp(riskId(f));
     rows.push([
-      f.rule_id, resolveRuleMeta(f.rule_id, metaMap || {}), f.severity, f.confidence || "疑似", f.invoice_no,
-      f.field, f.message, f.suggestion,
+      f.rule_id,
+      resolveRuleMeta(f.rule_id, metaMap || {}),
+      f.severity,
+      f.confidence || "疑似",
+      f.invoice_no,
+      f.field,
+      f.message,
+      f.suggestion,
       d ? DISP_LABEL[d.status] : DISP_LABEL.pending,
-      d ? d.updatedAt.slice(0,16).replace("T", " ") : ""
+      d ? d.updatedAt.slice(0, 16).replace("T", " ") : ""
     ]);
   });
-  const csv = "\uFEFF" + rows.map(r => r.map(csvCell).join(",")).join("\n");
-  const blob = new Blob([csv], {type: "text/csv;charset=utf-8"});
+  const csv = "\uFEFF" + rows.map((r) => r.map(csvCell).join(",")).join("\n");
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
-  a.download = "invoice-precheck-findings-" + new Date().toISOString().slice(0,10) + ".csv";
+  a.download = "invoice-precheck-findings-" + (/* @__PURE__ */ new Date()).toISOString().slice(0, 10) + ".csv";
   a.click();
   URL.revokeObjectURL(a.href);
 }
-
-/* ---------- 渲染 ---------- */
-/* ---------- 处置状态：事件委托（P1①） ---------- */
-document.addEventListener("click", e => {
+document.addEventListener("click", (e) => {
   const vs = e.target.closest(".vs");
-  if (vs) { setView(vs.dataset.view); return; }
+  if (vs) {
+    setView(vs.dataset.view);
+    return;
+  }
   const op = e.target.closest(".op");
-  if (op) { setDisp(op.dataset.rid, op.dataset.st); renderReport(); return; }
+  if (op) {
+    setDisp(op.dataset.rid, op.dataset.st);
+    renderReport();
+    return;
+  }
   const flt = e.target.closest(".flt");
   if (flt) {
     const all = document.querySelectorAll(".flt");
-    all.forEach(b => b.classList.toggle("active", b === flt));
+    all.forEach((b) => b.classList.toggle("active", b === flt));
     const f = flt.dataset.flt;
-    document.querySelectorAll("#view-risk .finding").forEach(el => {
-      el.style.display = (f === "pending") ? (el.dataset.rid && ((getDisp(el.dataset.rid) || {}).status || "pending") === "pending" ? "" : "none") : "";
+    document.querySelectorAll("#view-risk .finding").forEach((el) => {
+      el.style.display = f === "pending" ? el.dataset.rid && ((getDisp(el.dataset.rid) || {}).status || "pending") === "pending" ? "" : "none" : "";
     });
   }
 });
-
-/* 渲染入口：render 改名为 renderReport 以支持处置后重渲染 */
 let __lastReport = null;
-function render(d) { __lastReport = d; __origRender(d); }
-function renderReport() { if (__lastReport) render(__lastReport); }
-/* 单条命中风险行（P1③ 三视图共用；showOps=false 为审计视角——规则视图不参与处置主路径） */
+function render(d) {
+  __lastReport = d;
+  __origRender(d);
+}
+function renderReport() {
+  if (__lastReport) render(__lastReport);
+}
 function findingRow(f, metaMap, showOps) {
   const sev = f.severity || "低";
   const sevCls = SEV_CLS[sev] || "low";
   const conf = CONF_ALLOW.has(f.confidence) ? f.confidence : "疑似";
-  const chain = (f.evidence_chain||[]).map(e => `<li><code>${esc(e.field)}</code>${e.row != null ? `（行 ${esc(e.row)}）` : ""}：原文 ${esc(e.raw)} → ${esc(e.value)}${e.note ? ` · ${esc(e.note)}` : ""}</li>`).join("");
+  const chain = (f.evidence_chain || []).map((e) => `<li><code>${esc(e.field)}</code>${e.row != null ? `（行 ${esc(e.row)}）` : ""}：原文 ${esc(e.raw)} → ${esc(e.value)}${e.note ? ` · ${esc(e.note)}` : ""}</li>`).join("");
   const amt = f.evidence_amt != null ? `¥${esc(f.evidence_amt)}` : "";
   const rid = riskId(f);
   const disp = getDisp(rid);
   const st = disp ? disp.status : "pending";
   const dim = st === "pending" ? "" : " dim";
   const badge = st === "pending" ? "" : `<span class="stb ${st}">${st === "resolved" ? "✓" : "○"} ${DISP_LABEL[st]}</span>`;
-  const t0 = disp ? disp.updatedAt.slice(0,16).replace("T", " ") : "";
-  const ops = showOps
-    ? (st === "pending"
-      ? `<button class="op resolved" data-rid="${rid}" data-st="resolved">✓ 标记已处理</button><button class="op ignored" data-rid="${rid}" data-st="ignored">○ 忽略</button>`
-      : `<button class="op undo" data-rid="${rid}" data-st="pending">↺ 撤销（回待处理）</button>`)
-    : "";
+  const t0 = disp ? disp.updatedAt.slice(0, 16).replace("T", " ") : "";
+  const ops = showOps ? st === "pending" ? `<button class="op resolved" data-rid="${rid}" data-st="resolved">✓ 标记已处理</button><button class="op ignored" data-rid="${rid}" data-st="ignored">○ 忽略</button>` : `<button class="op undo" data-rid="${rid}" data-st="pending">↺ 撤销（回待处理）</button>` : "";
   return `<details class="finding${dim}" data-rid="${rid}">
     <summary>
       <span class="bar ${sevCls}"></span>
@@ -950,8 +1089,6 @@ function findingRow(f, metaMap, showOps) {
     </div>
   </details>`;
 }
-
-/* 复核徽标（RV-17）：三态文案，避免"已复核"被误读为风险已清零 */
 function reviewBadge(i) {
   const rec = getRev(i.invoice_no);
   if (rec) {
@@ -960,74 +1097,73 @@ function reviewBadge(i) {
       const txt = rec.corrected ? `数据已复核·修正${n}项` : "数据已复核·确认无误";
       return `<span class="badge review done" title="复核时间 ${esc(rec.reviewedAt || "")}；复核≠风险处置，未处置 findings 仍在风险清单">${esc(txt)}</span>`;
     }
-    // RV-20：未复核但已有修正记录（旧格式兼容）→ 露出修正数，防"修正被吞"
     if (n > 0) return `<span class="badge review" title="已修正 ${n} 项但尚未复核确认">数据待复核（已修正${n}项）</span>`;
   }
-  return i.review_needed
-    ? `<span class="badge review" title="${esc(i.review_reason || "OCR 低置信度/勾稽不符等")}">数据待复核</span>`
-    : "";
+  return i.review_needed ? `<span class="badge review" title="${esc(i.review_reason || "OCR 低置信度/勾稽不符等")}">数据待复核</span>` : "";
 }
-
-/* 发票视图（P1③）：按票分组，无命中票可见（防沉默暗示合规） */
 function invoiceViewHtml(d, metaMap) {
-  const sevRank = {高:0, 中:1, 低:2};
+  const sevRank = { 高: 0, 中: 1, 低: 2 };
   const byInv = {};
-  (d.findings||[]).forEach(f => (byInv[f.invoice_no] = byInv[f.invoice_no] || []).push(f));
-  const notExec = (d.rules||[]).some(r => /未执行/.test(r.state || ""));
-  const invs = (d.invoices||[]).map(i => {
-    const fs = (byInv[i.invoice_no]||[]).slice()
-      .sort((a,b) => (sevRank[a.severity] ?? 9) - (sevRank[b.severity] ?? 9) || a.rule_id.localeCompare(b.rule_id));
-    const maxSev = fs.length ? Math.min(...fs.map(f => sevRank[f.severity] ?? 9)) : 9;
-    return { ...i, fs, maxSev, clean: fs.length === 0 };
-  }).sort((a,b) => {
-    if (a.clean !== b.clean) return a.clean ? 1 : -1;                 // 无命中票最后
-    if (a.maxSev !== b.maxSev) return a.maxSev - b.maxSev;           // 最高严重度降序
-    if (a.fs.length !== b.fs.length) return b.fs.length - a.fs.length; // 命中数降序
-    return a.invoice_no.localeCompare(b.invoice_no);                 // 票号稳定升序
+  (d.findings || []).forEach((f) => (byInv[f.invoice_no] = byInv[f.invoice_no] || []).push(f));
+  const notExec = (d.rules || []).some((r) => /未执行/.test(r.state || ""));
+  const invs = (d.invoices || []).map((i) => {
+    const fs = (byInv[i.invoice_no] || []).slice().sort((a, b) => {
+      var _a, _b;
+      return ((_a = sevRank[a.severity]) != null ? _a : 9) - ((_b = sevRank[b.severity]) != null ? _b : 9) || a.rule_id.localeCompare(b.rule_id);
+    });
+    const maxSev = fs.length ? Math.min(...fs.map((f) => {
+      var _a;
+      return (_a = sevRank[f.severity]) != null ? _a : 9;
+    })) : 9;
+    return __spreadProps(__spreadValues({}, i), { fs, maxSev, clean: fs.length === 0 });
+  }).sort((a, b) => {
+    if (a.clean !== b.clean) return a.clean ? 1 : -1;
+    if (a.maxSev !== b.maxSev) return a.maxSev - b.maxSev;
+    if (a.fs.length !== b.fs.length) return b.fs.length - a.fs.length;
+    return a.invoice_no.localeCompare(b.invoice_no);
   });
   if (!invs.length) return `<div class="card card-pad"><div class="hint">无发票数据。</div></div>`;
   return `${notExec ? `<div class="view-note">⚠ 部分规则未执行（数据不足/未配置），不能据此判定无命中</div>` : ""}
-  <div class="inv-group">${invs.map(i => `
+  <div class="inv-group">${invs.map((i) => `
     <details class="inv-card${i.clean ? " clean" : ""}${notExec && i.clean ? " partial" : ""}">
       <summary class="inv-head">
         <span class="inv-no">${esc(shortNo(i.invoice_no))}</span>
         <span class="inv-full">${esc(i.invoice_no)}</span>
         <span class="inv-meta">${esc(i.seller_name || "")} · ${esc(i.issue_date || "")} · ${fmtMoney(i.total || i.amount)}${i.tax ? `（税额 ${fmtMoney(i.tax)}）` : ""}</span>
-        ${i.clean
-          ? (notExec ? `<span class="stb q">？ 未完全检查</span>` : `<span class="stb ok">✓ 无命中</span>`)
-          : `<span class="stb warn">${i.fs.length} 条命中</span>`}
+        ${i.clean ? notExec ? `<span class="stb q">？ 未完全检查</span>` : `<span class="stb ok">✓ 无命中</span>` : `<span class="stb warn">${i.fs.length} 条命中</span>`}
         ${reviewBadge(i)}
-        ${(i.review_needed || getRev(i.invoice_no)) ? `<button class="btn-ghost rev-btn" onclick="event.preventDefault();event.stopPropagation();openReviewModal('${esc(i.invoice_no)}')">复核</button>` : ""}
+        ${i.review_needed || getRev(i.invoice_no) ? `<button class="btn-ghost rev-btn" onclick="event.preventDefault();event.stopPropagation();openReviewModal('${esc(i.invoice_no)}')">复核</button>` : ""}
         <span class="caret">▸</span>
       </summary>
       <div class="inv-body">
-        ${i.clean
-          ? `<div class="inv-clean-note">${notExec ? "本票无命中，但部分规则未执行，不能判定绝对合规（最后≠最干净）" : "无命中风险（已按当前规则检查，不代表绝对合规）"}</div>`
-          : `<div class="inv-list">${i.fs.map(f => findingRow(f, metaMap, true)).join("")}</div>`}
+        ${i.clean ? `<div class="inv-clean-note">${notExec ? "本票无命中，但部分规则未执行，不能判定绝对合规（最后≠最干净）" : "无命中风险（已按当前规则检查，不代表绝对合规）"}</div>` : `<div class="inv-list">${i.fs.map((f) => findingRow(f, metaMap, true)).join("")}</div>`}
       </div>
     </details>`).join("")}</div>`;
 }
-
-/* 规则效果视图（P1③）：以 d.rules 为唯一源，审批/审计视角，不参与处置主路径 */
 function ruleViewHtml(d, metaMap) {
-  const sevRank = {高:0, 中:1, 低:2};
+  const sevRank = { 高: 0, 中: 1, 低: 2 };
   const byRule = {};
-  (d.findings||[]).forEach(f => (byRule[f.rule_id] = byRule[f.rule_id] || []).push(f));
-  const nInv = (d.invoices||[]).length;
-  const rules = (d.rules||[]).map(r => {
-    const hits = (byRule[r.rule_id]||[]).slice()
-      .sort((a,b) => (sevRank[a.severity] ?? 9) - (sevRank[b.severity] ?? 9) || a.invoice_no.localeCompare(b.invoice_no));
+  (d.findings || []).forEach((f) => (byRule[f.rule_id] = byRule[f.rule_id] || []).push(f));
+  const nInv = (d.invoices || []).length;
+  const rules = (d.rules || []).map((r) => {
+    const hits = (byRule[r.rule_id] || []).slice().sort((a, b) => {
+      var _a, _b;
+      return ((_a = sevRank[a.severity]) != null ? _a : 9) - ((_b = sevRank[b.severity]) != null ? _b : 9) || a.invoice_no.localeCompare(b.invoice_no);
+    });
     const notExec = /未执行/.test(r.state || "");
-    const maxSev = hits.length ? Math.min(...hits.map(f => sevRank[f.severity] ?? 9)) : 9;
-    return { ...r, hits, hit: hits.length, miss: notExec ? null : Math.max(0, nInv - hits.length), notExec, maxSev };
-  }).sort((a,b) => {
-    if (a.maxSev !== b.maxSev) return a.maxSev - b.maxSev;            // 最高严重度降序
-    if (a.hit !== b.hit) return b.hit - a.hit;                       // 命中数降序
-    return (a.rule_id || "").localeCompare(b.rule_id || "");         // 规则名升序
+    const maxSev = hits.length ? Math.min(...hits.map((f) => {
+      var _a;
+      return (_a = sevRank[f.severity]) != null ? _a : 9;
+    })) : 9;
+    return __spreadProps(__spreadValues({}, r), { hits, hit: hits.length, miss: notExec ? null : Math.max(0, nInv - hits.length), notExec, maxSev });
+  }).sort((a, b) => {
+    if (a.maxSev !== b.maxSev) return a.maxSev - b.maxSev;
+    if (a.hit !== b.hit) return b.hit - a.hit;
+    return (a.rule_id || "").localeCompare(b.rule_id || "");
   });
   if (!rules.length) return `<div class="card card-pad"><div class="hint">无规则数据。</div></div>`;
   return `<div class="view-note">规则效果视图（只读分析视角，不参与处置）：每条规则的命中/未命中/未执行三态；未执行不代表合规，需补数据/配置后重跑；处置请到风险/发票视图</div>
-  <div class="rule-group">${rules.map(r => {
+  <div class="rule-group">${rules.map((r) => {
     const sev = r.severity || "中";
     const sevCls = SEV_CLS[sev] || "low";
     return `<div class="rule-card">
@@ -1036,89 +1172,95 @@ function ruleViewHtml(d, metaMap) {
         <span class="rname">${esc(resolveRuleMeta(r.rule_id, metaMap))}</span>
         <span class="rule-cnt">命中 <b>${r.hit}</b>${r.notExec ? ` · <span class="fail">未执行</span>` : ` · 未命中 <b>${r.miss}</b>`}</span>
       </div>
-      ${r.hit ? `<details class="rule-hits"><summary>命中票（${r.hit}）</summary><div class="inner">${r.hits.map(f => findingRow(f, metaMap, false)).join("")}</div></details>` : ""}
+      ${r.hit ? `<details class="rule-hits"><summary>命中票（${r.hit}）</summary><div class="inner">${r.hits.map((f) => findingRow(f, metaMap, false)).join("")}</div></details>` : ""}
       ${r.notExec ? `<div class="rule-note">未执行（${esc(r.state)}）——不能判定合规，需补齐数据/配置后重跑</div>` : ""}
     </div>`;
   }).join("")}</div>`;
 }
-
-/* 视图切换（P1③）：localStorage 持久化，非法值回退风险视图；renderReport 重渲染后保持 */
 const VIEW_KEY = "fap:report-view";
 function applyFltState(v) {
   const off = v !== "risk";
-  document.querySelectorAll(".flt").forEach(b => { b.disabled = off; });
+  document.querySelectorAll(".flt").forEach((b) => {
+    b.disabled = off;
+  });
   const h = document.getElementById("fltHint");
   if (h) h.textContent = off ? "筛选仅作用于风险视图" : "";
 }
 function setView(v) {
-  if (!["risk","invoice","rule"].includes(v)) v = "risk";
-  try { localStorage.setItem(VIEW_KEY, v); } catch (e) { /* 存储不可用：视图状态不保留，回退风险视图 */ }
-  document.querySelectorAll(".report-view").forEach(el => { el.hidden = el.id !== "view-" + v; });
-  document.querySelectorAll(".vs").forEach(b => b.classList.toggle("active", b.dataset.view === v));
+  if (!["risk", "invoice", "rule"].includes(v)) v = "risk";
+  try {
+    localStorage.setItem(VIEW_KEY, v);
+  } catch (e) {
+  }
+  document.querySelectorAll(".report-view").forEach((el) => {
+    el.hidden = el.id !== "view-" + v;
+  });
+  document.querySelectorAll(".vs").forEach((b) => b.classList.toggle("active", b.dataset.view === v));
   applyFltState(v);
   updatePrintHead(v);
 }
 function applyView() {
   let v = localStorage.getItem(VIEW_KEY);
-  if (!["risk","invoice","rule"].includes(v)) v = "risk";
-  document.querySelectorAll(".report-view").forEach(el => { el.hidden = el.id !== "view-" + v; });
-  document.querySelectorAll(".vs").forEach(b => b.classList.toggle("active", b.dataset.view === v));
+  if (!["risk", "invoice", "rule"].includes(v)) v = "risk";
+  document.querySelectorAll(".report-view").forEach((el) => {
+    el.hidden = el.id !== "view-" + v;
+  });
+  document.querySelectorAll(".vs").forEach((b) => b.classList.toggle("active", b.dataset.view === v));
   applyFltState(v);
   updatePrintHead(v);
 }
 function updatePrintHead(v) {
+  var _a;
   const ph = document.getElementById("printHead");
   if (!ph || !__lastReport) return;
-  const name = {risk:"风险处理", invoice:"发票明细", rule:"规则分析"}[v] || "风险处理";
-  ph.textContent = name + " · 规则包 " + (__lastReport.ruleset?.version || __lastReport.ruleset_version || "?") + " · 生成 " + (__lastReport.generated_at || "");
+  const name = { risk: "风险处理", invoice: "发票明细", rule: "规则分析" }[v] || "风险处理";
+  ph.textContent = name + " · 规则包 " + (((_a = __lastReport.ruleset) == null ? void 0 : _a.version) || __lastReport.ruleset_version || "?") + " · 生成 " + (__lastReport.generated_at || "");
 }
-
 function __origRender(d) {
+  var _a, _b, _c, _d, _e, _f, _g, _h, _i;
   const el = $("result");
   const _sk = `<div class="skeleton"><div class="sk-line w60"></div><div class="sk-grid">${Array(5).fill('<div class="sk-card"><div class="sk-line w40"></div><div class="sk-line w70"></div></div>').join("")}</div><div class="sk-line w80"></div></div>`;
   if (el.innerHTML === "") el.innerHTML = _sk;
   $("empty").style.display = "none";
-  if (!d || d.error) { el.innerHTML = `<div class="card card-pad high">${esc(d && d.error || "无响应")}</div>`; return; }
+  if (!d || d.error) {
+    el.innerHTML = `<div class="card card-pad high">${esc(d && d.error || "无响应")}</div>`;
+    return;
+  }
   try {
-  const s = d.summary || {};
-  const rules = d.rules || [], rs = d.rules_summary || {};
-  const stateNote = rs.enabled_count ? `启用 ${rs.enabled_count} 条 · 命中 ${rs.命中||0} · 未命中 ${rs.未命中||0} · 未执行 ${rs.未执行||0}` : "";
-
-  /* RV-37 上下文条：三态互斥（待复核+自动通过+解析失败=文件数），消除口径打架 */
-  const autoPass = Math.max(0, (s.total_count ?? 0) - (s.review_count ?? 0));
-  const kpis = `
+    const s = d.summary || {};
+    const rules = d.rules || [], rs = d.rules_summary || {};
+    const stateNote = rs.enabled_count ? `启用 ${rs.enabled_count} 条 · 命中 ${rs.命中 || 0} · 未命中 ${rs.未命中 || 0} · 未执行 ${rs.未执行 || 0}` : "";
+    const autoPass = Math.max(0, ((_a = s.total_count) != null ? _a : 0) - ((_b = s.review_count) != null ? _b : 0));
+    const kpis = `
   <div class="ctxbar">
     <div class="kpis">
-      <div class="kpi total main"><div class="n">${esc(s.file_count ?? 0)}</div><div class="l">文件数</div></div>
+      <div class="kpi total main"><div class="n">${esc((_c = s.file_count) != null ? _c : 0)}</div><div class="l">文件数</div></div>
       <div class="kpi total main"><div class="n">${fmtMoney(s.total_amount)}</div><div class="l">价税合计</div></div>
       <div class="sep"></div>
-      <div class="kpi"><div class="n mid">${esc(s.review_count ?? 0)}${(s.human_review_count ?? 0) > 0 ? `<span class="mini">含人工${esc(s.human_review_count)}</span>` : ""}</div><div class="l">待复核</div></div>
+      <div class="kpi"><div class="n mid">${esc((_d = s.review_count) != null ? _d : 0)}${((_e = s.human_review_count) != null ? _e : 0) > 0 ? `<span class="mini">含人工${esc(s.human_review_count)}</span>` : ""}</div><div class="l">待复核</div></div>
       <div class="kpi"><div class="n ok">${esc(autoPass)}</div><div class="l">自动通过</div></div>
-      <div class="kpi"><div class="n high">${esc(s.failed_count ?? 0)}</div><div class="l">解析失败</div></div>
+      <div class="kpi"><div class="n high">${esc((_f = s.failed_count) != null ? _f : 0)}</div><div class="l">解析失败</div></div>
     </div>
     <div class="ctxmeta" title="批次/生成时间/口径">批次 ${esc(d.batch_id || "—")} · 生成 ${esc((d.generated_at || "").slice(0, 16) || "—")} · 口径：待复核+自动通过+解析失败=文件数；人工为待复核子集不参与求和；价税合计=仅成功解析票金额</div>
   </div>`;
-
-  const metaMap = buildRuleMetaMap(d.rules);
-  const rname = id => resolveRuleMeta(id, metaMap);
-  const findings = (d.findings||[]).length === 0
-    ? `<div class="card card-pad"><div class="hint">本批次未见规则命中，报告完成 ✓<br/>未命中不等于合规，请结合规则覆盖范围判断。</div></div>`
-    : (d.findings||[]).map(f => findingRow(f, metaMap, true)).join("");
-  const farr = d.findings || [];
-  const cnt = { pending: 0, resolved: 0, ignored: 0 };
-  farr.forEach(f => { const s = (getDisp(riskId(f)) || {}).status || "pending"; cnt[s]++; });
-  const done = farr.length > 0 && cnt.pending === 0;
-  const dispBar = farr.length ? `<div class="disps">
+    const metaMap = buildRuleMetaMap(d.rules);
+    const rname = (id) => resolveRuleMeta(id, metaMap);
+    const findings = (d.findings || []).length === 0 ? `<div class="card card-pad"><div class="hint">本批次未见规则命中，报告完成 ✓<br/>未命中不等于合规，请结合规则覆盖范围判断。</div></div>` : (d.findings || []).map((f) => findingRow(f, metaMap, true)).join("");
+    const farr = d.findings || [];
+    const cnt = { pending: 0, resolved: 0, ignored: 0 };
+    farr.forEach((f) => {
+      const s2 = (getDisp(riskId(f)) || {}).status || "pending";
+      cnt[s2]++;
+    });
+    const done = farr.length > 0 && cnt.pending === 0;
+    const dispBar = farr.length ? `<div class="disps">
     <span class="dp pending">待处理 <b>${cnt.pending}</b></span>
     <span class="dp resolved">已处理 <b>${cnt.resolved}</b></span>
     <span class="dp ignored">已忽略 <b>${cnt.ignored}</b></span>
     <span class="hint">口径：已处理+已忽略=完成 · 规则升版后处置状态会重置（结论可能变化需重判）${window.__dispStoreFail ? ` · <span class="fail">存储不可用，本次处置不会保留</span>` : ""}</span>
     ${done ? `<span class="alldone">✓ 全部处置完成，可导出</span>` : ""}
   </div>` : "";
-
-  /* RV-37：冗余折叠已移除——发票明细/规则清单由对应视图承担（避免同屏信息重复） */
-
-  const html = `
+    const html = `
   <div class="card">${kpis}</div>
   <div class="print-head" id="printHead"></div>
   <div class="view-switch">
@@ -1134,29 +1276,27 @@ function __origRender(d) {
         <button class="btn-ghost flt" data-flt="pending">待处理</button>
         <button class="btn" onclick="exportInvoicesXLSX()">导出 Excel</button>
         <button class="btn-ghost" onclick="exportInvoicesCSV()">导出 CSV</button>
-        <button class="btn-ghost" onclick="exportCSV(${JSON.stringify(d.findings||[]).replace(/"/g,"&quot;")}, ${JSON.stringify(d.rules||[]).replace(/"/g,"&quot;")})">导出风险</button>
+        <button class="btn-ghost" onclick="exportCSV(${JSON.stringify(d.findings || []).replace(/"/g, "&quot;")}, ${JSON.stringify(d.rules || []).replace(/"/g, "&quot;")})">导出风险</button>
         <button class="btn-ghost" onclick="window.print()">打印</button>
       </div>
     </div>
     ${dispBar}
-    <div id="view-risk" class="report-view"><h2>风险清单 <span class="sub">${(d.findings||[]).length} 条命中 · 按严重度排序</span></h2>${findings}</div>
-    <div id="view-invoice" class="report-view" hidden><h2>发票明细 <span class="sub">${(d.invoices||[]).length} 张票 · 无命中票最后</span></h2>${invoiceViewHtml(d, metaMap)}</div>
-    <div id="view-rule" class="report-view" hidden><h2>规则分析 <span class="sub">${(d.rules||[]).length} 条规则 · 三态口径</span></h2>${ruleViewHtml(d, metaMap)}</div>
+    <div id="view-risk" class="report-view"><h2>风险清单 <span class="sub">${(d.findings || []).length} 条命中 · 按严重度排序</span></h2>${findings}</div>
+    <div id="view-invoice" class="report-view" hidden><h2>发票明细 <span class="sub">${(d.invoices || []).length} 张票 · 无命中票最后</span></h2>${invoiceViewHtml(d, metaMap)}</div>
+    <div id="view-rule" class="report-view" hidden><h2>规则分析 <span class="sub">${(d.rules || []).length} 条规则 · 三态口径</span></h2>${ruleViewHtml(d, metaMap)}</div>
   </div>
   <div class="meta">
-    <div>规则包：${esc(d.ruleset?.version || d.ruleset_version)}（生效 ${esc(d.ruleset?.effective_date || "")}）· 批次 ${esc(d.batch_id)} · 生成 ${esc(d.generated_at)}</div>
-    <div>范围说明：${esc(d.ruleset?.scope_note || d.scope_note || "")}</div>
+    <div>规则包：${esc(((_g = d.ruleset) == null ? void 0 : _g.version) || d.ruleset_version)}（生效 ${esc(((_h = d.ruleset) == null ? void 0 : _h.effective_date) || "")}）· 批次 ${esc(d.batch_id)} · 生成 ${esc(d.generated_at)}</div>
+    <div>范围说明：${esc(((_i = d.ruleset) == null ? void 0 : _i.scope_note) || d.scope_note || "")}</div>
   </div>
   <div class="disc">${esc(d.disclaimer || DISCLAIMER)}</div>`;
-  el.innerHTML = html;
-  applyView();
+    el.innerHTML = html;
+    applyView();
   } catch (e) {
     console.error("[render] 失败:", e);
-    el.innerHTML = `<div class="card card-pad high"><b>报告渲染失败</b><br/>${esc(String((e && e.message) || e))}<br/><button class="btn" style="margin-top:10px" onclick="render(demoReport())">重试</button></div>`;
+    el.innerHTML = `<div class="card card-pad high"><b>报告渲染失败</b><br/>${esc(String(e && e.message || e))}<br/><button class="btn" style="margin-top:10px" onclick="render(demoReport())">重试</button></div>`;
   }
 }
-
-/* ---------- 模式切换 ---------- */
 function setMode(live) {
   document.body.classList.toggle("live", live);
   $("modeLabel").textContent = live ? "真实模式（连后端）" : "演示模式（内置样例）";
@@ -1167,73 +1307,109 @@ function setMode(live) {
     $("backendUrl").value = localStorage.getItem("ipc_backend") || "http://localhost:8000";
     $("apiKey").value = localStorage.getItem("ipc_key") || "";
   }
-  // 空状态引导：无报告时右侧显示引导区（演示/真实模式初始页均可见，RV-37 空状态）
   $("empty").style.display = "";
   $("result").innerHTML = "";
 }
-
-/* ---------- 真实模式：连接 + 预审 ---------- */
 async function healthCheck() {
   const url = $("backendUrl").value.trim().replace(/\/+$/, "");
-  if (!url) { $("connHint").textContent = "请填写后端地址"; return false; }
+  if (!url) {
+    $("connHint").textContent = "请填写后端地址";
+    return false;
+  }
   localStorage.setItem("ipc_backend", url);
   try {
-    const r = await fetch(url + "/healthz", {method:"GET"});
-    if (r.ok) { const j = await r.json(); $("connHint").textContent = "连接成功 · 服务正常（ruleset " + (j.ruleset || "?") + "）"; $("connHint").className = "hint okc"; return true; }
-    $("connHint").textContent = "连接失败：HTTP " + r.status + "（后端未启动？地址不对？）"; $("connHint").className = "hint err"; return false;
-  } catch (e) { $("connHint").textContent = "连接失败：" + e.message + "（注意：GitHub Pages 是 https，后端需 https 或 localhost）"; $("connHint").className = "hint err"; return false; }
+    const r = await fetch(url + "/healthz", { method: "GET" });
+    if (r.ok) {
+      const j = await r.json();
+      $("connHint").textContent = "连接成功 · 服务正常（ruleset " + (j.ruleset || "?") + "）";
+      $("connHint").className = "hint okc";
+      return true;
+    }
+    $("connHint").textContent = "连接失败：HTTP " + r.status + "（后端未启动？地址不对？）";
+    $("connHint").className = "hint err";
+    return false;
+  } catch (e) {
+    $("connHint").textContent = "连接失败：" + e.message + "（注意：GitHub Pages 是 https，后端需 https 或 localhost）";
+    $("connHint").className = "hint err";
+    return false;
+  }
 }
-
 async function runReview() {
   const url = $("backendUrl").value.trim().replace(/\/+$/, "");
   const key = $("apiKey").value.trim();
   const files = $("fileInput").files;
-  if (!url) { $("connHint").textContent = "请填写后端地址"; $("connHint").className = "hint err"; return; }
-  if (!key) { $("connHint").textContent = "请填写 API Key（后端环境变量 INVOICE_API_KEY 的值）"; $("connHint").className = "hint err"; return; }
-  if (!files.length) { $("runHint").textContent = "请选择要上传的发票文件（XML/OFD/PDF）"; $("runHint").className = "hint err"; return; }
-  localStorage.setItem("ipc_backend", url); localStorage.setItem("ipc_key", key);
+  if (!url) {
+    $("connHint").textContent = "请填写后端地址";
+    $("connHint").className = "hint err";
+    return;
+  }
+  if (!key) {
+    $("connHint").textContent = "请填写 API Key（后端环境变量 INVOICE_API_KEY 的值）";
+    $("connHint").className = "hint err";
+    return;
+  }
+  if (!files.length) {
+    $("runHint").textContent = "请选择要上传的发票文件（XML/OFD/PDF）";
+    $("runHint").className = "hint err";
+    return;
+  }
+  localStorage.setItem("ipc_backend", url);
+  localStorage.setItem("ipc_key", key);
   const fd = new FormData();
   for (const f of files) fd.append("files", f, f.name);
   const totalMb = Array.from(files).reduce((s, f) => s + f.size, 0) / 1048576;
-  $("btnReview").disabled = true; $("btnReview").textContent = `上传中 0%（共 ${totalMb.toFixed(1)} MB）`;
+  $("btnReview").disabled = true;
+  $("btnReview").textContent = `上传中 0%（共 ${totalMb.toFixed(1)} MB）`;
   try {
-    // XHR 上传（fetch 无上传进度；大文件需真实反馈，DeepSeek Week1 痛点）
     const j = await xhrUpload(url + "/review", key, fd, (loaded, total) => {
       const pct = total ? Math.round(loaded / total * 100) : 0;
-      $("btnReview").textContent = `上传中 ${pct}%（${(loaded/1048576).toFixed(1)}/${(total/1048576).toFixed(1)} MB）`;
+      $("btnReview").textContent = `上传中 ${pct}%（${(loaded / 1048576).toFixed(1)}/${(total / 1048576).toFixed(1)} MB）`;
     });
     $("btnReview").textContent = "解析中…";
-    if (j.status !== 200) { $("result").innerHTML = `<div class="card card-pad high">后端拒绝：${esc((j.body||{}).detail || ("HTTP " + j.status))}</div>`; return; }
+    if (j.status !== 200) {
+      $("result").innerHTML = `<div class="card card-pad high">后端拒绝：${esc((j.body || {}).detail || "HTTP " + j.status)}</div>`;
+      return;
+    }
     render(j.body);
-    if ((j.body.findings||[]).length) {
+    if ((j.body.findings || []).length) {
       try {
-        const er = await fetch(url + "/v1/findings/explain", {method:"POST",
-          headers:{"X-API-Key": key, "Content-Type":"application/json"},
-          body: JSON.stringify({findings: j.body.findings})});
+        const er = await fetch(url + "/v1/findings/explain", {
+          method: "POST",
+          headers: { "X-API-Key": key, "Content-Type": "application/json" },
+          body: JSON.stringify({ findings: j.body.findings })
+        });
         if (er.ok) {
           const ej = await er.json();
-          (ej.explanations||[]).forEach((exp, i) => { if (exp && j.body.findings[i]) j.body.findings[i].explanation = exp; });
+          (ej.explanations || []).forEach((exp, i) => {
+            if (exp && j.body.findings[i]) j.body.findings[i].explanation = exp;
+          });
           render(j.body);
         }
-      } catch (e2) { /* 解释获取失败：保留已渲染的报告 */ }
+      } catch (e2) {
+      }
     }
   } catch (e) {
     $("result").innerHTML = `<div class="card card-pad high">请求失败：${esc(e.message)}（检查后端地址与网络；跨域需后端 CORS 放行）</div>`;
   } finally {
-    $("btnReview").disabled = false; $("btnReview").textContent = "运行预审";
+    $("btnReview").disabled = false;
+    $("btnReview").textContent = "运行预审";
   }
 }
-
-/* XHR 上传（带进度回调；返回 {status, body}） */
 function xhrUpload(url, key, fd, onProgress) {
   return new Promise((resolve, reject) => {
     const x = new XMLHttpRequest();
     x.open("POST", url);
     x.setRequestHeader("X-API-Key", key);
-    x.upload.onprogress = e => { if (e.lengthComputable) onProgress(e.loaded, e.total); };
+    x.upload.onprogress = (e) => {
+      if (e.lengthComputable) onProgress(e.loaded, e.total);
+    };
     x.onload = () => {
       let body = null;
-      try { body = JSON.parse(x.responseText || "null"); } catch (e) { body = null; }
+      try {
+        body = JSON.parse(x.responseText || "null");
+      } catch (e) {
+        body = null;
+      }
       resolve({ status: x.status, body });
     };
     x.onerror = () => reject(new Error("网络错误（检查后端地址与网络）"));
@@ -1241,50 +1417,63 @@ function xhrUpload(url, key, fd, onProgress) {
     x.send(fd);
   });
 }
-
-/* ---------- 上传交互 ---------- */
 const dz = $("dropZone");
 dz.addEventListener("click", () => $("fileInput").click());
-dz.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); $("fileInput").click(); } });
-dz.addEventListener("dragover", e => { e.preventDefault(); dz.classList.add("over"); });
-dz.addEventListener("dragleave", () => dz.classList.remove("over"));
-dz.addEventListener("drop", e => {
-  e.preventDefault(); dz.classList.remove("over");
-  if (e.dataTransfer.files.length) { $("fileInput").files = e.dataTransfer.files; syncFiles(); }
+dz.addEventListener("keydown", (e) => {
+  if (e.key === "Enter" || e.key === " ") {
+    e.preventDefault();
+    $("fileInput").click();
+  }
 });
-document.addEventListener("paste", e => {
-  const items = e.clipboardData?.items || [];
+dz.addEventListener("dragover", (e) => {
+  e.preventDefault();
+  dz.classList.add("over");
+});
+dz.addEventListener("dragleave", () => dz.classList.remove("over"));
+dz.addEventListener("drop", (e) => {
+  e.preventDefault();
+  dz.classList.remove("over");
+  if (e.dataTransfer.files.length) {
+    $("fileInput").files = e.dataTransfer.files;
+    syncFiles();
+  }
+});
+document.addEventListener("paste", (e) => {
+  var _a;
+  const items = ((_a = e.clipboardData) == null ? void 0 : _a.items) || [];
   const dt = new DataTransfer();
   let got = false;
-  for (const it of items) if (it.kind === "file") { dt.items.add(it.getAsFile()); got = true; }
-  if (got) { $("fileInput").files = dt.files; syncFiles(); }
+  for (const it of items) if (it.kind === "file") {
+    dt.items.add(it.getAsFile());
+    got = true;
+  }
+  if (got) {
+    $("fileInput").files = dt.files;
+    syncFiles();
+  }
 });
 function syncFiles() {
   const fs = $("fileInput").files;
-  $("fileList").innerHTML = fs.length
-    ? Array.from(fs).map(f => `<div class="f"><span>📎</span><span class="nm">${esc(f.name)}</span><span>${(f.size/1024).toFixed(0)}KB</span></div>`).join("")
-    : "";
+  $("fileList").innerHTML = fs.length ? Array.from(fs).map((f) => `<div class="f"><span>📎</span><span class="nm">${esc(f.name)}</span><span>${(f.size / 1024).toFixed(0)}KB</span></div>`).join("") : "";
   $("runHint").textContent = fs.length ? `已选 ${fs.length} 个文件，点击「运行预审」开始。` : "运行后右侧显示合规预审报告。文件仅发往你配置的后端，不发送第三方。";
   $("runHint").className = "hint";
 }
 $("fileInput").onchange = syncFiles;
-
-/* 拍照识别（能力位保留；Week2 演示冻结：无"规划中"字样，不触发选图，点击给提示） */
 $("btnCamera").onclick = () => {
   $("runHint").textContent = "拍照识别（OCR）在真实模式后端接入后可用（本地 OCR 已支持图片版 PDF）。演示版请上传 PDF/XML/OFD 文件。";
   $("runHint").className = "hint err";
 };
-
-/* ---------- 绑定 ---------- */
-$("btnDemo").onclick = () => { setMode(false); render(demoReport()); };
+$("btnDemo").onclick = () => {
+  setMode(false);
+  render(demoReport());
+};
 $("btnLive").onclick = () => setMode(true);
 $("btnRun").onclick = () => render(demoReport());
 $("btnTest").onclick = healthCheck;
 $("btnReview").onclick = runReview;
-
-/* 初始：演示模式展示内置样例（一打开就能看到产品样子） */
 setMode(false);
 render(demoReport());
+
 </script>
 </body>
 </html>
