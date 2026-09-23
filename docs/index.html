@@ -392,6 +392,13 @@
 
 <script>
 "use strict";
+window.addEventListener("error", function (ev) {
+  try {
+    var bar = document.getElementById("errbar");
+    if (!bar) { bar = document.createElement("div"); bar.id = "errbar"; bar.style.cssText = "position:fixed;top:0;left:0;right:0;z-index:9999;background:#7f1d1d;color:#fff;font:12px/1.5 monospace;padding:6px 10px;white-space:pre-wrap;max-height:90px;overflow:auto;"; document.body.appendChild(bar); }
+    bar.textContent = "[页面错误] " + (ev.message || ev.type || "未知") + (ev.filename ? " @ " + ev.filename.split("/").pop() + ":" + ev.lineno : "");
+  } catch (_) {}
+});
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const SEV_CLS = {"高":"high","中":"mid","低":"low"};
@@ -1068,9 +1075,11 @@ function updatePrintHead(v) {
 
 function __origRender(d) {
   const el = $("result");
-  if (el.innerHTML === "") el.innerHTML = `<div class="skeleton"><div class="sk-line w60"></div><div class="sk-grid">${Array(5).fill('<div class="sk-card"><div class="sk-line w40"></div><div class="sk-line w70"></div></div>').join("")}</div><div class="sk-line w80"></div></div>`;
+  const _sk = `<div class="skeleton"><div class="sk-line w60"></div><div class="sk-grid">${Array(5).fill('<div class="sk-card"><div class="sk-line w40"></div><div class="sk-line w70"></div></div>').join("")}</div><div class="sk-line w80"></div></div>`;
+  if (el.innerHTML === "") el.innerHTML = _sk;
   $("empty").style.display = "none";
-  if (!d || d.error) { el.innerHTML = `<div class="card card-pad high">${esc(d?.error || "无响应")}</div>`; return; }
+  if (!d || d.error) { el.innerHTML = `<div class="card card-pad high">${esc(d && d.error || "无响应")}</div>`; return; }
+  try {
   const s = d.summary || {};
   const rules = d.rules || [], rs = d.rules_summary || {};
   const stateNote = rs.enabled_count ? `启用 ${rs.enabled_count} 条 · 命中 ${rs.命中||0} · 未命中 ${rs.未命中||0} · 未执行 ${rs.未执行||0}` : "";
@@ -1141,6 +1150,10 @@ function __origRender(d) {
   <div class="disc">${esc(d.disclaimer || DISCLAIMER)}</div>`;
   el.innerHTML = html;
   applyView();
+  } catch (e) {
+    console.error("[render] 失败:", e);
+    el.innerHTML = `<div class="card card-pad high"><b>报告渲染失败</b><br/>${esc(String((e && e.message) || e))}<br/><button class="btn" style="margin-top:10px" onclick="render(demoReport())">重试</button></div>`;
+  }
 }
 
 /* ---------- 模式切换 ---------- */
