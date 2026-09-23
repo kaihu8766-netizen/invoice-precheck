@@ -375,4 +375,7 @@ def parse_document(data: bytes) -> NormalizedInvoice:
     if dtype == "ofd":
         inner = extract_invoice_xml(data)
         return parse_xml(inner)
+    if dtype == "pdf":
+        from .pdf import parse_pdf  # 延迟导入：PDF 路径（文本/OCR 兜底）依赖较重
+        return parse_pdf(data)
     return parse_xml(data)

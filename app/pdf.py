@@ -156,6 +156,8 @@ def parse_pdf(data: bytes, source_hash: str = "") -> NormalizedInvoice:
 
         qr_core = {}
         full_text = []
+        _ocr_conf: list[float] = []
+        _used_ocr = False
         for page in doc:
             pix = page.get_pixmap(matrix=fitz.Matrix(_QR_SCALE, _QR_SCALE), colorspace=fitz.csGRAY)
             qr = _decode_qr(pix)
@@ -169,7 +171,10 @@ def parse_pdf(data: bytes, source_hash: str = "") -> NormalizedInvoice:
             try:
                 ocr = provider_factory()
                 png = render_pdf_page(data, page_index=0, dpi=300)
-                text = ocr.recognize(png)
+                if hasattr(ocr, "recognize_with_conf"):
+                    text, _ocr_conf = ocr.recognize_with_conf(png)
+                else:
+                    text = ocr.recognize(png)
                 _used_ocr = True
             except Exception as e:
                 raise PDFNeedsOCR(f"PDF 无可提取文本且本地 OCR 不可用（{e}），疑似扫描件")
@@ -199,9 +204,28 @@ def parse_pdf(data: bytes, source_hash: str = "") -> NormalizedInvoice:
                    if not getattr(inv, k)]
         if missing:
             warnings.append(f"字段缺失: {','.join(missing)}")
+        # D 补丁：需人工复核判定（不自动通过）
+        review_why: list[str] = []
         if inv.total > 0 and inv.amount + inv.tax != inv.total:
-            warnings.append("价税勾稽不符（需人工复核）")
+            warnings.append("价税勾稽不符")
+            review_why.append("价税勾稽不符（金额+税额≠价税合计）")
+        if qr_core.get("invoice_no") and tf["invoice_no"] and qr_core["invoice_no"] != tf["invoice_no"]:
+            review_why.append("二维码发票号与版式不一致")
+        if qr_core.get("total") and tf["total"] and qr_core["total"] != tf["total"]:
+            review_why.append("二维码价税合计与版式不一致")
+        if _ocr_conf:
+            # 关键行低置信度：发票号（20位）/金额（¥/￥）/税号（91开头）所在行
+            key_lines = [i for i, ln in enumerate(text.splitlines())
+                         if re.search(r"\b\d{20}\b|[¥￥]\s*[\d,]+|\b91[0-9A-Z]{16}\b", ln)]
+            low = [c for i, c in enumerate(_ocr_conf) if i in key_lines and c < 0.80]
+            if low:
+                review_why.append(f"OCR 关键字段置信度偏低（最低 {min(low):.2f}）")
+        if missing:
+            review_why.append(f"关键字段缺失: {','.join(missing)}")
         inv.parse_warnings = warnings
+        if review_why:
+            inv.review_needed = True
+            inv.review_reason = "；".join(review_why)
         return inv
     finally:
         doc.close()

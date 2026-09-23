@@ -66,6 +66,10 @@ class NormalizedInvoice:
     differential_deduction: Optional[Decimal] = None       # 差额征税扣除额 KCE（Decimal；无则 None）
     red_letter_blue_no: str = ""      # 被红冲蓝字发票号码（红冲关联占位；中文方言字段，EInvoice 布局待真实票核验）
 
+    # 人工复核标志（DeepSeek OCR 评审 D 补丁：低置信度/勾稽不一致 → 需人工复核，不自动通过）
+    review_needed: bool = False       # 需人工复核（OCR 低置信度 / 勾稽不一致等防错场景）
+    review_reason: str = ""           # 复核原因（展示给财务人员）
+
 
 @dataclass
 class EvidenceLink:

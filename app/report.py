@@ -116,10 +116,13 @@ def build_report(
             "status": _invoice_status(i, review_ids),
             "warning_count": len(i.parse_warnings),
             "item_count": len(i.items),  # G0 行级：明细行数（行级展示随 D 阶段交互上线）
+            "review_needed": i.review_needed,   # D 补丁：需人工复核（OCR 低置信度/勾稽不符等）
+            "review_reason": i.review_reason,   # 复核原因（财务人员可直接看）
         }
         for i in invoices
     ]
     failed_list = [{"file": f["name"], "error": f["error"]} for f in failed]
+    summary["human_review_count"] = sum(1 for i in invoices if i.review_needed)
 
     # ④ 规则三态（里程碑评审）：未执行的规则必须可见，禁止沉默；规则包单一来源（G1）
     rule_states = rule_states or {}

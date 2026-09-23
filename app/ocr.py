@@ -37,11 +37,17 @@ class RapidOcrProvider:
         return RapidOcrProvider._engine
 
     def recognize(self, image_bytes: bytes) -> str:
+        return self.recognize_with_conf(image_bytes)[0]
+
+    def recognize_with_conf(self, image_bytes: bytes) -> tuple[str, list[float]]:
+        """返回 (文本, 每行置信度)；低置信度供调用方标'需人工复核'。"""
         engine = self._get_engine()
         result, _ = engine(image_bytes)
         if not result:
-            return ""
-        return "\n".join(line[1] for line in result)
+            return "", []
+        lines = [line[1] for line in result]
+        confs = [float(line[2]) if len(line) > 2 and line[2] is not None else 1.0 for line in result]
+        return "\n".join(lines), confs
 
 
 def render_pdf_page(pdf_bytes: bytes, page_index: int = 0, dpi: int = 300) -> bytes:
