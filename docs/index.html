@@ -110,6 +110,31 @@
   .finding summary{ list-style:none; display:flex; align-items:center; gap:8px; padding:7px 10px; cursor:pointer; border-radius:var(--r-md); flex-wrap:wrap; }
   .finding summary::-webkit-details-marker{ display:none; }
   .finding summary:hover{ background:#fafbfc; }
+  /* 输出区视图切换（P1③，DeepSeek 评审：三视图+无命中票可验证） */
+  .view-switch{ display:flex; gap:6px; margin:12px 0 0; background:#fff; border:1px solid var(--line); border-radius:var(--r-md); padding:4px; width:max-content; max-width:100%; flex-wrap:wrap; }
+  .vs{ border:0; background:transparent; padding:7px 16px; font-size:13px; color:var(--sub); border-radius:8px; cursor:pointer; font-weight:500; }
+  .vs.active{ background:var(--brand); color:#fff; }
+  .report-view{ margin-top:10px; }
+  .inv-group, .rule-group{ display:flex; flex-direction:column; gap:10px; }
+  .inv-card, .rule-card{ background:#fff; border:1px solid var(--line-soft); border-radius:var(--r-md); padding:10px; }
+  .inv-card.clean{ background:#fbfdfc; }
+  .inv-head, .rule-head{ display:flex; align-items:center; gap:8px; flex-wrap:wrap; font-size:13px; }
+  .inv-no{ font-weight:700; }
+  .inv-full{ color:var(--weak); font-size:11.5px; font-family:ui-monospace,Menlo,Consolas,monospace; }
+  .inv-meta{ color:var(--sub); font-size:12px; }
+  .inv-list{ margin-top:8px; display:flex; flex-direction:column; gap:8px; }
+  .inv-clean-note{ margin-top:8px; font-size:12px; color:var(--ok); background:var(--ok-bg); padding:8px 10px; border-radius:8px; }
+  .stb.warn{ background:var(--mid-bg); color:var(--mid); }
+  .view-note{ font-size:12px; color:#9a6700; background:#fdf6e3; padding:8px 12px; border-radius:8px; margin-bottom:10px; line-height:1.6; }
+  .rule-cnt{ margin-left:auto; font-size:12px; color:var(--sub); }
+  .rule-cnt b{ color:var(--ink); }
+  .rule-hits{ margin-top:8px; border:1px solid var(--line-soft); border-radius:8px; }
+  .rule-hits summary{ cursor:pointer; padding:8px 10px; font-size:12.5px; font-weight:600; color:var(--sub); list-style:none; }
+  .rule-hits summary::-webkit-details-marker{ display:none; }
+  .rule-hits summary::after{ content:"展开 ▾"; font-size:12px; font-weight:400; color:var(--weak); margin-left:6px; }
+  .rule-hits[open] summary::after{ content:"收起 ▴"; }
+  .rule-hits .inner{ padding:8px; display:flex; flex-direction:column; gap:8px; }
+  .rule-note{ margin-top:8px; font-size:12px; color:var(--high); background:var(--high-bg); padding:8px 10px; border-radius:8px; line-height:1.6; }
   .finding[open] summary{ background:#fafbfc; border-bottom:1px solid var(--line-soft); }
   .finding .bar{ width:3px; align-self:stretch; border-radius:2px; flex-shrink:0; }
   .bar.high{ background:var(--high); } .bar.mid{ background:var(--mid); } .bar.low{ background:var(--weak); }
@@ -312,8 +337,8 @@ function demoReport() {
   byId("R4").state = "未执行（未提供报销类别）";
   return {
     "summary": {
-      "file_count": 5, "total_count": 4, "total_amount": "2034.20",
-      "no_finding_count": 1, "review_count": 3, "failed_count": 1
+      "file_count": 5, "total_count": 5, "total_amount": "2161.40",
+      "no_finding_count": 1, "review_count": 4, "failed_count": 1
     },
     "findings": [
       {"rule_id":"R10","severity":"高","confidence":"确定","invoice_no":"26440000000000100002","field":"items[2].ComTaxAm",
@@ -352,7 +377,8 @@ function demoReport() {
       {"invoice_no":"26440000000000100001","invoice_type":"增值税电子普通发票","issue_date":"2026-08-01","amount":"800.00","tax":"48.00","total":"848.00","seller_name":"示例服务有限公司","status":"待复核","warning_count":0,"item_count":2},
       {"invoice_no":"26440000000000100002","invoice_type":"增值税电子普通发票","issue_date":"2026-08-02","amount":"1500.00","tax":"90.00","total":"1590.00","seller_name":"示例制造集团有限公司","status":"待复核","warning_count":0,"item_count":3},
       {"invoice_no":"26440000000000100003","invoice_type":"增值税电子普通发票（差额征税）","issue_date":"2026-08-03","amount":"86.20","tax":"5.17","total":"91.37","seller_name":"示例票务代理有限公司","status":"待复核","warning_count":0,"item_count":1},
-      {"invoice_no":"26440000000000100004","invoice_type":"增值税电子普通发票（红字）","issue_date":"2026-08-04","amount":"-500.00","tax":"-30.00","total":"-530.00","seller_name":"示例物流有限公司","status":"待复核","warning_count":0,"item_count":2}
+      {"invoice_no":"26440000000000100004","invoice_type":"增值税电子普通发票（红字）","issue_date":"2026-08-04","amount":"-500.00","tax":"-30.00","total":"-530.00","seller_name":"示例物流有限公司","status":"待复核","warning_count":0,"item_count":2},
+      {"invoice_no":"26440000000000100005","invoice_type":"增值税电子普通发票","issue_date":"2026-08-05","amount":"120.00","tax":"7.20","total":"127.20","seller_name":"示例咨询有限公司","status":"未见异常","warning_count":0,"item_count":1}
     ],
     "failed": [{"file":"upload.pdf","error":"不支持的输入类型（仅支持数电票 XML 与 OFD 容器）"}],
     "ruleset_version":"0.3.0",
@@ -463,6 +489,8 @@ function exportCSV(findings, metaMap) {
 /* ---------- 渲染 ---------- */
 /* ---------- 处置状态：事件委托（P1①） ---------- */
 document.addEventListener("click", e => {
+  const vs = e.target.closest(".vs");
+  if (vs) { setView(vs.dataset.view); return; }
   const op = e.target.closest(".op");
   if (op) { setDisp(op.dataset.rid, op.dataset.st); renderReport(); return; }
   const flt = e.target.closest(".flt");
@@ -470,7 +498,7 @@ document.addEventListener("click", e => {
     const all = document.querySelectorAll(".flt");
     all.forEach(b => b.classList.toggle("active", b === flt));
     const f = flt.dataset.flt;
-    document.querySelectorAll(".finding").forEach(el => {
+    document.querySelectorAll("#view-risk .finding").forEach(el => {
       el.style.display = (f === "pending") ? (el.dataset.rid && ((getDisp(el.dataset.rid) || {}).status || "pending") === "pending" ? "" : "none") : "";
     });
   }
@@ -480,6 +508,127 @@ document.addEventListener("click", e => {
 let __lastReport = null;
 function render(d) { __lastReport = d; __origRender(d); }
 function renderReport() { if (__lastReport) render(__lastReport); }
+/* 单条命中风险行（P1③ 三视图共用；showOps=false 为审计视角——规则视图不参与处置主路径） */
+function findingRow(f, metaMap, showOps) {
+  const sev = f.severity || "低";
+  const sevCls = SEV_CLS[sev] || "low";
+  const conf = CONF_ALLOW.has(f.confidence) ? f.confidence : "疑似";
+  const chain = (f.evidence_chain||[]).map(e => `<li><code>${esc(e.field)}</code>${e.row != null ? `（行 ${esc(e.row)}）` : ""}：原文 ${esc(e.raw)} → ${esc(e.value)}${e.note ? ` · ${esc(e.note)}` : ""}</li>`).join("");
+  const amt = f.evidence_amt != null ? `¥${esc(f.evidence_amt)}` : "";
+  const rid = riskId(f);
+  const disp = getDisp(rid);
+  const st = disp ? disp.status : "pending";
+  const dim = st === "pending" ? "" : " dim";
+  const badge = st === "pending" ? "" : `<span class="stb ${st}">${st === "resolved" ? "✓" : "○"} ${DISP_LABEL[st]}</span>`;
+  const t0 = disp ? disp.updatedAt.slice(0,16).replace("T", " ") : "";
+  const ops = showOps
+    ? (st === "pending"
+      ? `<button class="op resolved" data-rid="${rid}" data-st="resolved">✓ 标记已处理</button><button class="op ignored" data-rid="${rid}" data-st="ignored">○ 忽略</button>`
+      : `<button class="op undo" data-rid="${rid}" data-st="pending">↺ 撤销（回待处理）</button>`)
+    : "";
+  return `<details class="finding${dim}" data-rid="${rid}">
+    <summary>
+      <span class="bar ${sevCls}"></span>
+      <span class="sev ${sevCls}">${sev === "高" ? "▲" : sev === "中" ? "●" : "·"} ${esc(f.rule_id)} ${esc(sev)}</span>
+      <span class="rname">${esc(resolveRuleMeta(f.rule_id, metaMap))}</span>
+      <span class="ticket">${esc(shortNo(f.invoice_no))}</span>
+      ${badge}
+      ${amt ? `<span class="amt">${amt}</span>` : ""}
+      <span class="caret">▸</span>
+    </summary>
+    <div class="body">
+      <div class="msg">${esc(f.message)}</div>
+      <div class="meta">票号 <code>${esc(f.invoice_no)}</code> · 字段 <code>${esc(f.field)}</code> · 原文「${esc(f.evidence)}」 · 置信度 ${esc(conf)}</div>
+      ${chain ? `<ul class="chain"><b>证据链：</b>${chain}</ul>` : ""}
+      <div class="sug"><b>建议：</b>${esc(f.suggestion)}</div>
+      ${explainBlock(f)}
+      <div class="ops">${ops}${showOps ? `<span class="hint" style="margin-top:0;">${st !== "pending" ? "处置时间 " + esc(t0) : "处置后状态保留在本浏览器（localStorage），导出 CSV 将携带处置信息"}</span>` : ""}</div>
+    </div>
+  </details>`;
+}
+
+/* 发票视图（P1③）：按票分组，无命中票可见（防沉默暗示合规） */
+function invoiceViewHtml(d, metaMap) {
+  const sevRank = {高:0, 中:1, 低:2};
+  const byInv = {};
+  (d.findings||[]).forEach(f => (byInv[f.invoice_no] = byInv[f.invoice_no] || []).push(f));
+  const notExec = (d.rules||[]).some(r => /未执行/.test(r.state || ""));
+  const invs = (d.invoices||[]).map(i => {
+    const fs = (byInv[i.invoice_no]||[]).slice()
+      .sort((a,b) => (sevRank[a.severity] ?? 9) - (sevRank[b.severity] ?? 9) || a.rule_id.localeCompare(b.rule_id));
+    const maxSev = fs.length ? Math.min(...fs.map(f => sevRank[f.severity] ?? 9)) : 9;
+    return { ...i, fs, maxSev, clean: fs.length === 0 };
+  }).sort((a,b) => {
+    if (a.clean !== b.clean) return a.clean ? 1 : -1;                 // 无命中票最后
+    if (a.maxSev !== b.maxSev) return a.maxSev - b.maxSev;           // 最高严重度降序
+    if (a.fs.length !== b.fs.length) return b.fs.length - a.fs.length; // 命中数降序
+    return a.invoice_no.localeCompare(b.invoice_no);                 // 票号稳定升序
+  });
+  if (!invs.length) return `<div class="card card-pad"><div class="hint">无发票数据。</div></div>`;
+  return `${notExec ? `<div class="view-note">⚠ 部分规则未执行（数据不足/未配置），不能据此判定无命中</div>` : ""}
+  <div class="inv-group">${invs.map(i => `
+    <div class="inv-card${i.clean ? " clean" : ""}">
+      <div class="inv-head">
+        <span class="inv-no">${esc(shortNo(i.invoice_no))}</span>
+        <span class="inv-full">${esc(i.invoice_no)}</span>
+        <span class="inv-meta">${esc(i.seller_name || "")} · ${esc(i.issue_date || "")} · ¥${esc(i.total || i.amount || "—")}</span>
+        ${i.clean ? `<span class="stb ok">✓ 无命中</span>` : `<span class="stb warn">${i.fs.length} 条命中</span>`}
+      </div>
+      ${i.clean
+        ? `<div class="inv-clean-note">无命中风险（已按当前规则检查，不代表绝对合规）</div>`
+        : `<div class="inv-list">${i.fs.map(f => findingRow(f, metaMap, true)).join("")}</div>`}
+    </div>`).join("")}</div>`;
+}
+
+/* 规则效果视图（P1③）：以 d.rules 为唯一源，审批/审计视角，不参与处置主路径 */
+function ruleViewHtml(d, metaMap) {
+  const sevRank = {高:0, 中:1, 低:2};
+  const byRule = {};
+  (d.findings||[]).forEach(f => (byRule[f.rule_id] = byRule[f.rule_id] || []).push(f));
+  const nInv = (d.invoices||[]).length;
+  const rules = (d.rules||[]).map(r => {
+    const hits = (byRule[r.rule_id]||[]).slice()
+      .sort((a,b) => (sevRank[a.severity] ?? 9) - (sevRank[b.severity] ?? 9) || a.invoice_no.localeCompare(b.invoice_no));
+    const notExec = /未执行/.test(r.state || "");
+    const maxSev = hits.length ? Math.min(...hits.map(f => sevRank[f.severity] ?? 9)) : 9;
+    return { ...r, hits, hit: hits.length, miss: notExec ? null : Math.max(0, nInv - hits.length), notExec, maxSev };
+  }).sort((a,b) => {
+    if (a.maxSev !== b.maxSev) return a.maxSev - b.maxSev;            // 最高严重度降序
+    if (a.hit !== b.hit) return b.hit - a.hit;                       // 命中数降序
+    return (a.rule_id || "").localeCompare(b.rule_id || "");         // 规则名升序
+  });
+  if (!rules.length) return `<div class="card card-pad"><div class="hint">无规则数据。</div></div>`;
+  return `<div class="view-note">规则效果视图（审批/审计视角）：每条规则的命中/未命中/未执行三态；未执行不代表合规，需补数据/配置后重跑</div>
+  <div class="rule-group">${rules.map(r => {
+    const sev = r.severity || "中";
+    const sevCls = SEV_CLS[sev] || "low";
+    return `<div class="rule-card">
+      <div class="rule-head">
+        <span class="sev ${sevCls}">${esc(r.rule_id)} ${esc(sev)}</span>
+        <span class="rname">${esc(resolveRuleMeta(r.rule_id, metaMap))}</span>
+        <span class="rule-cnt">命中 <b>${r.hit}</b>${r.notExec ? ` · <span class="fail">未执行</span>` : ` · 未命中 <b>${r.miss}</b>`}</span>
+      </div>
+      ${r.hit ? `<details class="rule-hits"><summary>命中票（${r.hit}）</summary><div class="inner">${r.hits.map(f => findingRow(f, metaMap, false)).join("")}</div></details>` : ""}
+      ${r.notExec ? `<div class="rule-note">未执行（${esc(r.state)}）——不能判定合规，需补齐数据/配置后重跑</div>` : ""}
+    </div>`;
+  }).join("")}</div>`;
+}
+
+/* 视图切换（P1③）：localStorage 持久化，非法值回退风险视图；renderReport 重渲染后保持 */
+const VIEW_KEY = "fap:report-view";
+function setView(v) {
+  if (!["risk","invoice","rule"].includes(v)) v = "risk";
+  localStorage.setItem(VIEW_KEY, v);
+  document.querySelectorAll(".report-view").forEach(el => { el.hidden = el.id !== "view-" + v; });
+  document.querySelectorAll(".vs").forEach(b => b.classList.toggle("active", b.dataset.view === v));
+}
+function applyView() {
+  let v = localStorage.getItem(VIEW_KEY);
+  if (!["risk","invoice","rule"].includes(v)) v = "risk";
+  document.querySelectorAll(".report-view").forEach(el => { el.hidden = el.id !== "view-" + v; });
+  document.querySelectorAll(".vs").forEach(b => b.classList.toggle("active", b.dataset.view === v));
+}
+
 function __origRender(d) {
   const el = $("result");
   $("empty").style.display = "none";
@@ -502,41 +651,7 @@ function __origRender(d) {
   const rname = id => resolveRuleMeta(id, metaMap);
   const findings = (d.findings||[]).length === 0
     ? `<div class="card card-pad"><div class="hint">本批次未见规则命中，报告完成 ✓<br/>未命中不等于合规，请结合规则覆盖范围判断。</div></div>`
-    : (d.findings||[]).map(f => {
-      const sev = f.severity || "低";
-      const sevCls = SEV_CLS[sev] || "low";
-      const conf = CONF_ALLOW.has(f.confidence) ? f.confidence : "疑似";
-      const chain = (f.evidence_chain||[]).map(e => `<li><code>${esc(e.field)}</code>${e.row != null ? `（行 ${esc(e.row)}）` : ""}：原文 ${esc(e.raw)} → ${esc(e.value)}${e.note ? ` · ${esc(e.note)}` : ""}</li>`).join("");
-      const amt = f.evidence_amt != null ? `¥${esc(f.evidence_amt)}` : "";
-      const rid = riskId(f);
-      const disp = getDisp(rid);
-      const st = disp ? disp.status : "pending";
-      const dim = st === "pending" ? "" : " dim";
-      const badge = st === "pending" ? "" : `<span class="stb ${st}">${st === "resolved" ? "✓" : "○"} ${DISP_LABEL[st]}</span>`;
-      const t0 = disp ? disp.updatedAt.slice(0,16).replace("T", " ") : "";
-      const ops = st === "pending"
-        ? `<button class="op resolved" data-rid="${rid}" data-st="resolved">✓ 标记已处理</button><button class="op ignored" data-rid="${rid}" data-st="ignored">○ 忽略</button>`
-        : `<button class="op undo" data-rid="${rid}" data-st="pending">↺ 撤销（回待处理）</button>`;
-      return `<details class="finding${dim}" data-rid="${rid}">
-        <summary>
-          <span class="bar ${sevCls}"></span>
-          <span class="sev ${sevCls}">${sev === "高" ? "▲" : sev === "中" ? "●" : "·"} ${esc(f.rule_id)} ${esc(sev)}</span>
-          <span class="rname">${esc(rname(f.rule_id))}</span>
-          <span class="ticket">${esc(shortNo(f.invoice_no))}</span>
-          ${badge}
-          ${amt ? `<span class="amt">${amt}</span>` : ""}
-          <span class="caret">▸</span>
-        </summary>
-        <div class="body">
-          <div class="msg">${esc(f.message)}</div>
-          <div class="meta">票号 <code>${esc(f.invoice_no)}</code> · 字段 <code>${esc(f.field)}</code> · 原文「${esc(f.evidence)}」 · 置信度 ${esc(conf)}</div>
-          ${chain ? `<ul class="chain"><b>证据链：</b>${chain}</ul>` : ""}
-          <div class="sug"><b>建议：</b>${esc(f.suggestion)}</div>
-          ${explainBlock(f)}
-          <div class="ops">${ops}<span class="hint" style="margin-top:0;">${st !== "pending" ? "处置时间 " + esc(t0) : "处置后状态保留在本浏览器（localStorage），导出 CSV 将携带处置信息"}</span></div>
-        </div>
-      </details>`;
-    }).join("");
+    : (d.findings||[]).map(f => findingRow(f, metaMap, true)).join("");
   const farr = d.findings || [];
   const cnt = { pending: 0, resolved: 0, ignored: 0 };
   farr.forEach(f => { const s = (getDisp(riskId(f)) || {}).status || "pending"; cnt[s]++; });
@@ -584,9 +699,13 @@ function __origRender(d) {
 
   const html = `
   <div class="card">${kpis}</div>
+  <div class="view-switch">
+    <button class="vs active" data-view="risk">风险视图</button>
+    <button class="vs" data-view="invoice">发票视图</button>
+    <button class="vs" data-view="rule">规则视图</button>
+  </div>
   <div class="section">
     <div class="section-head">
-      <h2>风险清单 <span class="sub">${(d.findings||[]).length} 条命中 · 按严重度排序</span></h2>
       <div class="tools">
         <button class="btn-ghost flt active" data-flt="all">全部</button>
         <button class="btn-ghost flt" data-flt="pending">待处理</button>
@@ -595,7 +714,9 @@ function __origRender(d) {
       </div>
     </div>
     ${dispBar}
-    ${findings}
+    <div id="view-risk" class="report-view"><h2>风险清单 <span class="sub">${(d.findings||[]).length} 条命中 · 按严重度排序</span></h2>${findings}</div>
+    <div id="view-invoice" class="report-view" hidden><h2>发票视图 <span class="sub">${(d.invoices||[]).length} 张票 · 无命中票最后</span></h2>${invoiceViewHtml(d, metaMap)}</div>
+    <div id="view-rule" class="report-view" hidden><h2>规则效果视图 <span class="sub">${(d.rules||[]).length} 条规则 · 三态口径</span></h2>${ruleViewHtml(d, metaMap)}</div>
   </div>
   ${invoices}
   ${rulesSec}
@@ -605,6 +726,7 @@ function __origRender(d) {
   </div>
   <div class="disc">${esc(d.disclaimer || DISCLAIMER)}</div>`;
   el.innerHTML = html;
+  applyView();
 }
 
 /* ---------- 模式切换 ---------- */
