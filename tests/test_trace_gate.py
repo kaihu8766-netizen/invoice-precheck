@@ -162,6 +162,25 @@ class TestAuditScheme(unittest.TestCase):
         rc = self._run_with_git_times([], ["2026-09-23 12:00:00 +0800"])
         self.assertEqual(rc, 0)
 
+    def test_git_log_cmd_uses_archive_dir(self):
+        # RV-31：git log 档案路径须含 ARCHIVE_DIR 前缀 + basename（防相对路径查不到）
+        import subprocess
+        (self.feat_dir / "F-20260923-01.md").write_text("# F-20260923-01\n", encoding="utf-8")
+        make_arch(self.rv_dir, "20260923-23", "scheme", "F-20260923-01", "adopted")
+        captured = []
+
+        def fake_run(cmd, *a, **kw):
+            captured.append(cmd)
+            which = 0 if "--diff-filter=A" in cmd else 1
+            src = ["2026-09-23 12:00:00 +0800"] if which == 0 else ["2026-09-23 12:00:00 +0800"]
+            return subprocess.CompletedProcess(cmd, 0, stdout="\n".join(src), stderr="")
+
+        with mock.patch.object(subprocess, "run", side_effect=fake_run):
+            tg.cmd_audit_scheme()
+        log_cmd = captured[0]
+        self.assertTrue(any(tg.ARCHIVE_DIR in str(a) for a in log_cmd), "git log 必须带 ARCHIVE_DIR 前缀")
+        self.assertTrue(any(a.endswith(".md") for a in log_cmd), "git log 须含档案 basename")
+
 
 if __name__ == "__main__":
     unittest.main()

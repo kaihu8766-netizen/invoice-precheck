@@ -56,11 +56,16 @@ python3 scripts/trace_gate.py check --message "你的 commit message"
 1. `python3 scripts/trace_gate.py preflight --desc "<功能描述>"` → 立项，生成 `F-YYYYMMDD-NN` 功能登记（定位=发号器，RV-22 修正）
 2. 方案评审（事前对齐）：`deepseek_gate.py --phase scheme --feature F-xxx --topic "<方案>" --prompt "..."` → DeepSeek 评审方案 → 用户批准（档案 status=adopted）
 3. 开发实施
-4. 功能提交：message 以 `feat(` 开头且引用 `F-xxx` + 方案评审 `RV-ID`；钩子校验 F-xxx 存在已批准（adopted）的 phase=scheme 评审，缺失拒绝提交
+4. **先入库档案、再提交代码**（RV-30 执行顺序纪律，F-20260923-01 自举例外教训）：**"入库"= 方案评审档案 + 功能登记完成 git commit 且 push 到远端**（audit 锚点以 git 入库时间为准，push 与否不影响本地审计，但惯例 push）——先提交 project-trace → 再提交 invoice-precheck 功能代码
+5. 功能提交：message 以 `feat(` 开头且引用 `F-xxx` + 方案评审 `RV-ID`；钩子校验 F-xxx 存在已批准（adopted）的 phase=scheme 评审，缺失拒绝提交
 
 **事后复核**：实施后发 `deepseek_gate.py`（默认 --phase review）评审实施结果 → 用户拍板 → 提交带 RV-ID（红线改动走 diff_hash 双闸门）。
 
 **时间可审计**：`python3 scripts/trace_gate.py audit-scheme` 对比方案评审入库时间 vs 功能代码首次提交时间，产出"方案后补"清单（评审晚于代码=流程违规，exit 1）。不在 commit-msg 做墙钟比对（RV-22：commit 对象未创建，恒为假）。
+
+**audit-scheme 已知限制（RV-33 落定）**：
+- 浅历史/无 TRACE 时 `git log` 空返回 → 输出"无功能登记目录/档案未入库"且 RC=0，属**跳过语义**（非"审计通过"），依赖 CI `fetch-depth: 0` 兜底；本地浅克隆会踩到，勿将 RC=0 误读为合规
+- 时间锚点用 committer date（`%ci`）= "入库时间"；rebase/squash 会更新 committer date 导致漂移；author date 不参与比较（全链路唯一时间源，混用会重演历史比较 bug）
 
 **事前对齐门禁口径（RV-23 落定，改代码/流程须先评审）**：
 1. 触发正则：`^feat(\([^)]+\))?!?:`（feat:/feat(scope):/feat!:/feat(scope)!: 均算功能提交）

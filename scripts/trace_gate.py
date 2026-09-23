@@ -37,7 +37,9 @@ ROOT = Path(__file__).resolve().parent.parent
 
 # 溯源仓库路径（与 invoice-precheck 平级）
 TRACE = ROOT.parent / "project-trace"
-RV_DIR = TRACE / "03-会议与日志" / "DeepSeek评审"
+# RV-30：评审档案相对 TRACE 仓库根的目录（git log -- <path> 用，path 相对仓库根；抽常量防目录改名漏改）
+ARCHIVE_DIR = "03-会议与日志/DeepSeek评审"
+RV_DIR = TRACE / ARCHIVE_DIR
 GATE_DIR = TRACE / "03-会议与日志" / "门禁记录"
 FEATURE_DIR = TRACE / "03-会议与日志" / "功能登记"
 DECISIONS = TRACE / "DECISIONS.md"
@@ -386,7 +388,8 @@ def cmd_audit_scheme() -> int:
                 # 档案首次入库 git 提交时间（不可自填）；档案在 project-trace 仓 → cwd=TRACE
                 # RV-24 修正：--reverse 取首条（最早入库），非默认最新；统一 committer date(%ci)
                 out = subprocess.run(
-                    ["git", "log", "--reverse", "--diff-filter=A", "--format=%ci", "--", rv.name],
+                    ["git", "log", "--reverse", "--diff-filter=A", "--format=%ci", "--",
+                     ARCHIVE_DIR + "/" + rv.name],  # rv.name 为 glob 结果的 basename（RV-30 确认）
                     capture_output=True, text=True, cwd=TRACE,
                 ).stdout.strip().splitlines()
                 if out:

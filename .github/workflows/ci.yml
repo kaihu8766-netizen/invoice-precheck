@@ -16,6 +16,13 @@ jobs:
         python-version: ["3.11", "3.12"]
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # RV-32 E2：全历史，保证 audit-scheme/时间锚点在 CI 可用（shallow clone 会空返回）
+
+      - name: Assert full history (RV-33 条件2)
+        run: |
+          echo "commits fetched: $(git rev-list --count HEAD)"
+          test "$(git rev-list --count HEAD)" -gt 1 || (echo "✗ fetch-depth:0 未生效（浅历史会让 audit-scheme 静默空输出）" && exit 1)
 
       - uses: actions/setup-python@v5
         with:
