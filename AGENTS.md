@@ -82,3 +82,11 @@ python3 scripts/trace_gate.py check --message "你的 commit message"
 3. 重提交：message 带 `RV-<id>`，钩子校验 diff_hash 与当前 staged 完全一致才放行。
 - 评审完成前不得再改红线文件（改过 hash 即失效，需重新评审）。
 - 非红线文件仅需常规 ID 引用（GATE/RV/DEC/ISS）。
+
+## 门禁边界（RV-14 诚实标注）
+- 门禁防"遗忘/误操作"，不防恶意绕过（git commit --no-verify、git -c core.hooksPath=/dev/null 等 git 原生逃逸通道存在，项目信任执行者）。
+- 门禁自改（scripts/trace_gate.py、.githooks/commit-msg、scripts/gate_rules.yaml、deepseek_gate.py）同样命中 gate_self 红线，必须评审。
+
+## 执行者纪律（RV-15 采纳，用户批准后生效）
+- 不得主动使用 `git commit --no-verify`、`git -c core.hooksPath=/dev/null`、修改 gate_self 文件来绕过门禁。
+- 确需变更门禁机制：先提 RV 评审 → 用户明确批准 → 变更时在 commit message 留痕（RV-ID）。

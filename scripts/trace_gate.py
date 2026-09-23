@@ -163,6 +163,11 @@ def _classify(staged_diff: str) -> tuple[list[str], str]:
             if m:
                 files.add(m.group(1))
     hits = []
+    # RV-15 自指修复：核心保护集硬编码（不随 gate_rules.yaml 被删而失效）
+    HARD_GATE_SELF = ("scripts/trace_gate.py", ".githooks/commit-msg", "scripts/gate_rules.yaml",
+                      "agent-communication-demo/deepseek_gate.py", "AGENTS.md")
+    if any(f.startswith(h) for f in files for h in HARD_GATE_SELF):
+        hits.append("gate_self")
     for name, rule in rules.items():
         paths = rule.get("paths", []); kws = rule.get("keywords", [])
         if any(f.startswith(p) for f in files for p in paths):

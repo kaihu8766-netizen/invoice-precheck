@@ -16,3 +16,14 @@ rules:
   data_redline:           # 脱敏/真实数据处理（红线相关一律必审）
     paths: ["scripts/anonymize_to_private.py", "scripts/benchmark.py"]
     keywords: ["anonymize", "脱敏", "private", "真实", "发票"]
+  gate_self:              # 门禁自身（RV-14/15 P0 修复：改门禁放行自己→必审；含 AGENTS/CI/hook 配置）
+    paths:
+      - "scripts/trace_gate.py"
+      - ".githooks/"
+      - "scripts/gate_rules.yaml"
+      - "agent-communication-demo/deepseek_gate.py"
+      - "AGENTS.md"
+      - "Makefile"
+      - "pyproject.toml"
+      - ".github/"
+    keywords: ["gate", "hook", "钩子"]
