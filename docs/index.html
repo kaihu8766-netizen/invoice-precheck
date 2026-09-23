@@ -122,9 +122,8 @@
   /* KPI 摘要 */
   .kpis{ display:grid; grid-template-columns:repeat(5,1fr); gap:10px; padding:14px 16px 4px; }
   @media (max-width:720px){ .kpis{ grid-template-columns:repeat(3,1fr); } }
-  .kpi.total{ background:#fff; border:1px solid var(--line); }
-  .kpis .sep{ grid-column:3; width:1px; background:var(--line-soft); margin:2px 0; }
-  @media (max-width:720px){ .kpis .sep{ display:none; } }
+  .kpi.total{ background:var(--brand-weak); border:1px solid var(--line); border-top:2px solid var(--brand); }
+  .kpi.total .l{ color:var(--brand); font-weight:600; }
   .ctxbar{ border-bottom:1px solid var(--line-soft); }
   .ctxmeta{ font-size:11.5px; color:var(--weak); padding:6px 16px 12px; overflow-wrap:anywhere; }
   .kpi .mini{ display:block; font-size:10.5px; font-weight:500; color:var(--sub); margin-top:1px; }
@@ -1265,7 +1264,6 @@ function __origRender(d) {
     <div class="kpis">
       <div class="kpi total main"><div class="n">${esc((_c = s.file_count) != null ? _c : 0)}</div><div class="l">文件数</div></div>
       <div class="kpi total main"><div class="n">${fmtMoney(s.total_amount)}</div><div class="l">价税合计</div></div>
-      <div class="sep"></div>
       <div class="kpi"><div class="n mid">${esc((_d = s.review_count) != null ? _d : 0)}${((_e = s.human_review_count) != null ? _e : 0) > 0 ? `<span class="mini">含人工${esc(s.human_review_count)}</span>` : ""}</div><div class="l">待复核</div></div>
       <div class="kpi"><div class="n ok">${esc(autoPass)}</div><div class="l">自动通过</div></div>
       <div class="kpi"><div class="n high">${esc((_f = s.failed_count) != null ? _f : 0)}</div><div class="l">解析失败</div></div>
