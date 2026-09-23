@@ -7,3 +7,4 @@ httpx2>=1.0          # starlette.testclient 依赖（CI 首次运行暴露：缺
 pymupdf
 zxing-cpp
 reportlab
+rapidocr-onnxruntime

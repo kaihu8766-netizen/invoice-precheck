@@ -21,6 +21,7 @@ from typing import Optional
 import fitz  # PyMuPDF
 
 from .models import NormalizedInvoice
+from .ocr import render_pdf_page, provider_factory
 
 MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB（与 XML 对齐）
 MAX_PAGES = 20                    # 页数上限（防超大 PDF）
@@ -164,7 +165,14 @@ def parse_pdf(data: bytes, source_hash: str = "") -> NormalizedInvoice:
 
         text = "\n".join(full_text)
         if len(text.strip()) < 10:
-            raise PDFNeedsOCR(f"PDF 无可提取文本（{len(text.strip())} 字符），疑似扫描件")
+            # 图片版/扫描版：本地 OCR 兜底（数据不出本机；失败则友好降级）
+            try:
+                ocr = provider_factory()
+                png = render_pdf_page(data, page_index=0, dpi=300)
+                text = ocr.recognize(png)
+                _used_ocr = True
+            except Exception as e:
+                raise PDFNeedsOCR(f"PDF 无可提取文本且本地 OCR 不可用（{e}），疑似扫描件")
 
         tf = _extract_text_fields(text, qr_total=qr_core.get("total", Decimal("0")))
         warnings = []
@@ -184,7 +192,8 @@ def parse_pdf(data: bytes, source_hash: str = "") -> NormalizedInvoice:
             seller_name=tf["seller_name"], seller_taxid=tf["seller_taxid"],
             invoice_type=tf["invoice_type"],
             source_hash=source_hash,
-            raw_fields={"parse_path": "qr+text", "qr_core": qr_core, "pdf_text_head": text[:300]},
+            raw_fields={"parse_path": ("qr+ocr" if locals().get("_used_ocr") else "qr+text"),
+                        "qr_core": qr_core, "pdf_text_head": text[:300]},
         )
         missing = [k for k in ("invoice_no", "issue_date", "total", "buyer_name", "seller_name")
                    if not getattr(inv, k)]
