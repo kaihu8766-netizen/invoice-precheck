@@ -103,6 +103,9 @@
   /* KPI 摘要 */
   .kpis{ display:grid; grid-template-columns:repeat(5,1fr); gap:10px; padding:14px 16px 4px; }
   @media (max-width:720px){ .kpis{ grid-template-columns:repeat(3,1fr); } }
+  .kpi.total{ background:#fff; border:1px solid var(--line); }
+  .kpis .sep{ grid-column:3; width:1px; background:var(--line-soft); margin:2px 0; }
+  @media (max-width:720px){ .kpis .sep{ display:none; } }
   .ctxbar{ border-bottom:1px solid var(--line-soft); }
   .ctxmeta{ font-size:11.5px; color:var(--weak); padding:6px 16px 12px; overflow-wrap:anywhere; }
   .kpi .mini{ display:block; font-size:10.5px; font-weight:500; color:var(--sub); margin-top:1px; }
@@ -121,7 +124,7 @@
   .section-head{ display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; flex-wrap:wrap; gap:8px; }
   .section-head h2{ font-size:15px; font-weight:700; }
   .section-head .sub{ font-size:12px; color:var(--sub); }
-  .tools{ display:flex; gap:6px; }
+  .tools{ display:flex; gap:6px; flex-wrap:wrap; min-width:0; }
   .tools .btn-ghost{ padding:4px 10px; font-size:12px; }
   .finding{ border:1px solid var(--line); border-radius:var(--r-md); background:#fff; margin-bottom:5px; }
   .finding summary{ list-style:none; display:flex; align-items:center; gap:8px; padding:7px 10px; cursor:pointer; border-radius:var(--r-md); flex-wrap:wrap; }
@@ -180,7 +183,7 @@
     .tools .btn-ghost{ white-space:nowrap; }
     .view-switch .vs{ padding:7px 12px; }
     .kpi{ padding:8px 10px; min-width:0; }
-    .kpi .n{ font-size:18px; }
+    .kpi .n{ font-size:15px; max-width:100%; overflow:hidden; }
     .kpi .l{ word-break:keep-all; line-height:1.4; }
   }
   .finding .amt{ font-size:12.5px; font-weight:600; margin-left:auto; white-space:nowrap; font-variant-numeric:tabular-nums; }
@@ -1027,7 +1030,7 @@ function applyView() {
 function updatePrintHead(v) {
   const ph = document.getElementById("printHead");
   if (!ph || !__lastReport) return;
-  const name = {risk:"风险视图", invoice:"发票视图", rule:"规则效果视图"}[v] || "风险视图";
+  const name = {risk:"风险处理", invoice:"发票明细", rule:"规则分析"}[v] || "风险处理";
   ph.textContent = name + " · 规则包 " + (__lastReport.ruleset?.version || __lastReport.ruleset_version || "?") + " · 生成 " + (__lastReport.generated_at || "");
 }
 
@@ -1044,13 +1047,14 @@ function __origRender(d) {
   const kpis = `
   <div class="ctxbar">
     <div class="kpis">
-      <div class="kpi main"><div class="n">${esc(s.file_count ?? 0)}</div><div class="l">文件数</div></div>
-      <div class="kpi main"><div class="n">${fmtMoney(s.total_amount)}</div><div class="l">价税合计</div></div>
+      <div class="kpi total main"><div class="n">${esc(s.file_count ?? 0)}</div><div class="l">文件数</div></div>
+      <div class="kpi total main"><div class="n">${fmtMoney(s.total_amount)}</div><div class="l">价税合计</div></div>
+      <div class="sep"></div>
       <div class="kpi"><div class="n mid">${esc(s.review_count ?? 0)}${(s.human_review_count ?? 0) > 0 ? `<span class="mini">含人工${esc(s.human_review_count)}</span>` : ""}</div><div class="l">待复核</div></div>
       <div class="kpi"><div class="n ok">${esc(autoPass)}</div><div class="l">自动通过</div></div>
       <div class="kpi"><div class="n high">${esc(s.failed_count ?? 0)}</div><div class="l">解析失败</div></div>
     </div>
-    <div class="ctxmeta" title="批次与生成时间">批次 ${esc(d.batch_id || "—")} · 生成 ${esc((d.generated_at || "").slice(0, 16) || "—")} · 口径：待复核+自动通过+解析失败=文件数</div>
+    <div class="ctxmeta" title="批次/生成时间/口径">批次 ${esc(d.batch_id || "—")} · 生成 ${esc((d.generated_at || "").slice(0, 16) || "—")} · 口径：待复核+自动通过+解析失败=文件数；人工为待复核子集不参与求和；价税合计=仅成功解析票金额</div>
   </div>`;
 
   const metaMap = buildRuleMetaMap(d.rules);
