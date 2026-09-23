@@ -73,7 +73,16 @@
   details.adv summary::-webkit-details-marker{ display:none; }
   details.adv summary::after{ content:"展开 ▾"; font-size:12px; font-weight:400; color:var(--weak); }
   details.adv[open] summary::after{ content:"收起 ▴"; }
-  details.adv .inner{ padding:4px 12px 12px; }
+  details.adv .inner{ padding:4px 12px 12px; overflow-x:auto; }
+  .inv-card{ }
+  .inv-card summary{ list-style:none; cursor:pointer; }
+  .inv-card summary::-webkit-details-marker{ display:none; }
+  .inv-card[open] summary{ border-bottom:1px solid var(--line-soft); padding-bottom:8px; }
+  .inv-body{ margin-top:8px; }
+  .inv-card.partial{ background:#fdfbf7; border-color:#e5d5a8; }
+  .stb.q{ background:#fdf6e3; color:#9a6700; }
+  .btn-ghost:disabled{ opacity:.45; cursor:not-allowed; }
+  @media print{ .view-switch{ display:none !important; } }
 
   .fld{ display:flex; flex-direction:column; gap:6px; margin-top:8px; }
   .fld label{ font-size:12px; color:var(--sub); font-weight:600; }
@@ -467,7 +476,8 @@ function shortNo(n) {
 
 /* 导出 CSV（DeepSeek 评审 P0：财务需留痕/导出） */
 function exportCSV(findings, metaMap) {
-  const rows = [["规则", "规则名", "严重度", "置信度", "票号", "字段", "问题", "建议", "处置状态", "处置时间"]];
+  const rows = [["# 导出范围：全量命中清单（N 条，不随视图切换变化） · 生成 " + new Date().toISOString()]];
+  rows.push(["规则", "规则名", "严重度", "置信度", "票号", "字段", "问题", "建议", "处置状态", "处置时间"]);
   (findings || []).forEach(f => {
     const d = getDisp(riskId(f));
     rows.push([
@@ -567,17 +577,22 @@ function invoiceViewHtml(d, metaMap) {
   if (!invs.length) return `<div class="card card-pad"><div class="hint">无发票数据。</div></div>`;
   return `${notExec ? `<div class="view-note">⚠ 部分规则未执行（数据不足/未配置），不能据此判定无命中</div>` : ""}
   <div class="inv-group">${invs.map(i => `
-    <div class="inv-card${i.clean ? " clean" : ""}">
-      <div class="inv-head">
+    <details class="inv-card${i.clean ? " clean" : ""}${notExec && i.clean ? " partial" : ""}">
+      <summary class="inv-head">
         <span class="inv-no">${esc(shortNo(i.invoice_no))}</span>
         <span class="inv-full">${esc(i.invoice_no)}</span>
         <span class="inv-meta">${esc(i.seller_name || "")} · ${esc(i.issue_date || "")} · ¥${esc(i.total || i.amount || "—")}</span>
-        ${i.clean ? `<span class="stb ok">✓ 无命中</span>` : `<span class="stb warn">${i.fs.length} 条命中</span>`}
+        ${i.clean
+          ? (notExec ? `<span class="stb q">？ 未完全检查</span>` : `<span class="stb ok">✓ 无命中</span>`)
+          : `<span class="stb warn">${i.fs.length} 条命中</span>`}
+        <span class="caret">▸</span>
+      </summary>
+      <div class="inv-body">
+        ${i.clean
+          ? `<div class="inv-clean-note">${notExec ? "本票无命中，但部分规则未执行，不能判定绝对合规（最后≠最干净）" : "无命中风险（已按当前规则检查，不代表绝对合规）"}</div>`
+          : `<div class="inv-list">${i.fs.map(f => findingRow(f, metaMap, true)).join("")}</div>`}
       </div>
-      ${i.clean
-        ? `<div class="inv-clean-note">无命中风险（已按当前规则检查，不代表绝对合规）</div>`
-        : `<div class="inv-list">${i.fs.map(f => findingRow(f, metaMap, true)).join("")}</div>`}
-    </div>`).join("")}</div>`;
+    </details>`).join("")}</div>`;
 }
 
 /* 规则效果视图（P1③）：以 d.rules 为唯一源，审批/审计视角，不参与处置主路径 */
@@ -598,7 +613,7 @@ function ruleViewHtml(d, metaMap) {
     return (a.rule_id || "").localeCompare(b.rule_id || "");         // 规则名升序
   });
   if (!rules.length) return `<div class="card card-pad"><div class="hint">无规则数据。</div></div>`;
-  return `<div class="view-note">规则效果视图（审批/审计视角）：每条规则的命中/未命中/未执行三态；未执行不代表合规，需补数据/配置后重跑</div>
+  return `<div class="view-note">规则效果视图（只读分析视角，不参与处置）：每条规则的命中/未命中/未执行三态；未执行不代表合规，需补数据/配置后重跑；处置请到风险/发票视图</div>
   <div class="rule-group">${rules.map(r => {
     const sev = r.severity || "中";
     const sevCls = SEV_CLS[sev] || "low";
@@ -616,17 +631,25 @@ function ruleViewHtml(d, metaMap) {
 
 /* 视图切换（P1③）：localStorage 持久化，非法值回退风险视图；renderReport 重渲染后保持 */
 const VIEW_KEY = "fap:report-view";
+function applyFltState(v) {
+  const off = v !== "risk";
+  document.querySelectorAll(".flt").forEach(b => { b.disabled = off; });
+  const h = document.getElementById("fltHint");
+  if (h) h.textContent = off ? "筛选仅作用于风险视图" : "";
+}
 function setView(v) {
   if (!["risk","invoice","rule"].includes(v)) v = "risk";
-  localStorage.setItem(VIEW_KEY, v);
+  try { localStorage.setItem(VIEW_KEY, v); } catch (e) { /* 存储不可用：视图状态不保留，回退风险视图 */ }
   document.querySelectorAll(".report-view").forEach(el => { el.hidden = el.id !== "view-" + v; });
   document.querySelectorAll(".vs").forEach(b => b.classList.toggle("active", b.dataset.view === v));
+  applyFltState(v);
 }
 function applyView() {
   let v = localStorage.getItem(VIEW_KEY);
   if (!["risk","invoice","rule"].includes(v)) v = "risk";
   document.querySelectorAll(".report-view").forEach(el => { el.hidden = el.id !== "view-" + v; });
   document.querySelectorAll(".vs").forEach(b => b.classList.toggle("active", b.dataset.view === v));
+  applyFltState(v);
 }
 
 function __origRender(d) {
@@ -707,6 +730,7 @@ function __origRender(d) {
   <div class="section">
     <div class="section-head">
       <div class="tools">
+        <span class="hint" id="fltHint" style="margin:0 4px 0 0;"></span>
         <button class="btn-ghost flt active" data-flt="all">全部</button>
         <button class="btn-ghost flt" data-flt="pending">待处理</button>
         <button class="btn-ghost" onclick="exportCSV(${JSON.stringify(d.findings||[]).replace(/"/g,"&quot;")}, ${JSON.stringify(d.rules||[]).replace(/"/g,"&quot;")})">导出 CSV</button>
