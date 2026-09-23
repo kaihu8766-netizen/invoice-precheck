@@ -97,11 +97,22 @@ def _extract_text_fields(text: str, qr_total: Decimal = Decimal("0")) -> dict:
     cos = _COMPANY_RE.findall(joined)
     yens = [_clean_money(x) for x in _YEN_RE.findall(joined)]
 
-    # 公司名去重保序（购买方=第一个，销售方=第二个）
+    # 公司名去重保序（默认版式：购买方=第一个，销售方=第二个）
     seen, unique = set(), []
     for c in cos:
         if c not in seen:
             seen.add(c); unique.append(c)
+
+    # 版式变体检测（2026-09-23 真实样本发现：江苏版式值区在区块标题之前，购/销顺序相反）
+    # 判据：若第一个公司名出现在"购买方信息"区块标题之前 → 值区顺序与区块顺序矛盾 → 反转购/销
+    _BUYER_BLK = re.compile(r"购\s*买\s*方\s*信\s*息")
+    buyer_blk = _BUYER_BLK.search(joined)
+    swapped = False
+    if unique and buyer_blk:
+        first_name_pos = joined.find(unique[0])
+        if first_name_pos >= 0 and first_name_pos < buyer_blk.start():
+            unique = [unique[1], unique[0]] if len(unique) > 1 else unique
+            swapped = True
 
     # total：优先二维码核验码（真实票可靠）→ '小写'标签后首个¥ → 兜底最大¥
     total = Decimal("0")
@@ -131,6 +142,7 @@ def _extract_text_fields(text: str, qr_total: Decimal = Decimal("0")) -> dict:
                 amount, tax = total, Decimal("0")
 
     return {
+        "party_swapped": swapped,
         "invoice_no": no.group(1) if no else "",
         "issue_date": f"{int(date.group(1)):04d}-{int(date.group(2)):02d}-{int(date.group(3)):02d}"
         if date and 1 <= int(date.group(2)) <= 12 and 1 <= int(date.group(3)) <= 31 else "",
@@ -207,10 +219,13 @@ def parse_pdf(data: bytes, source_hash: str = "") -> NormalizedInvoice:
         )
         missing = [k for k in ("invoice_no", "issue_date", "total", "buyer_name", "seller_name")
                    if not getattr(inv, k)]
-        if missing:
-            warnings.append(f"字段缺失: {','.join(missing)}")
         # D 补丁：需人工复核判定（不自动通过）
         review_why: list[str] = []
+        if tf.get("party_swapped"):
+            warnings.append("购/销方版式变体（值区先于区块标题），已按区块顺序反转，请人工核对方向")
+            review_why.append("购/销方版式变体，方向待人工确认")
+        if missing:
+            warnings.append(f"字段缺失: {','.join(missing)}")
         if inv.total > 0 and inv.amount + inv.tax != inv.total:
             warnings.append("价税勾稽不符")
             review_why.append("价税勾稽不符（金额+税额≠价税合计）")
