@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import statistics
 import sys
 import time
@@ -66,6 +67,61 @@ def _run_synthetic() -> dict:
     }
 
 
+def _run_public_official() -> dict:
+    """官方公告样张（政府公开文件，格式覆盖）：空白模板，预期字段缺失→review_needed。"""
+    files = sorted((ROOT / "benchmark" / "public" / "official").glob("*.pdf"))
+    rows, t0 = [], time.time()
+    for pth in files:
+        try:
+            inv = parse_document(pth.read_bytes())
+            rows.append({
+                "file": pth.name, "parsed": True, "reconcile": False,
+                "review_needed": inv.review_needed,
+                "review_reason": inv.review_reason,
+                "note": "官方空白样张：预期字段缺失触发人工复核",
+            })
+        except Exception as e:
+            rows.append({"file": pth.name, "parsed": False, "error": f"{type(e).__name__}: {str(e)[:60]}"})
+    elapsed = time.time() - t0
+    parsed = [r for r in rows if r.get("parsed")]
+    return {
+        "group": "public_official", "count": len(files), "elapsed_s": round(elapsed, 2),
+        "parse_rate": f"{len(parsed)}/{len(files)}",
+        "review_rate": f"{sum(1 for r in parsed if r.get('review_needed'))}/{len(parsed)}",
+        "note": "官方数电票样张（政府公告附件，格式覆盖；空白模板预期需人工复核）",
+        "rows": rows,
+    }
+
+
+def _run_private_copy() -> dict:
+    """真实脱敏副本（受控保留：本机 ~/invoice-private/，环境变量 INVOICE_PRIVATE_DIR 注入，可重跑）。"""
+    d = Path(os.environ.get("INVOICE_PRIVATE_DIR", ""))
+    if not d.is_dir():
+        return {"group": "real_private", "note": "未配置 INVOICE_PRIVATE_DIR（受控脱敏副本区），跳过", "rows": []}
+    files = sorted(list(d.glob("*.pdf")) + list(d.glob("*.xml")) + list(d.glob("*.ofd")))
+    if not files:
+        return {"group": "real_private", "note": "受控副本区为空，等待新样本", "rows": []}
+    rows, t0 = [], time.time()
+    for pth in files:
+        try:
+            inv = parse_document(pth.read_bytes())
+            gk = inv.total > 0 and inv.amount + inv.tax == inv.total
+            rows.append({"file": pth.name, "parsed": True, "reconcile": gk,
+                         "invoice_no": inv.invoice_no, "total": str(inv.total),
+                         "review_needed": inv.review_needed})
+        except Exception as e:
+            rows.append({"file": pth.name, "parsed": False, "error": f"{type(e).__name__}: {str(e)[:60]}"})
+    elapsed = time.time() - t0
+    parsed = [r for r in rows if r.get("parsed")]
+    return {
+        "group": "real_private", "count": len(files), "elapsed_s": round(elapsed, 2),
+        "parse_rate": f"{len(parsed)}/{len(files)}",
+        "reconcile_rate": f"{sum(1 for r in parsed if r.get('reconcile'))}/{len(parsed)}",
+        "avg_ms": round(elapsed / max(len(files), 1) * 1000),
+        "note": f"真实脱敏副本（受控保留 {d}，可重跑）", "rows": rows,
+    }
+
+
 def _run_archived() -> dict:
     """真实脱敏归档（文件已按红线删除，标注真值来自解析验证记录，不再重跑）。"""
     priv = ROOT / "benchmark" / "private" / "real_invoices_anonymized.json"
@@ -90,7 +146,7 @@ def main() -> int:
     ap.add_argument("--json", action="store_true", help="结果落盘 benchmark/results/latest.json")
     args = ap.parse_args()
 
-    results = [_run_synthetic(), _run_archived()]
+    results = [_run_synthetic(), _run_public_official(), _run_private_copy(), _run_archived()]
     print("=" * 60)
     print("基准集跑分（四指标 · 口径：解析成功率/勾稽准确率/耗时/归档）")
     print("=" * 60)

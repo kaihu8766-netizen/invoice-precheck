@@ -61,3 +61,9 @@ uvicorn app.main:app --reload     # 浏览器打开 http://127.0.0.1:8000
 - 免责："辅助提示，不替代专业财务/审计判断"（R-08）
 - 结论措辞："公开+合成集通过，真实分布未验证"（R-11）
 - 规则分级：A 级上线 / B 级等真实数据 / 红线不碰
+
+## 数据红线声明
+
+- 本仓库不含任何真实发票。真实发票**本地看、本地验**，原始文件验完即删。
+- 脱敏副本受控保留在本机 `~/invoice-private/`（仓库外，通过环境变量 `INVOICE_PRIVATE_DIR` 注入），**永不入库/不上 Pages/不进第三方/不用于训练**。
+- 基准集构成：`benchmark/synthetic`（自造，进 Git）· `benchmark/public`（官方公告样张等公开素材，标注来源许可）· `benchmark/private`（仅存脱敏映射与结果归档，.gitignore 永不入库）。
