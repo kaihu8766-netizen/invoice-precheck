@@ -32,11 +32,18 @@ import re
 import sys
 from pathlib import Path
 
-# 项目根（本脚本位于 <root>/scripts/）
-ROOT = Path(__file__).resolve().parent.parent
+# 项目根（A3修复：git rev-parse 更稳健，兼容 worktree/symlink；失败时明确报错）
+import subprocess as _sp
+try:
+    ROOT = Path(_sp.check_output(["git", "rev-parse", "--show-toplevel"], text=True).strip())
+except Exception as _e:
+    raise SystemExit(f"FATAL: 无法定位仓库根（git rev-parse 失败）：{_e}")
 
 # 溯源仓库路径（与 invoice-precheck 平级）
 TRACE = ROOT.parent / "project-trace"
+# A3补强：断言 TRACE 是真 git 仓，防布局假设失效时静默读错文件
+if not (TRACE / ".git").exists():
+    raise SystemExit(f"FATAL: TRACE 仓库不存在或不是 git 仓：{TRACE}")
 # RV-30：评审档案相对 TRACE 仓库根的目录（git log -- <path> 用，path 相对仓库根；抽常量防目录改名漏改）
 ARCHIVE_DIR = "03-会议与日志/DeepSeek评审"
 RV_DIR = TRACE / ARCHIVE_DIR
@@ -141,12 +148,33 @@ def cmd_gate(task: str) -> int:
 
 def cmd_check(message: str) -> int:
     ids = ID_RE.findall(message)
-    if ids:
-        print(f"[check] OK：引用 {ids}")
-        return 0
-    print("[check] FAIL：commit message 必须含 ID 引用（GATE-* / RV-* / DEC-* / ISS-*）")
-    print("[check] 示例：feat(scope): 描述 (RV-20260923-05, GATE-20260923-01)")
-    return 1
+    if not ids:
+        print("[check] FAIL：commit message 必须含 ID 引用（GATE-* / RV-* / DEC-* / ISS-*）")
+        print("[check] 示例：feat(scope): 描述 (RV-20260923-05, GATE-20260923-01)")
+        return 1
+    # A1修复：RV/GATE 号必须在 trace/ 索引中真实存在（防伪造号自证）+ status=adopted（防冒用pending号）
+    idx = _read_text(RV_INDEX)
+    for rid in ids:
+        if rid.startswith(("RV-", "GATE-")):
+            m = re.search(r"(\d{8})-(\d+)$", rid)
+            if m:
+                ymd, no = m.group(1), m.group(2)
+                prefix = f"{ymd[:4]}-{ymd[4:6]}-{ymd[6:]}-{int(no):02d}-"
+                rv_line = next((ln for ln in idx.splitlines() if prefix in ln), None)
+                # B1：档案=唯一权威源；索引是派生视图。索引缺→查档案目录，档案在则 fail loud 提示重建索引，不在才判伪造号
+                if not rv_line:
+                    arch_md = RV_DIR / f"{prefix}*.md"
+                    if list(RV_DIR.glob(f"{prefix}*.md")):
+                        print(f"[check] WARN：{rid} 档案存在但索引未收录（索引视图过期），请重建索引", file=sys.stderr)
+                        print(f"[check] FAIL：{rid} 索引不一致，拒绝提交（需先重建索引）", file=sys.stderr)
+                        return 1
+                    print(f"[check] FAIL：{rid} 未在评审索引中找到（伪造号或档案未入库）", file=sys.stderr)
+                    return 1
+                if "| adopted |" not in rv_line:
+                    print(f"[check] FAIL：{rid} 在索引中存在但未置 adopted（pending 号不可作为批准依据）", file=sys.stderr)
+                    return 1
+    print(f"[check] OK：引用 {ids}（存在性校验通过）")
+    return 0
 
 
 def cmd_ids(grep: str) -> int:
@@ -192,8 +220,8 @@ def _classify(staged_diff: str) -> tuple[list[str], str]:
 def cmd_classify(staged: bool) -> int:
     """classify --staged：分类当前 staged diff，输出命中红线类别 + diff_hash。"""
     import subprocess
-    diff = subprocess.run(["git", "diff", "--cached", "--binary"],
-                          capture_output=True, text=True).stdout if staged else ""
+    diff = subprocess.run(["git", "diff", "--cached", "--binary", "--", ".", ":!agent-communication-demo/raw/"],
+                          capture_output=True, text=True, cwd=ROOT).stdout if staged else ""
     if not staged:
         print("缺少 --staged；仅支持对 staged 改动分类（commit 前使用）")
         return 2
@@ -213,8 +241,12 @@ def cmd_check_rv(message: str) -> int:
     其档案记录的 diff_hash == 当前 staged diff hash；3) 无 RV 或哈希不符→拒绝。
     """
     import subprocess, re, yaml
-    diff = subprocess.run(["git", "diff", "--cached", "--binary"],
-                          capture_output=True, text=True).stdout
+    diff = subprocess.run(["git", "diff", "--cached", "--binary", "--", ".", ":!agent-communication-demo/raw/"],
+                          capture_output=True, text=True, cwd=ROOT).stdout
+    if not diff.strip():
+        # 空 staged：diff_hash 是全局常量（e3b0c442...），任何 RV 都能"匹配"——冒用后门，直接拒绝
+        print("[check-rv] FAIL：staged 为空，拒绝以空 diff 校验 RV（防全局常量冒用后门）", file=sys.stderr)
+        return 1
     hits, cur_hash = _classify(diff)
     if not hits:
         print("[check-rv] 未命中评审红线（常规 ID 校验由钩子继续）")
