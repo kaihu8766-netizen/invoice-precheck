@@ -21,11 +21,22 @@
     --bg:#f6f7f9; --card:#fff;
     --r-lg:12px; --r-md:8px; --r-sm:6px;
     --shadow:0 1px 2px rgba(15,23,42,.04), 0 1px 3px rgba(15,23,42,.06);
+    /* UI-2 视觉降噪（RV-74 第一批）：浅蓝渐变页面层、圆角加大、弱边框 */
+    --bg-grad:linear-gradient(180deg,#eef4ff 0%,#f6f7f9 320px,#f6f7f9 100%);
+    --r-xl:16px; --r-lg:14px;
+    --line-soft2:#f2f4f8;
   }
   *{ box-sizing:border-box; margin:0; padding:0; }
   html,body{ height:100%; }
-  body{ font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif; background:var(--bg); color:var(--ink); font-size:14px; line-height:1.6; }
+  body{ font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif; background:var(--bg-grad); color:var(--ink); font-size:14px; line-height:1.6; }
   .app{ max-width:1180px; margin:0 auto; padding:0 20px 48px; }
+
+  /* UI-2 溢出修复（RV-74 D）：按字段类型，禁止从中间折断关键字段 */
+  .num{ white-space:nowrap; font-variant-numeric:tabular-nums; text-overflow:ellipsis; overflow:hidden; max-width:100%; }
+  .wrap-any{ overflow-wrap:anywhere; word-break:break-word; }
+  table{ table-layout:fixed; }
+  th, td{ overflow-wrap:break-word; }
+  th.num-col, td.num{ white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 
   /* ---------- 顶栏 ---------- */
   .topbar{ display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px; padding:16px 0; border-bottom:1px solid var(--line); margin-bottom:16px; }
@@ -51,7 +62,19 @@
   @media (max-width:900px){ .input-panel{ position:static; } }
   .output-panel{ min-width:0; }
 
-  .card{ background:var(--card); border:1px solid var(--line); border-radius:var(--r-lg); box-shadow:var(--shadow); }
+  .card{ background:var(--card); border:1px solid var(--line); border-radius:var(--r-xl); box-shadow:0 1px 2px rgba(15,23,42,.03), 0 2px 8px rgba(15,23,42,.05); }
+
+  /* UI-2 顶栏设置抽屉按钮（RV-74 A：配置收抽屉，仅后端连接+规则阈值） */
+  .btn-settings{ border:1px solid var(--line); background:#fff; border-radius:10px; padding:6px 12px; font:inherit; font-size:12.5px; font-weight:600; color:var(--sub); cursor:pointer; display:flex; align-items:center; gap:5px; transition:all .15s; }
+  .btn-settings:hover{ border-color:var(--brand); color:var(--brand); background:var(--brand-weak); }
+  .settings-drawer{ display:none; position:absolute; right:0; top:52px; width:380px; max-width:calc(100vw - 24px); background:#fff; border:1px solid var(--line); border-radius:var(--r-lg); box-shadow:0 12px 40px rgba(15,23,42,.14); padding:14px 16px 16px; z-index:50; max-height:calc(100vh - 70px); overflow:auto; }
+  .settings-drawer.open{ display:block; }
+  .settings-drawer h4{ font-size:13px; font-weight:700; margin-bottom:8px; }
+  .settings-drawer .hint{ font-size:11.5px; }
+  /* UI-2 主体常驻（RV-74 A：企业主体=每次运行前置上下文，必须可见可改） */
+  .subject-chip{ display:inline-flex; align-items:center; gap:6px; font-size:12px; font-weight:600; color:var(--brand); background:var(--brand-weak); border:1px solid #d6e2ff; border-radius:8px; padding:3px 10px; max-width:280px; }
+  .subject-chip .nm{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .subject-chip .btn-edit{ border:none; background:transparent; color:var(--brand); font:inherit; font-size:11px; cursor:pointer; padding:0 2px; text-decoration:underline dotted; }
   .card-pad{ padding:16px; }
   .card h3{ font-size:13px; font-weight:700; color:var(--sub); text-transform:none; margin-bottom:10px; letter-spacing:.3px; }
   .card h3 .n{ color:var(--ink); }
@@ -320,6 +343,22 @@
 .rev-actions{display:flex;gap:8px;flex-wrap:wrap;}
 .rev-btn{margin-left:8px;padding:2px 9px;font-size:12px;}
 .badge.review.done{background:#e8f6ee;color:#2f7d4f;border:1px solid #b6e0c6;}
+
+/* UI-2 溢出根治（RV-74 D）：长字段按类型处理，关键字段禁止中间折断 */
+.inv-head{ display:flex; align-items:center; gap:8px; flex-wrap:wrap; min-width:0; }
+.inv-no{ font-weight:700; font-size:13px; flex-shrink:0; }
+.inv-full{ font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:12px; color:var(--sub); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:180px; flex-shrink:1; }
+.inv-meta{ font-size:12px; color:var(--sub); overflow-wrap:anywhere; word-break:break-word; min-width:0; flex:1 1 auto; }
+.ticket{ font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-weight:600; }
+.meta{ overflow-wrap:anywhere; word-break:break-word; }
+.ctxmeta{ overflow-wrap:anywhere; word-break:break-word; }
+code{ overflow-wrap:anywhere; word-break:break-word; }
+.kpi .n{ font-size:20px; font-weight:800; line-height:1.2; font-variant-numeric:tabular-nums; }
+.kpi .l{ word-break:keep-all; }
+@media (max-width:560px){
+  .inv-full{ max-width:120px; }
+  .inv-meta{ flex-basis:100%; }
+}
 </style>
 <script>
 /* ES5 兼容探针（RV-39：独立于主脚本，主脚本解析失败也能点亮） */
@@ -362,10 +401,60 @@
       </div>
     </div>
     <div class="top-right">
+      <span id="subjectChip" class="subject-chip" style="display:none;" title="当前校验主体（R2 抬头/税号）"><span class="nm" id="subjectChipName">示例科技有限公司</span><button class="btn-edit" id="btnEditSubject" type="button">修改</button></span>
       <span id="modeLabel" class="badge demo">演示模式（内置样例）</span>
       <div class="seg">
         <button id="btnDemo" class="active">演示模式</button>
         <button id="btnLive">真实模式</button>
+      </div>
+      <div style="position:relative;">
+        <button id="btnSettings" class="btn-settings" type="button">⚙ 设置</button>
+        <div id="settingsDrawer" class="settings-drawer">
+          <h4>连接后端</h4>
+          <div class="fld">
+            <label for="backendUrl">后端地址</label>
+            <input id="backendUrl" type="text" inputmode="url" placeholder="https://xxx.trycloudflare.com 或 http://localhost:8000" style="font-size:16px;">
+          </div>
+          <div class="fld">
+            <label for="apiKey">API Key（X-API-Key）</label>
+            <input id="apiKey" type="password" autocomplete="off" placeholder="后端环境变量 INVOICE_API_KEY 的值" style="font-size:16px;">
+          </div>
+          <button id="btnTest" class="btn btn-ghost" style="margin-top:10px;">测试连接</button>
+          <div class="hint" id="connHint">地址与 Key 仅保存在本浏览器，不发送到第三方。</div>
+          <h4 style="margin-top:16px;padding-top:12px;border-top:1px dashed var(--line);">企业主体设置（R2 抬头/税号校验）</h4>
+          <div class="fld">
+            <label for="coName">企业名称</label>
+            <input id="coName" type="text" placeholder="本公司全称（例：示例科技有限公司）" style="font-size:16px;">
+          </div>
+          <div class="fld">
+            <label for="coTaxId">统一社会信用代码</label>
+            <input id="coTaxId" type="text" placeholder="18 位税号" style="font-size:16px;">
+          </div>
+          <button id="btnSaveCfg" class="btn btn-ghost" style="margin-top:10px;">保存企业主体</button>
+          <div class="hint" id="cfgHint">保存后 R2 将校验每张票购买方税号是否本公司：不一致 → 高风险；税号一致但名称差异 → 低风险提示。首版仅支持单主体（集团多法人/代开场景暂不覆盖）。</div>
+          <details id="rulesCfg" style="margin-top:14px;border:1px dashed var(--line);border-radius:8px;padding:10px 12px;">
+            <summary style="cursor:pointer;font-size:12.5px;font-weight:600;color:var(--sub);">规则阈值校准（R3/R4/R6/R8 · 默认值见各输入框占位符）</summary>
+            <div style="margin-top:8px;font-size:12.5px;font-weight:600;color:var(--brand);">R3 连号</div>
+            <div class="fld"><label for="rcSerialTail">连号取票号末 N 位（2-8）</label><input id="rcSerialTail" type="number" min="2" max="8" placeholder="4" style="font-size:16px;"></div>
+            <div class="fld"><label for="rcSerialGap">窗口内相邻最大差值（0-10）</label><input id="rcSerialGap" type="number" min="0" max="10" placeholder="2" style="font-size:16px;"></div>
+            <div class="fld"><label for="rcSerialMin">窗口内最少票数（2-100）</label><input id="rcSerialMin" type="number" min="2" max="100" placeholder="3" style="font-size:16px;"></div>
+            <div style="margin-top:8px;font-size:12.5px;font-weight:600;color:var(--brand);">R4 类别限额（元，100-1 亿）</div>
+            <div class="fld"><label for="rcLimitTravel">差旅</label><input id="rcLimitTravel" type="number" min="100" placeholder="5000" style="font-size:16px;"></div>
+            <div class="fld"><label for="rcLimitEntertain">招待</label><input id="rcLimitEntertain" type="number" min="100" placeholder="3000" style="font-size:16px;"></div>
+            <div class="fld"><label for="rcLimitOffice">办公</label><input id="rcLimitOffice" type="number" min="100" placeholder="2000" style="font-size:16px;"></div>
+            <div class="fld"><label for="rcLimitTransport">交通</label><input id="rcLimitTransport" type="number" min="100" placeholder="1000" style="font-size:16px;"></div>
+            <div class="fld"><label for="rcLimitOther">其他</label><input id="rcLimitOther" type="number" min="100" placeholder="5000" style="font-size:16px;"></div>
+            <div class="fld"><label for="rcDefaultLimit">类别不在表内时的默认限额（元）</label><input id="rcDefaultLimit" type="number" min="100" placeholder="5000" style="font-size:16px;"></div>
+            <div style="margin-top:8px;font-size:12.5px;font-weight:600;color:var(--brand);">R6 / R8</div>
+            <div class="fld"><label for="rcConcentrate">同供应商同日票数阈值（2-100）</label><input id="rcConcentrate" type="number" min="2" max="100" placeholder="6" style="font-size:16px;"></div>
+            <div class="fld"><label for="rcMaxTotal">单票金额上限（元，1 万-10 亿）</label><input id="rcMaxTotal" type="number" min="10000" placeholder="30000000" style="font-size:16px;"></div>
+            <div style="display:flex;gap:8px;margin-top:10px;">
+              <button id="btnSaveRules" class="btn btn-ghost" style="flex:1;">保存规则阈值</button>
+              <button id="btnResetRules" class="btn btn-ghost" style="flex:1;">恢复默认</button>
+            </div>
+            <div class="hint" id="rulesHint">阈值保存到本地后端 data/config.json（不入 Git）。变更会记录生效时间与配置哈希，报告中标注"阈值来自自定义配置"。</div>
+          </details>
+        </div>
       </div>
     </div>
   </header>
@@ -385,55 +474,6 @@
         <div class="filelist" id="fileList"></div>
         <button id="btnReview" class="btn btn-primary" style="margin-top:12px;">运行预审</button>
         <div class="hint" id="runHint">运行后右侧显示合规预审报告。文件仅发往你配置的后端，不发送第三方。</div>
-      </section>
-
-      <section class="card card-pad live-only">
-        <h3>连接后端</h3>
-        <div class="fld">
-          <label for="backendUrl">后端地址</label>
-          <input id="backendUrl" type="text" inputmode="url" placeholder="https://xxx.trycloudflare.com 或 http://localhost:8000" style="font-size:16px;">
-        </div>
-        <div class="fld">
-          <label for="apiKey">API Key（X-API-Key）</label>
-          <input id="apiKey" type="password" autocomplete="off" placeholder="后端环境变量 INVOICE_API_KEY 的值" style="font-size:16px;">
-        </div>
-        <button id="btnTest" class="btn btn-ghost" style="margin-top:10px;">测试连接</button>
-        <div class="hint" id="connHint">地址与 Key 仅保存在本浏览器，不发送到第三方。</div>
-        <div class="fld" style="margin-top:14px;padding-top:12px;border-top:1px dashed var(--line);">
-          <label>企业主体设置（R2 抬头/税号校验 · 存本地后端，不入 Git）</label>
-        </div>
-        <div class="fld">
-          <label for="coName">企业名称</label>
-          <input id="coName" type="text" placeholder="本公司全称（例：示例科技有限公司）" style="font-size:16px;">
-        </div>
-        <div class="fld">
-          <label for="coTaxId">统一社会信用代码</label>
-          <input id="coTaxId" type="text" placeholder="18 位税号" style="font-size:16px;">
-        </div>
-        <button id="btnSaveCfg" class="btn btn-ghost" style="margin-top:10px;">保存企业主体</button>
-        <div class="hint" id="cfgHint">保存后 R2 将校验每张票购买方税号是否本公司：不一致 → 高风险；税号一致但名称差异 → 低风险提示。首版仅支持单主体（集团多法人/代开场景暂不覆盖）。</div>
-        <details id="rulesCfg" style="margin-top:14px;border:1px dashed var(--line);border-radius:8px;padding:10px 12px;">
-          <summary style="cursor:pointer;font-size:12.5px;font-weight:600;color:var(--sub);">规则阈值校准（R3/R4/R6/R8 · 默认值见各输入框占位符）</summary>
-          <div style="margin-top:8px;font-size:12.5px;font-weight:600;color:var(--brand);">R3 连号</div>
-          <div class="fld"><label for="rcSerialTail">连号取票号末 N 位（2-8）</label><input id="rcSerialTail" type="number" min="2" max="8" placeholder="4" style="font-size:16px;"></div>
-          <div class="fld"><label for="rcSerialGap">窗口内相邻最大差值（0-10）</label><input id="rcSerialGap" type="number" min="0" max="10" placeholder="2" style="font-size:16px;"></div>
-          <div class="fld"><label for="rcSerialMin">窗口内最少票数（2-100）</label><input id="rcSerialMin" type="number" min="2" max="100" placeholder="3" style="font-size:16px;"></div>
-          <div style="margin-top:8px;font-size:12.5px;font-weight:600;color:var(--brand);">R4 类别限额（元，100-1 亿）</div>
-          <div class="fld"><label for="rcLimitTravel">差旅</label><input id="rcLimitTravel" type="number" min="100" placeholder="5000" style="font-size:16px;"></div>
-          <div class="fld"><label for="rcLimitEntertain">招待</label><input id="rcLimitEntertain" type="number" min="100" placeholder="3000" style="font-size:16px;"></div>
-          <div class="fld"><label for="rcLimitOffice">办公</label><input id="rcLimitOffice" type="number" min="100" placeholder="2000" style="font-size:16px;"></div>
-          <div class="fld"><label for="rcLimitTransport">交通</label><input id="rcLimitTransport" type="number" min="100" placeholder="1000" style="font-size:16px;"></div>
-          <div class="fld"><label for="rcLimitOther">其他</label><input id="rcLimitOther" type="number" min="100" placeholder="5000" style="font-size:16px;"></div>
-          <div class="fld"><label for="rcDefaultLimit">类别不在表内时的默认限额（元）</label><input id="rcDefaultLimit" type="number" min="100" placeholder="5000" style="font-size:16px;"></div>
-          <div style="margin-top:8px;font-size:12.5px;font-weight:600;color:var(--brand);">R6 / R8</div>
-          <div class="fld"><label for="rcConcentrate">同供应商同日票数阈值（2-100）</label><input id="rcConcentrate" type="number" min="2" max="100" placeholder="6" style="font-size:16px;"></div>
-          <div class="fld"><label for="rcMaxTotal">单票金额上限（元，1 万-10 亿）</label><input id="rcMaxTotal" type="number" min="10000" placeholder="30000000" style="font-size:16px;"></div>
-          <div style="display:flex;gap:8px;margin-top:10px;">
-            <button id="btnSaveRules" class="btn btn-ghost" style="flex:1;">保存规则阈值</button>
-            <button id="btnResetRules" class="btn btn-ghost" style="flex:1;">恢复默认</button>
-          </div>
-          <div class="hint" id="rulesHint">阈值保存到本地后端 data/config.json（不入 Git）。变更会记录生效时间与配置哈希，报告中标注"阈值来自自定义配置"。</div>
-        </details>
       </section>
 
       <section class="card card-pad demo-only">
@@ -1525,6 +1565,11 @@ function setMode(live) {
   if (live) {
     $("backendUrl").value = localStorage.getItem("ipc_backend") || "http://localhost:8000";
     $("apiKey").value = localStorage.getItem("ipc_key") || "";
+    // UI-2（RV-74）：切换真实模式后回显主体 chip（本地存储的企业名）
+    if (localStorage.getItem("ipc_company")) $("coName").value = localStorage.getItem("ipc_company");
+    updateSubjectChip();
+  } else {
+    updateSubjectChip();
   }
   $("empty").style.display = "";
   $("result").innerHTML = "";
@@ -1565,6 +1610,7 @@ async function loadCompanyCfg() {
   if (ents.length) {
     if (ents[0].name) $("coName").value = ents[0].name;
     if (ents[0].tax_id) $("coTaxId").value = ents[0].tax_id;
+    updateSubjectChip();
   }
   if (j.rules) fillRulesPanel(j.rules);
 }
@@ -1586,11 +1632,40 @@ $("btnSaveCfg").onclick = async () => {
     if (!r.ok) { $("cfgHint").textContent = "保存失败：" + (j.detail || r.status); $("cfgHint").className = "hint err"; return; }
     $("cfgHint").textContent = "已保存：" + j.message + (j.tax_id_masked ? "（税号 " + j.tax_id_masked + "）" : "") + "，R2 校验已生效";
     $("cfgHint").className = "hint okc";
+    // UI-2（RV-74）：主体常驻报告头——保存后更新顶栏 chip + 本地回显
+    if (name) localStorage.setItem("ipc_company", name);
+    updateSubjectChip();
   } catch (e) {
     $("cfgHint").textContent = "保存失败：" + e.message;
     $("cfgHint").className = "hint err";
   }
 };
+// UI-2（RV-74）：设置抽屉开关 + 主体常驻 chip
+function updateSubjectChip() {
+  const name = $("coName").value.trim();
+  const chip = $("subjectChip");
+  if (name) {
+    $("subjectChipName").textContent = name;
+    chip.style.display = "inline-flex";
+  } else {
+    chip.style.display = "none";
+  }
+}
+$("btnSettings").onclick = (ev) => {
+  ev.stopPropagation();
+  $("settingsDrawer").classList.toggle("open");
+};
+document.addEventListener("click", (ev) => {
+  const d = $("settingsDrawer");
+  if (d.classList.contains("open") && !d.contains(ev.target) && ev.target.id !== "btnSettings") {
+    d.classList.remove("open");
+  }
+});
+$("btnEditSubject").onclick = () => {
+  $("settingsDrawer").classList.add("open");
+  $("coName").focus();
+};
+
 function fillRulesPanel(rules) {
   if (!rules) return;
   var set = function (id, v) { if (v !== undefined && v !== null) { var el = $(id); if (el) el.value = v; } };
