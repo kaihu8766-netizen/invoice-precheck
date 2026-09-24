@@ -12,10 +12,13 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 HTML = ROOT / "docs" / "index.html"
 CHROME = "/usr/local/bin/chromium"
+HAVE_CHROME = os.path.exists(CHROME)
 
 
 def render_check(script: str) -> str:
-    """chromium headless 渲染后执行注入 JS，返回 console 输出。"""
+    """chromium headless 渲染后执行注入 JS，返回 console 输出。CI 无 chromium 时跳过。"""
+    if not HAVE_CHROME:
+        raise unittest.SkipTest("chromium 不可用（CI 环境），跳过渲染类测试")
     code = f"""
     <script>
     try {{
