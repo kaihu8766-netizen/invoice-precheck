@@ -10,9 +10,9 @@ rules:
   ocr_engine:             # OCR 渲染/Provider
     paths: ["app/ocr.py"]
     keywords: ["ocr", "dpi", "render"]
-  rules_engine:           # 规则/阈值
+  rules_engine:           # 规则/阈值（RV-78：keywords 收紧，防 "rules" 匹配 gate_rules.yaml 误命中）
     paths: ["app/rules.py"]
-    keywords: ["阈值", "rule", "限额", "上限"]
+    keywords: ["阈值", "rules.py", "限额", "上限"]
   data_redline:           # 脱敏/真实数据处理（红线相关一律必审）
     paths: ["scripts/anonymize_to_private.py", "scripts/benchmark.py"]
     keywords: ["anonymize", "脱敏", "private", "真实", "发票"]
