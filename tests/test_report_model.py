@@ -146,6 +146,42 @@ class TestReportModel(unittest.TestCase):
         d = __import__("json").loads(out)
         self.assertTrue(d["ok"], f"fileName bad: {d['name']}")
 
+    def test_disp_snapshot_injection(self):
+        """RV-92 B1：处置状态快照注入——模型不读 UI 全局状态（纯函数契约）。"""
+        out = render_check("""
+        const m0 = buildReportModel(demoReport(), { dispMap: {}, liveMode: false });
+        // 找到第一个风险对应的 riskId，构造快照
+        const d0 = demoReport();
+        const f0 = d0.findings[0];
+        const rid = riskId(f0);
+        const m1 = buildReportModel(d0, { dispMap: { [rid]: { status: "已处理" } }, liveMode: false });
+        window.__report_test_output = {
+          m0status: m0.risks[0].status, m1status: m1.risks[0].status,
+          rid: rid
+        };
+        """)
+        d = __import__("json").loads(out)
+        self.assertEqual(d["m0status"], "待处理")
+        self.assertEqual(d["m1status"], "已处理")
+
+    def test_model_memo_reuse(self):
+        """RV-92 B2：数据/处置未变时复用同一模型实例，Excel/PDF 时间戳状态一致。"""
+        out = render_check("""
+        __lastReport = demoReport();
+        const a = getReportModel();
+        const b = getReportModel();
+        // 构造一次无变化调用后对比实例与时间戳
+        window.__report_test_output = {
+          same: a === b,
+          expA: a.header.exportedAt, expB: b.header.exportedAt,
+          nameA: a.fileName, nameB: b.fileName
+        };
+        """)
+        d = __import__("json").loads(out)
+        self.assertTrue(d["same"], "模型应复用同一实例")
+        self.assertEqual(d["expA"], d["expB"], "导出时间戳应一致（快照语义）")
+        self.assertEqual(d["nameA"], d["nameB"], "文件名应一致（同一快照）")
+
 
 if __name__ == "__main__":
     unittest.main()

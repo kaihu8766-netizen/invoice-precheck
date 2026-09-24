@@ -387,10 +387,11 @@
   .op.undo:hover{ background:var(--brand-weak); }
   .flt.active{ background:var(--brand-weak); color:var(--brand); border-color:var(--brand); font-weight:600; }
 
-  /* 打印：只保留独立报告 DOM（RV-91：报告打印与工作台隔离） */
+  /* 打印：只保留独立报告 DOM（RV-91：报告打印与工作台隔离；RV-92：模态与按钮一并排除，防白页/残留） */
   #report-print-root{ display:none; }
   @media print{
     body > *:not(#report-print-root){ display:none !important; }
+    .rev-overlay, .rpPreviewOv, #rpPreviewOv{ display:none !important; }
     #report-print-root{ display:block !important; }
     body{ background:#fff; }
     .rp{ font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif; color:#1a1f26; font-size:12px; line-height:1.65; }
@@ -714,8 +715,10 @@ const SEV_CLS = { "高": "high", "中": "mid", "低": "low" };
 const CONF_ALLOW = /* @__PURE__ */ new Set(["确定", "疑似"]);
 const DISCLAIMER = "本工作台基于发票文件结构化数据进行入账前检查辅助，不替代人工复核与税务判断；发现问题需核原始凭证，未发现异常不代表不存在异常；未检查、未执行的检查项不代表该项无风险；本结果不构成税务合规结论、审计意见或专业鉴证意见，最终以电子税务局查验结果及主管税务机关认定为准；检查方案版本与覆盖范围已列明。";
 const SCOPE_NOTE = "本报告基于数电票 XML 结构化数据的确定性规则生成；公开+合成集验证通过，真实分布未验证。";
-// ===== 预审报告数据模型（RV-91：Excel/PDF 共用单一来源，纯函数无 DOM 依赖）=====
-function buildReportModel(d) {
+// ===== 预审报告数据模型（RV-91：Excel/PDF 共用单一来源；RV-92：处置状态快照注入，保持纯函数）=====
+function buildReportModel(d, opts) {
+  opts = opts || {};
+  const dispMap = opts.dispMap || {};
   const s = d.summary || {};
   const invs = d.invoices || [];
   const findings = d.findings || [];
@@ -723,7 +726,7 @@ function buildReportModel(d) {
   const now = new Date();
   const pad = (n) => String(n).padStart(2, "0");
   const nowStr = now.getFullYear() + "-" + pad(now.getMonth() + 1) + "-" + pad(now.getDate()) + " " + pad(now.getHours()) + ":" + pad(now.getMinutes()) + ":" + pad(now.getSeconds());
-  const nowCompact = now.getFullYear() + pad(now.getMonth() + 1) + pad(now.getDate()) + "-" + pad(now.getHours()) + pad(now.getMinutes());
+  const nowCompact = now.getFullYear() + pad(now.getMonth() + 1) + pad(now.getDate()) + "-" + pad(now.getHours()) + pad(now.getMinutes()) + pad(now.getSeconds());
   // 预审结论计数（与工作台 precheck 派生口径一致）
   const pc = { "建议入账": 0, "建议核对": 0, "阻断入账": 0, "无法预审": 0 };
   let pcAmt = { "建议入账": 0, "建议核对": 0, "阻断入账": 0, "无法预审": 0 };
@@ -757,17 +760,20 @@ function buildReportModel(d) {
       status: "—"
     };
   });
-  const riskRows = findings.map((f) => ({
-    rule_id: f.rule_id, rule_name: f.rule_name || "", severity: f.severity || "中",
-    invoice_no: f.invoice_no || "", message: f.message || "", suggestion: f.suggestion || "",
-    status: getDisp(riskId(f)) ? getDisp(riskId(f)).status : "待处理"
-  }));
+  const riskRows = findings.map((f) => {
+    const disp = dispMap[riskId(f)];
+    return {
+      rule_id: f.rule_id, rule_name: f.rule_name || "", severity: f.severity || "中",
+      invoice_no: f.invoice_no || "", message: f.message || "", suggestion: f.suggestion || "",
+      status: disp && disp.status ? disp.status : "待处理"
+    };
+  });
   return {
     header: {
       batchId: d.batch_id || "—", generatedAt: d.generated_at || nowStr, exportedAt: nowStr,
       ruleset: (rs.name || "发票合规检查方案") + " v" + (rs.version || d.ruleset_version || ""),
       effective: rs.effective_date || "", scope: rs.scope_note || d.scope_note || "",
-      source: document.body && document.body.classList.contains("live") ? "真实模式（连接后端）" : "演示模式（内置样例）",
+      source: opts.liveMode ? "真实模式（连接后端）" : "演示模式（内置样例）",
       fileCount: s.file_count != null ? s.file_count : invs.length,
       invoiceCount: invs.length,
       failedCount: s.failed_count != null ? s.failed_count : 0,
@@ -789,6 +795,25 @@ function buildReportModel(d) {
     scopeNote: SCOPE_NOTE,
     fileName: "预审报告_" + (d.batch_id || "batch").replace(/[^\w\u4e00-\u9fa5-]/g, "_") + "_" + nowCompact + ".xlsx"
   };
+}
+// RV-92 B2：报告模型单一实例（memo 化）。数据指纹 + 处置快照指纹均不变时复用同一 m，
+// 保证 Excel 导出、PDF 预览、打印三处生成时间/处置状态/排序完全一致（导出即快照）。
+let __reportModelCache = null;
+function reportDataFp(d) {
+  const invs = d.invoices || [];
+  const nos = invs.map((i) => i.invoice_no + ":" + (i.precheck || "") + ":" + (i.total || "")).join("|");
+  const s = d.summary || {};
+  return fnv1a64([d.batch_id || "", nos, s.file_count, s.failed_count, s.total_count].join("|")).toString();
+}
+function getReportModel() {
+  const d = __lastReport;
+  if (!d) return null;
+  const dataFp = reportDataFp(d);
+  const dispFp = fnv1a64(JSON.stringify(loadDisp())).toString();
+  if (!__reportModelCache || __reportModelCache.dataFp !== dataFp || __reportModelCache.dispFp !== dispFp) {
+    __reportModelCache = { dataFp, dispFp, m: buildReportModel(d, { dispMap: loadDisp(), liveMode: !!(document.body && document.body.classList.contains("live")) }) };
+  }
+  return __reportModelCache.m;
 }
 // ===== 财务视角术语表（RV-83/84：去IT化，保留财务/税务行话）=====
 // 界面展示文案一律走本表映射；新增术语先在此登记再使用。
@@ -1400,7 +1425,7 @@ function exportInvoicesXLSX() {
     "xl/workbook.xml": enc('<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="发票清单" sheetId="1" r:id="rId1"/></sheets></workbook>'),
     "xl/_rels/workbook.xml.rels": enc('<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>'),
     "xl/worksheets/sheet1.xml": enc(sheetXml),
-    "xl/styles.xml": enc('<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><numFmts count="0"/><fonts count="1"><font><sz val="11"/><name val="Calibri"/></font></fonts><fills count="1"><fill><patternFill patternType="none"/></fill></fills><borders count="1"><border/></borders><cellStyleXfs count="1"><xf/></cellStyleXfs><cellXfs count="2"><xf xfId="0"/><xf xfId="0" numFmtId="4" applyNumberFormat="1"/></cellXfs></styleSheet>')
+    "xl/styles.xml": enc('<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><numFmts count="1"><numFmt numFmtId="164" formatCode="&quot;¥&quot;#,##0.00;[Red]-&quot;¥&quot;#,##0.00"/></numFmts><fonts count="1"><font><sz val="11"/><name val="Calibri"/></font></fonts><fills count="1"><fill><patternFill patternType="none"/></fill></fills><borders count="1"><border/></borders><cellStyleXfs count="1"><xf/></cellStyleXfs><cellXfs count="2"><xf xfId="0"/><xf xfId="0" numFmtId="164" applyNumberFormat="1"/></cellXfs></styleSheet>')
   };
   const zip = xlZip(files);
   const blob = new Blob([zip], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
@@ -1434,7 +1459,7 @@ function exportInvoicesCSV() {
 }
 function exportReportXLSX() {
   if (!__lastReport) { alert("无报告数据可导出"); return; }
-  const m = buildReportModel(__lastReport);
+  const m = getReportModel();
   const enc = (s) => new TextEncoder().encode(s);
   const numCell = (ref, v) => {
     const tr = String(v != null ? v : "").trim();
@@ -1514,7 +1539,7 @@ function exportReportXLSX() {
     "xl/worksheets/sheet1.xml": enc(sheet1Xml),
     "xl/worksheets/sheet2.xml": enc(sheet2Xml),
     "xl/worksheets/sheet3.xml": enc(sheet3Xml),
-    "xl/styles.xml": enc('<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><numFmts count="0"/><fonts count="2"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font></fonts><fills count="1"><fill><patternFill patternType="none"/></fill></fills><borders count="1"><border/></borders><cellStyleXfs count="1"><xf/></cellStyleXfs><cellXfs count="3"><xf xfId="0"/><xf xfId="0" fontId="1" applyFont="1"/><xf xfId="0" numFmtId="4" applyNumberFormat="1"/></cellXfs></styleSheet>')
+    "xl/styles.xml": enc('<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><numFmts count="1"><numFmt numFmtId="164" formatCode="&quot;¥&quot;#,##0.00;[Red]-&quot;¥&quot;#,##0.00"/></numFmts><fonts count="2"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font></fonts><fills count="1"><fill><patternFill patternType="none"/></fill></fills><borders count="1"><border/></borders><cellStyleXfs count="1"><xf/></cellStyleXfs><cellXfs count="3"><xf xfId="0"/><xf xfId="0" fontId="1" applyFont="1"/><xf xfId="0" numFmtId="164" applyNumberFormat="1"/></cellXfs></styleSheet>')
   };
   const zip = xlZip(files);
   const blob = new Blob([zip], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
@@ -1587,7 +1612,7 @@ function renderReportDOM(m) {
 }
 function openReportPreview() {
   if (!__lastReport) { alert("无报告数据可预览"); return; }
-  const m = buildReportModel(__lastReport);
+  const m = getReportModel();
   const ov = document.createElement("div");
   ov.className = "rev-overlay";
   ov.id = "rpPreviewOv";
