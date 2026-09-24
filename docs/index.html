@@ -201,6 +201,13 @@
   .ctxbar{ border-bottom:1px solid var(--line-soft); }
   .ctxmeta{ font-size:11.5px; color:var(--weak); padding:6px 16px 12px; overflow-wrap:anywhere; }
   .kpi .mini{ display:block; font-size:10.5px; font-weight:500; color:var(--sub); margin-top:1px; }
+  .kpi.amt3{ padding-top:8px; padding-bottom:8px; }
+  .kpi.amt3 .n{ font-size:15px; line-height:1.25; }
+  .kpi.amt3 .n.sub{ font-size:13px; color:var(--high); }
+  .kpi.amt3 .n.net{ font-size:19px; }
+  .kpi.amt3 .l{ font-size:10.5px; }
+  .kpi.amt3 .l.sub, .kpi.amt3 .l.net{ margin-top:0; }
+  .kpi.amt3 .l.net{ color:var(--brand); font-weight:600; }
   .kpi{ background:#fafbfc; border:1px solid var(--line-soft); border-radius:var(--r-md); padding:10px 12px; }
   .kpi .n{ font-size:20px; font-weight:800; line-height:1.2; font-variant-numeric:tabular-nums; }
   .kpi .l{ font-size:11.5px; color:var(--sub); margin-top:2px; word-break:keep-all; line-height:1.4; }
@@ -666,7 +673,7 @@ const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s != null ? s : "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 const SEV_CLS = { "高": "high", "中": "mid", "低": "low" };
 const CONF_ALLOW = /* @__PURE__ */ new Set(["确定", "疑似"]);
-const DISCLAIMER = "本工作台基于发票文件结构化数据做合规预审，不替代人工复核与税务判断；发现问题需核原始凭证，未发现问题不等于合规；检查方案版本与覆盖范围已列明。";
+const DISCLAIMER = "本工作台基于发票文件结构化数据进行入账前检查辅助，不替代人工复核与税务判断；发现问题需核原始凭证，未发现异常不代表不存在异常；未检查、未执行的检查项不代表该项无风险；本结果不构成税务合规结论、审计意见或专业鉴证意见，最终以电子税务局查验结果及主管税务机关认定为准；检查方案版本与覆盖范围已列明。";
 const SCOPE_NOTE = "本报告基于数电票 XML 结构化数据的确定性规则生成；公开+合成集验证通过，真实分布未验证。";
 // ===== 财务视角术语表（RV-83/84：去IT化，保留财务/税务行话）=====
 // 界面展示文案一律走本表映射；新增术语先在此登记再使用。
@@ -677,13 +684,13 @@ const FIN_TERMS = {
   "规则分析": "检查项",
   "规则命中": "发现问题",
   "命中": "发现",
-  "未命中": "未见异常",
+  "未命中": "未发现异常",
   "未执行": "未检查",
   "解析失败": "识别失败",
   "待处理": "待处理",
   "已处理": "已处理",
   "已忽略": "已忽略",
-  "自动通过": "未见异常",
+  "自动通过": "未发现异常",
   "待复核": "待复核",
   "文件数": "文件数",
   "价税合计": "价税合计",
@@ -713,12 +720,12 @@ const FIN_TERMS = {
 //   A=发票状态查验 B=金额税额勾稽 C=XML归档 D=异常凭证/进项转出 E=重复报销查重 F=红冲关联
 // risk_tags: string[] （供逐票清单展示的短标签）
 const CHECK_META = {
-  A: { name: "发票状态查验", short: "状态" },
-  B: { name: "金额税额勾稽", short: "金额勾稽" },
-  C: { name: "数电票归档", short: "归档" },
-  D: { name: "异常凭证/进项转出", short: "异常" },
-  E: { name: "重复报销查重", short: "查重" },
-  F: { name: "红冲关联", short: "红冲" }
+  A: { name: "发票状态查验", short: "状态", step: "①票面基础" },
+  B: { name: "金额税额勾稽", short: "金额勾稽", step: "④金额勾稽" },
+  C: { name: "数电票归档", short: "归档", step: "⑤审批附件" },
+  D: { name: "异常凭证/进项转出", short: "异常", step: "①票面基础" },
+  E: { name: "重复报销查重", short: "查重", step: "②业务真实性" },
+  F: { name: "红冲关联", short: "红冲", step: "②业务真实性" }
 };
 const RULES_META = [
   { rule_id: "R1", name: "重复报销 / 整文件重复", severity: "高" },
@@ -973,7 +980,7 @@ function openReviewModal(invNo) {
     const val = rec ? (_b = (_a = rec.current[f.k]) != null ? _a : i[f.k]) != null ? _b : "" : (_c = i[f.k]) != null ? _c : "";
     return `<div class="rev-row"><label>${f.label}</label><input class="rev-in" data-f="${f.k}" value="${esc(val)}"></div>`;
   }).join("");
-  const statusNote = rec ? `<div class="rev-done-note">${rec.corrected ? "已修正 " + Object.keys(rec.corrected_fields || {}).length + " 项" : "已确认无误"} · ${esc((rec.reviewedAt || "").slice(0, 16))}</div>` : `<div class="rev-todo-note">数据待复核：${reason}</div>`;
+  const statusNote = rec ? `<div class="rev-done-note">${rec.corrected ? "已修正 " + Object.keys(rec.corrected_fields || {}).length + " 项" : "已确认无误"} · ${esc((rec.reviewedAt || "").slice(0, 16))}</div>` : `<div class="rev-todo-note">待人工复核：${reason}</div>`;
   const ov = document.createElement("div");
   ov.className = "rev-overlay";
   ov.id = "revOverlay";
@@ -1031,7 +1038,7 @@ function reviewAction(invNo, action) {
     }
   });
   if (action === "clear") {
-    if (!window.confirm("重置将删除本票复核记录（含修正与流水），回滚到数据待复核；底层识别结果不受影响。继续？")) return;
+    if (!window.confirm("重置将删除本票复核记录（含修正与流水），回滚到待人工复核；底层识别结果不受影响。继续？")) return;
     setRev(invNo, null);
     return;
   }
@@ -1076,7 +1083,7 @@ function buildExportRows() {
   const rows = [];
   (d.invoices || []).forEach((i) => {
     const rec = getRev(i.invoice_no);
-    const st = rec ? rec.corrected ? "数据已修正" : "数据已确认" : i.review_needed ? "数据待复核" : "自动通过";
+    const st = rec ? rec.corrected ? "数据已修正" : "数据已确认" : i.review_needed ? "待人工复核" : "自动通过";
     const cf = rec ? Object.keys(rec.corrected_fields || {}).join(";") : "";
     const log = rec ? (rec.auditLog || []).map((a) => `${a.field}:${a.from}→${a.to}`).join(" | ") : "";
     const cur = rec ? rec.current : i;
@@ -1498,9 +1505,9 @@ function reviewBadge(i) {
       const txt = rec.corrected ? `数据已复核·修正${n}项` : "数据已复核·确认无误";
       return `<span class="badge review done" title="复核时间 ${esc(rec.reviewedAt || "")}；复核≠风险处置，未处置 findings 仍在风险清单">${esc(txt)}</span>`;
     }
-    if (n > 0) return `<span class="badge review" title="已修正 ${n} 项但尚未复核确认">数据待复核（已修正${n}项）</span>`;
+    if (n > 0) return `<span class="badge review" title="已修正 ${n} 项但尚未复核确认">待人工复核（已修正${n}项）</span>`;
   }
-  return i.review_needed ? `<span class="badge review" title="${esc(i.review_reason || "识别低置信度/勾稽不符等")}">数据待复核</span>` : "";
+  return i.review_needed ? `<span class="badge review" title="${esc(i.review_reason || "识别低置信度/勾稽不符等")}">待人工复核</span>` : "";
 }
 function invoiceViewHtml(d, metaMap) {
   const sevRank = { 高: 0, 中: 1, 低: 2 };
@@ -1583,7 +1590,7 @@ function invoiceViewHtml(d, metaMap) {
       if (!c) return "";
       const stCls = c.status === "block" ? "block" : c.status === "warn" ? "warn" : "pass";
       const mk = c.status === "block" ? "✕" : c.status === "warn" ? "△" : "✓";
-      return `<span class="ck ${stCls}" title="${esc(c.message || "")}">${mk} ${CHECK_META[code].short}</span>`;
+      return `<span class="ck ${stCls}" title="${esc(c.message || "")}（${CHECK_META[code].step}）">${mk} ${CHECK_META[code].short}</span>`;
     }).join("");
     const ckWarn = Object.keys(CHECK_META).filter((code) => { const c = cks[code]; return c && (c.status === "warn" || c.status === "block"); });
     const ckNote = ckWarn.length ? ckWarn.map((code) => `<div class="ck-note ${cks[code].status === "block" ? "ckb" : "ckw"}"><b>${esc(CHECK_META[code].name)}：</b>${esc(cks[code].message)}</div>`).join("") : "";
@@ -1629,7 +1636,11 @@ function ruleViewHtml(d, metaMap) {
     return (a.rule_id || "").localeCompare(b.rule_id || "");
   });
   if (!rules.length) return `<div class="card card-pad"><div class="hint">无检查项数据。</div></div>`;
-  return `<div class="view-note">检查项视图（只读分析视角，不参与处置）：每个检查项的发现问题 / 未见异常 / 未检查三态；未检查不代表合规，需补数据/配置后重跑；处置请到风险待办/逐票清单视图</div>
+  return `<div class="view-note">检查项视图（只读分析视角，不参与处置）：每个检查项的发现问题 / 未发现异常 / 未检查三态；未检查不代表合规，需补数据/配置后重跑；处置请到风险待办/逐票清单视图</div>
+  <details class="rule-hits"><summary>分级判定原则（block / warn / pass）</summary><div class="inner"><div class="hint" style="line-height:1.9">
+  <b>block（建议暂缓入账）</b>：发票状态异常（失控/作废/红冲异常）、购销方名称或税号与合同/收款方不一致、重复报销、明细合计≠票面且影响税额、查验结果不符。<br/>
+  <b>warn（建议核对）</b>：缺原始文件（XML）、关联蓝票不在本批次、明细行级不一致但不影响税额、需人工复核的识别低置信度字段。<br/>
+  <b>pass（未见异常）</b>：本检查项未发现异常；不代表整体合规，需结合全部检查项与人工复核。</div></div></details>
   <div class="rule-group">${rules.map((r) => {
     const sev = r.severity || "中";
     const sevCls = SEV_CLS[sev] || "low";
@@ -1834,13 +1845,31 @@ function __origRender(d) {
       order.forEach((rid) => { if (byRule[rid]) chips.push(`<button class="todo-chip${RULES_META.find((r) => r.rule_id === rid && r.severity === "中") ? " mid" : ""}" type="button" data-prio="${rid}" title="点击查看该问题的发票">${esc(resolveRuleMeta(rid, metaMap))} <b>${byRule[rid]}</b></button>`); });
       return chips.join("");
     })();
-    // RV-84：价税合计口径——有效金额合计（剔除红冲/作废票），红冲金额单列
-    const totalAmt = fmtMoney(s.total_amount);
+    // RV-86：价税合计净额 = 蓝票价税合计 + 红字冲减（负数）。data.total_amount 保持接口契约（剔除红冲的蓝票合计），净额在此派生
+    const totalAmt = (() => {
+      const blue = Number(s.total_amount || 0);
+      let red = 0;
+      invs4.forEach((i) => { if ((i.invoice_status || "normal") === "red_flush") red += Math.round(Number(i.total || 0) * 100) / 100; });
+      return fmtMoney(String(blue + red));
+    })();
     const redAmt = s.red_flush_amount ? `红冲 ${fmtMoney(String(Math.abs(Number(s.red_flush_amount)).toFixed(2)))}` : "";
     const taxAmt = (() => {
       // 用整数分累加避免浮点误差（150.3699…→150.37）
       let t = 0;
       invs4.forEach((i) => { if ((i.invoice_status || "normal") !== "red_flush" && (i.invoice_status || "normal") !== "void") t += Math.round(Number(i.tax || 0) * 100); });
+      const s = String(t / 100);
+      return fmtMoney(s);
+    })();
+    const blueTotal = (() => {
+      // 蓝票价税合计（剔除红冲/作废后的有效金额）
+      let t = 0;
+      invs4.forEach((i) => { if ((i.invoice_status || "normal") !== "red_flush" && (i.invoice_status || "normal") !== "void") t += Math.round(Number(i.total || 0) * 100); });
+      return fmtMoney(String(t / 100));
+    })();
+    const redTotal = (() => {
+      // 红字发票冲减合计（负数）
+      let t = 0;
+      invs4.forEach((i) => { if ((i.invoice_status || "normal") === "red_flush") t += Math.round(Number(i.total || 0) * 100); });
       const s = String(t / 100);
       return fmtMoney(s);
     })();
@@ -1852,8 +1881,8 @@ function __origRender(d) {
     </div>
     <div class="kpis">
       <div class="kpi total main"><div class="n">${esc(invs4.length)}</div><div class="l">发票张数</div></div>
-      <div class="kpi total main"><div class="n">${totalAmt}</div><div class="l">价税合计（不含红冲）</div></div>
-      <div class="kpi total main"><div class="n">${taxAmt}</div><div class="l">税额</div></div>
+      <div class="kpi total main amt3"><div class="n">${blueTotal}</div><div class="l">蓝票价税合计</div><div class="n sub">${redTotal}</div><div class="l sub">红字冲减</div><div class="n net">${totalAmt}</div><div class="l net">价税合计净额</div></div>
+      <div class="kpi total main"><div class="n">${taxAmt}</div><div class="l">税额（不含红冲）</div></div>
       <div class="kpi total main"><div class="n">${redAmt ? esc(redAmt) : "—"}</div><div class="l">红冲 / 作废</div></div>
     </div>
     <div class="precheck-row">
@@ -1863,7 +1892,7 @@ function __origRender(d) {
       <div class="kpi precheck weak${drillCls("unknown")}" data-drill="unknown" role="button" tabindex="0" aria-pressed="${_drill.kpi === "unknown"}" title="查看信息不全、无法给出预审结论的发票"><div class="n">${esc(precheckCnt["无法预审"] || 0)}</div><div class="l">无法预审</div></div>
     </div>
     ${prioTags ? `<div class="todo-bar"><span class="lb">优先处理：</span>${prioTags}</div>` : ""}
-    <div class="ctxmeta" title="批次/生成时间/统计口径">统计口径：建议入账+建议核对+阻断入账+无法预审=发票张数；识别失败独立计文件；人工复核为建议核对子集；价税合计=有效发票金额（剔除红冲/作废）</div>
+    <div class="ctxmeta" title="批次/生成时间/统计口径">统计口径：预审结论四类之和=发票张数（识别失败文件独立计，不纳入预审结论统计）；人工复核为建议核对子集；价税合计净额=蓝票价税合计−红字冲减（税额同口径剔除红冲）；红字冲减为负数显式单列；同一张发票按 无法预审＞阻断入账＞建议核对＞建议入账 唯一归类；本工作台面向受票方（购方）财务部门，「进项转出」按购方视角表述</div>
   </div>`;
     const rname = (id) => resolveRuleMeta(id, metaMap);
     const findings = (d.findings || []).length === 0 ? `<div class="card card-pad"><div class="hint">本批次未发现问题，报告完成 ✓<br/>未发现问题不等于绝对合规，请结合检查项覆盖范围判断。</div></div>` : (d.findings || []).map((f) => findingRow(f, metaMap, true)).join("");
