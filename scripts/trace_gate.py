@@ -190,8 +190,68 @@ def cmd_ids(grep: str) -> int:
     return 0
 
 
+def _data_segments(path: Path, markers: list[str]) -> list[tuple[int, int]]:
+    """扫码定位数据段行区间（RV-77：结构区间判定主判据）。
+
+    对文本文件按行扫描：找到标记行（如 'demoReport = {'）后，用花括号配平
+    定位到结构结束，返回 [start_line, end_line]（1-based，含两端）。
+    支持多个标记，取并集。
+    """
+    if not path.exists():
+        return []
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except Exception:
+        return []
+    segs = []
+    depth = 0
+    in_seg = False
+    start = 0
+    for i, ln in enumerate(lines, start=1):
+        if not in_seg and any(m in ln for m in markers):
+            in_seg = True
+            start = i
+            depth = ln.count("{") - ln.count("}")
+            continue
+        if in_seg:
+            depth += ln.count("{") - ln.count("}")
+            if depth <= 0:
+                segs.append((start, i))
+                in_seg = False
+    return segs
+
+
+def _diff_changed_lines(diff: str) -> set[int]:
+    """从 unified diff（-U0）解析变更行号集合（RV-77：变更行 ∩ 数据段 = 命中 demo_data）。
+
+    解析 @@ -a,b +c,d @@ 头：新增侧行号 c..c+d-1（含 0 表示从 c 起连续插入）。
+    过滤 0（diff 头 +0 特例：新增文件首行实际从行 1 起；行号 0 不与任何数据段相交）。
+    """
+    import re as _re
+    out = set()
+    cur = 0
+    for ln in diff.splitlines():
+        m = _re.match(r"@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@", ln)
+        if m:
+            cur = int(m.group(3))
+            continue
+        if not ln.startswith(("+", "-", " ")):
+            continue
+        if ln.startswith("+"):
+            if cur > 0:
+                out.add(cur)
+        if not ln.startswith("-"):
+            cur += 1
+    return out
+
+
 def _classify(staged_diff: str) -> tuple[list[str], str]:
-    """按 gate_rules.yaml 分类 staged diff：返回 (命中类别列表, diff_hash)。"""
+    """按 gate_rules.yaml 分类 staged diff：返回 (命中类别列表, diff_hash)。
+
+    RV-77：统一判定引擎——check-rv 消费红线类（parser_core/pdf_pipeline/ocr_engine/
+    rules_engine/data_redline/gate_self），check-scheme 消费需事前对齐类（demo_data）。
+    判定分层：结构区间（主判据）> 变更行内容 > 路径+关键词（兜底）。
+    """
     import hashlib, re, yaml
     rules_path = Path(__file__).parent / "gate_rules.yaml"
     rules = yaml.safe_load(rules_path.read_text(encoding="utf-8"))["rules"]
@@ -208,9 +268,25 @@ def _classify(staged_diff: str) -> tuple[list[str], str]:
                       "agent-communication-demo/deepseek_gate.py", "AGENTS.md")
     if any(f.startswith(h) for f in files for h in HARD_GATE_SELF):
         hits.append("gate_self")
+    changed_lines = _diff_changed_lines(staged_diff) if staged_diff.strip() else set()
     for name, rule in rules.items():
-        paths = rule.get("paths", []); kws = rule.get("keywords", [])
-        if any(f.startswith(p) for f in files for p in paths):
+        paths = rule.get("paths", []); kws = rule.get("keywords", []); segs = rule.get("data_segments", [])
+        file_hit = any(f.startswith(p) for f in files for p in paths)
+        # RV-77 结构区间主判据（demo_data 专属）：paths 仅限定目标文件，命中与否由
+        # 数据段行区间 ∩ diff 变更行决定——改 CSS/文案/模板不命中，改数据语义必命中
+        if segs and changed_lines:
+            for f in files:
+                if any(f.startswith(p) for p in paths):
+                    for s, e in _data_segments(ROOT / f, segs):
+                        if changed_lines & set(range(s, e + 1)):
+                            hits.append(name); break
+                    else:
+                        continue
+                    break
+            if name in hits:
+                continue
+        # 非 demo_data 类：paths 前缀命中即算（红线类语义：改了该文件就要审）
+        if file_hit and not segs:
             hits.append(name); continue
         if any(k in f for f in files for k in kws):
             hits.append(name)
@@ -350,21 +426,33 @@ def cmd_preflight(desc: str) -> int:
 
 
 def cmd_check_scheme(message: str) -> int:
-    """功能提交第三闸门（commit-msg 调用）：message 以 feat 约定开头 → 必须有已批准 scheme-RV。
+    """功能提交第三闸门（commit-msg 调用）：message 以 feat 约定开头 **或** staged diff 命中
+    需事前对齐类（demo_data）→ 必须有已批准 scheme-RV。
 
     RV-23 口径：
     - 触发正则 FEAT_RE = ^feat[(][^)]+[)]?[!]?:（feat:/feat(scope):/feat!:/feat(scope)!:）
+    - RV-77 修正：触发条件扩展为 FEAT_RE 匹配 **或** staged diff 命中 demo_data
+      （演示数据口径/语义改动，即使 fix: 前缀也要求 scheme 事前对齐；防"改口径用 fix 绕过"）
     - message 中出现的全部 F-xxx 都必须存在 adopted scheme-RV（防挂靠包装）
     - adopted 判据：档案 status=adopted 且 phase=scheme 且 feature 匹配（RV-23 口径 4：任一即可，保留多轮评审历史）
     - adopted 为执行者按用户拍板填写 → 属诚实边界（防忘不防绕，RV-23 口径 3 方案 A）
     - 方案档案与代码同次提交：check 读工作区档案，存在即通过（RV-23 口径 5 预期行为）
     """
-    if not FEAT_RE.match(message.lstrip()):
-        print("[check-scheme] 非功能提交（不匹配 ^feat(...)!?: ），跳过")
+    import subprocess
+    diff = subprocess.run(["git", "diff", "--cached", "--binary", "--", ".", ":!agent-communication-demo/raw/"],
+                          capture_output=True, text=True, cwd=ROOT).stdout
+    hits, _ = _classify(diff)
+    # RV-77：需事前对齐类 = demo_data（演示数据口径语义）；红线类仍由 check-rv 管
+    NEEDS_SCHEME = {"demo_data"}
+    diff_trigger = bool(set(hits) & NEEDS_SCHEME)
+    if not FEAT_RE.match(message.lstrip()) and not diff_trigger:
+        print("[check-scheme] 非功能提交且 diff 未命中需事前对齐类（demo_data），跳过")
         return 0
+    if diff_trigger:
+        print(f"[check-scheme] diff 命中需事前对齐类：{sorted(set(hits) & NEEDS_SCHEME)}（演示数据口径改动，须已批准方案评审）")
     fids = sorted(set("F-" + m for m in FID_RE.findall(message)))
     if not fids:
-        print("✗ 功能提交（feat: 前缀）必须引用功能登记 F-xxx（如 F-20260923-01）", file=sys.stderr)
+        print("✗ 需事前对齐的提交必须引用功能登记 F-xxx（如 F-20260923-01）", file=sys.stderr)
         print("  流程：先跑 trace_gate.py preflight --desc \"...\" 立项 → 再 deepseek_gate.py --phase scheme 评审方案 → 批准后提交", file=sys.stderr)
         return 1
     for fid in fids:
@@ -376,7 +464,7 @@ def cmd_check_scheme(message: str) -> int:
         head = rv.read_text(encoding="utf-8", errors="replace")[:400]
         idm = re.search(r"id:\s*(RV-\S+)", head)
         print(f"[check-scheme] {fid} 已批准方案评审 {idm.group(1) if idm else rv.name}")
-    print("[check-scheme] 通过：全部功能均有已批准方案评审（方案先于实施，事前对齐成立）")
+    print("[check-scheme] 通过：需事前对齐的提交均有已批准方案评审（方案先于实施，事前对齐成立）")
     return 0
 
 
