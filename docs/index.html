@@ -565,7 +565,7 @@ code{ overflow-wrap:anywhere; word-break:break-word; }
               <button id="btnSaveRules" class="btn btn-ghost" style="flex:1;">保存预警标准</button>
               <button id="btnResetRules" class="btn btn-ghost" style="flex:1;">恢复默认</button>
             </div>
-            <div class="hint" id="rulesHint">预警标准保存到本地后端 data/config.json（不入 Git）。变更会记录生效时间与配置哈希，报告中标注"预警标准来自自定义配置"。</div>
+            <div class="hint" id="rulesHint">预警标准保存到本地后端 data/config.json（不入 Git）。变更会记录生效时间与配置标识，报告中标注"预警标准来自自定义配置"。</div>
           </details>
         </div>
       </div>
@@ -600,7 +600,7 @@ code{ overflow-wrap:anywhere; word-break:break-word; }
             <div>· <b>本演示全部使用合成/脱敏数据</b>：不含任何真实发票；样例覆盖重复报销/差额征税/金额勾稽/红冲关联/识别低置信度复核等检查场景。</div>
             <div>· 真实数据验证结果（文本型 14 张、图片版 38 张、机动车免税 31 张）已归档为基准集记录，源文件按数据红线验后删除，演示环境<b>不可重跑真实样本</b>。</div>
             <div>· 预警标准已用 31 张真实样本校准（金额上限 100 万→3000 万），类别限额仍为财政部默认口径（待补样本）。</div>
-            <div>· "需人工复核"= 识别低置信度/勾稽不符/字段缺失的兜底标记，<b>不自动放行</b>；处置状态仅保存在本浏览器（localStorage），刷新可重置。</div>
+            <div>· "需人工复核"= 识别低置信度/勾稽不符/字段缺失的兜底标记，<b>不自动放行</b>；处置状态仅保存在本机浏览器，刷新可重置。</div>
           </div>
         </details>
       </section>
@@ -712,6 +712,36 @@ const FIN_TERMS = {
   "失控发票": "失控发票",
   "走逃失联": "走逃失联"
 };
+// ===== 证据链字段财务化映射（RV-86 追加：数据契约字段名保留，展示层翻译）=====
+// 数据层 evidence_chain[].field 保持接口契约（审计留痕），UI 用本表映射为财务语言
+const FIELD_TERMS = {
+  "source_hash": "文件一致性标识",
+  "sha256": "文件内容比对（结果：一致）",
+  "KCE": "识别置信度",
+  "TaxRate": "税率",
+  "Amount": "金额",
+  "ComTaxAm": "税额",
+  "备注": "备注",
+  "items": "明细行",
+  "红字发票对应的蓝字发票号码": "关联蓝字发票号码",
+  "file_hash": "文件一致性标识",
+  "serial_no": "发票号码",
+  "invoice_no": "发票号码",
+  "seller_taxid": "销售方税号",
+  "buyer_taxid": "购买方税号",
+  "tax_rate": "税率",
+  "amount": "金额",
+  "tax": "税额",
+  "total": "价税合计"
+};
+function fieldTerm(f) {
+  if (!f) return "";
+  // 精确匹配；若为路径式（items[2].ComTaxAm）拆分取末段映射
+  if (FIELD_TERMS[f] != null) return FIELD_TERMS[f];
+  const m = f.match(/(\w+)(?:\[\d+\])?\.(\w+)$/);
+  if (m && FIELD_TERMS[m[2]] != null) return m[1] === "items" ? `明细行·${FIELD_TERMS[m[2]]}` : FIELD_TERMS[m[2]];
+  return f;
+}
 // ===== P0 数据契约（RV-84/85）：每张发票的预审字段 =====
 // invoice_status: normal|red_flush|void|abnormal （发票状态查验 A）
 // file_format: xml|ofd|pdf|image （数电票归档 C）
@@ -801,13 +831,13 @@ function demoReport() {
         "confidence": "确定",
         "invoice_no": "26440000000000100001",
         "field": "source_hash",
-        "message": "整文件重复：source_hash 与 26440000000000100001（第 2 份）一致，疑似重复报销",
-        "evidence": "sha256 完全一致",
+        "message": "整文件重复：文件内容与本批次 26440000000000100001（第 2 份）完全一致，疑似重复报销",
+        "evidence": "文件内容比对：一致",
         "suggestion": "核对两笔是否为同一次报销误传；重复报销入账前需剔除",
         "evidence_chain": [
-          { "field": "source_hash", "raw": "a3f2…c9d1", "value": "a3f2…c9d1", "row": null, "note": "两份文件哈希一致" }
+          { "field": "source_hash", "raw": "a3f2…c9d1", "value": "a3f2…c9d1", "row": null, "note": "文件内容比对：一致" }
         ],
-        "explanation": { "what": "这张发票和本批次另一份文件内容完全相同（文件指纹一致），系统怀疑是同一张票被重复提交了两次。", "impact": "若两笔都入账，会造成同一笔费用重复报销、进项税重复抵扣，审计和税务检查时属于典型问题。", "action": "核对两笔是否为同一次报销误传；确认重复后只保留一笔，另一笔作废处理。", "who": "报销经办人核对来源，财务复核岗剔除重复后入账。", "source": "llm:demo:synthetic", "prompt_version": "explain-v1" }
+        "explanation": { "what": "这张发票和本批次另一份文件内容完全相同（文件内容比对：一致），系统怀疑是同一张票被重复提交了两次。", "impact": "若两笔都入账，会造成同一笔费用重复报销、进项税重复抵扣，审计和税务检查时属于典型问题。", "action": "核对两笔是否为同一次报销误传；确认重复后只保留一笔，另一笔作废处理。", "who": "报销经办人核对来源，财务复核岗剔除重复后入账。", "source": "llm:demo:synthetic", "prompt_version": "explain-v1" }
       },
       {
         "rule_id": "R9",
@@ -815,8 +845,8 @@ function demoReport() {
         "confidence": "疑似",
         "invoice_no": "26440000000000100003",
         "field": "备注",
-        "message": "差额征税票（KCE 存在）但备注未含『差额征税：』声明，征收方式存疑",
-        "evidence": "KCE=0.07 / 备注=票务代理服务费",
+        "message": "差额征税票（识别到差额征税标识）但备注未含『差额征税：』声明，征收方式存疑",
+        "evidence": "差额征税标识置信度 0.07 / 备注=票务代理服务费",
         "suggestion": "补充差额征税声明或核对征收方式",
         "evidence_chain": [
           { "field": "KCE", "raw": "0.07", "value": "0.07", "row": null, "note": "差额征税标识存在" },
@@ -840,7 +870,7 @@ function demoReport() {
       }
     ],
     "invoices": [
-      { "invoice_no": "26440000000000100001", "invoice_type": "增值税电子普通发票", "issue_date": "2026-08-01", "amount": "800.00", "tax": "48.00", "total": "848.00", "seller_name": "示例服务有限公司", "status": "待复核", "warning_count": 0, "item_count": 2, "invoice_status": "normal", "file_format": "pdf", "precheck": "阻断入账", "risk_tags": ["重复报销", "缺XML"], "check_results": { "A": { "status": "pass", "message": "发票状态：正常" }, "B": { "status": "pass", "message": "金额 800.00 + 税额 48.00 = 价税合计 848.00，勾稽一致" }, "C": { "status": "warn", "message": "仅上传 PDF，未检测到 XML 源文件。按入账归档要求需补传 XML" }, "D": { "status": "pass", "message": "未见异常凭证/进项转出提示" }, "E": { "status": "block", "message": "与另一份文件内容一致（文件指纹相同），疑似重复报销" }, "F": { "status": "pass", "message": "非红字发票" } } },
+      { "invoice_no": "26440000000000100001", "invoice_type": "增值税电子普通发票", "issue_date": "2026-08-01", "amount": "800.00", "tax": "48.00", "total": "848.00", "seller_name": "示例服务有限公司", "status": "待复核", "warning_count": 0, "item_count": 2, "invoice_status": "normal", "file_format": "pdf", "precheck": "阻断入账", "risk_tags": ["重复报销", "缺XML"], "check_results": { "A": { "status": "pass", "message": "发票状态：正常" }, "B": { "status": "pass", "message": "金额 800.00 + 税额 48.00 = 价税合计 848.00，勾稽一致" }, "C": { "status": "warn", "message": "仅上传 PDF，未检测到 XML 源文件。按入账归档要求需补传 XML" }, "D": { "status": "pass", "message": "未见异常凭证/进项转出提示" }, "E": { "status": "block", "message": "与另一份文件比对一致，疑似重复报销" }, "F": { "status": "pass", "message": "非红字发票" } } },
       { "invoice_no": "26440000000000100002", "invoice_type": "增值税电子普通发票", "issue_date": "2026-08-02", "amount": "1500.00", "tax": "90.00", "total": "1590.00", "seller_name": "示例制造集团有限公司", "status": "待复核", "warning_count": 0, "item_count": 3, "invoice_status": "normal", "file_format": "xml", "precheck": "阻断入账", "risk_tags": ["金额勾稽"], "check_results": { "A": { "status": "pass", "message": "发票状态：正常" }, "B": { "status": "block", "message": "明细行税额与 金额×税率 不一致：行 3 金额 300.00×税率 0.06=18.00，票面税额 25.50，差 7.50" }, "C": { "status": "pass", "message": "已检测到 XML 源文件，满足数电票入账归档要求" }, "D": { "status": "pass", "message": "未见异常凭证/进项转出提示" }, "E": { "status": "pass", "message": "未发现重复报销" }, "F": { "status": "pass", "message": "非红字发票" } } },
       { "invoice_no": "26440000000000100003", "invoice_type": "增值税电子普通发票（差额征税）", "issue_date": "2026-08-03", "amount": "86.20", "tax": "5.17", "total": "91.37", "seller_name": "示例票务代理有限公司", "status": "待复核", "warning_count": 0, "item_count": 1, "invoice_status": "normal", "file_format": "pdf", "precheck": "建议核对", "risk_tags": ["征收方式存疑", "缺XML"], "check_results": { "A": { "status": "pass", "message": "发票状态：正常" }, "B": { "status": "pass", "message": "金额 86.20 + 税额 5.17 = 价税合计 91.37，勾稽一致" }, "C": { "status": "warn", "message": "仅上传 PDF，未检测到 XML 源文件。按入账归档要求需补传 XML" }, "D": { "status": "pass", "message": "未见异常凭证/进项转出提示" }, "E": { "status": "pass", "message": "未发现重复报销" }, "F": { "status": "pass", "message": "非红字发票" } } },
       { "invoice_no": "26440000000000100004", "invoice_type": "增值税电子普通发票（红字）", "issue_date": "2026-08-04", "amount": "-500.00", "tax": "-30.00", "total": "-530.00", "seller_name": "示例物流有限公司", "status": "待复核", "warning_count": 0, "item_count": 2, "invoice_status": "red_flush", "file_format": "pdf", "precheck": "建议核对", "risk_tags": ["红冲关联", "进项转出", "缺XML"], "check_results": { "A": { "status": "warn", "message": "发票状态：红字（负数）发票，需核验对应蓝字发票" }, "B": { "status": "pass", "message": "金额 -500.00 + 税额 -30.00 = 价税合计 -530.00，勾稽一致" }, "C": { "status": "warn", "message": "仅上传 PDF，未检测到 XML 源文件。按入账归档要求需补传 XML" }, "D": { "status": "warn", "message": "红冲票需确认原蓝票是否已认证抵扣；如已抵扣，涉及进项税额转出" }, "E": { "status": "pass", "message": "未发现重复报销" }, "F": { "status": "warn", "message": "关联蓝字发票 26440000000000009999 不在本批次（历史库未接入），需人工核验红冲金额与合法性" } }, "review_needed": true, "review_reason": "红字发票需人工核验对应蓝票与进项转出处理；识别关键字段置信度偏低（最低 0.62）" },
@@ -988,7 +1018,7 @@ function openReviewModal(invNo) {
     <div class="rev-head">复核工作台 · 票 ${esc(shortNo(invNo))}</div>
     ${statusNote}
     <div class="rev-fields">${fields}</div>
-    <div class="rev-audit">${rec ? auditHtml(rec) : `<span class="hint">留痕：确认/修正将记录原始快照与操作流水（本浏览器 localStorage，审计以导出为准）。修正值不参与检查判定与处置（处置基于识别原始值，见 B4 约定）</span>`}</div>
+    <div class="rev-audit">${rec ? auditHtml(rec) : `<span class="hint">留痕：确认/修正将记录原始快照与操作流水（仅保存在本机浏览器，审计以导出为准）。修正值不参与检查判定与处置（处置基于识别原始值）</span>`}</div>
     <div class="rev-actions">
       <button class="btn-ghost" onclick="closeRevModal()">取消</button>
       <button class="btn-ghost" onclick="reviewAction('${esc(invNo)}','confirm')">确认无误</button>
@@ -1005,7 +1035,8 @@ function closeRevModal() {
 function auditHtml(rec) {
   const rows = (rec.auditLog || []).map((a) => {
     var _a, _b;
-    return `<div class="rev-audit-row"><b>${esc(a.t || "")}</b> ${esc(a.op || "")}：${esc(a.field || "")} "${esc((_a = a.from) != null ? _a : "")}" → "${esc((_b = a.to) != null ? _b : "")}"</div>`;
+    const fname = (REV_FIELDS.find((f) => f.k === a.field) || {}).label || fieldTerm(a.field) || a.field;
+    return `<div class="rev-audit-row"><b>${esc(a.t || "")}</b> ${esc(a.op || "")}：${esc(fname)} "${esc((_a = a.from) != null ? _a : "")}" → "${esc((_b = a.to) != null ? _b : "")}"</div>`;
   }).join("");
   return `<div class="rev-audit-title">操作流水</div>${rows || `<div class="hint">（无流水）</div>`}`;
 }
@@ -1084,8 +1115,8 @@ function buildExportRows() {
   (d.invoices || []).forEach((i) => {
     const rec = getRev(i.invoice_no);
     const st = rec ? rec.corrected ? "数据已修正" : "数据已确认" : i.review_needed ? "待人工复核" : "自动通过";
-    const cf = rec ? Object.keys(rec.corrected_fields || {}).join(";") : "";
-    const log = rec ? (rec.auditLog || []).map((a) => `${a.field}:${a.from}→${a.to}`).join(" | ") : "";
+    const cf = rec ? Object.keys(rec.corrected_fields || {}).map((k) => (REV_FIELDS.find((f) => f.k === k) || {}).label || fieldTerm(k) || k).join(";") : "";
+    const log = rec ? (rec.auditLog || []).map((a) => `${(REV_FIELDS.find((f) => f.k === a.field) || {}).label || fieldTerm(a.field) || a.field}:${a.from}→${a.to}`).join(" | ") : "";
     const cur = rec ? rec.current : i;
     rows.push({
       invoice_no: i.invoice_no,
@@ -1312,7 +1343,7 @@ function exportCSV(findings, metaMap) {
       f.severity,
       f.confidence || "疑似",
       f.invoice_no,
-      f.field,
+      fieldTerm(f.field),
       f.message,
       f.suggestion,
       d ? DISP_LABEL[d.status] : DISP_LABEL.pending,
@@ -1468,7 +1499,7 @@ function findingRow(f, metaMap, showOps) {
   const sev = f.severity || "低";
   const sevCls = SEV_CLS[sev] || "low";
   const conf = CONF_ALLOW.has(f.confidence) ? f.confidence : "疑似";
-  const chain = (f.evidence_chain || []).map((e) => `<li><code>${esc(e.field)}</code>${e.row != null ? `（行 ${esc(e.row)}）` : ""}：原文 ${esc(e.raw)} → ${esc(e.value)}${e.note ? ` · ${esc(e.note)}` : ""}</li>`).join("");
+  const chain = (f.evidence_chain || []).map((e) => `<li><code>${esc(fieldTerm(e.field))}</code>${e.row != null ? `（第 ${esc(e.row)} 行）` : ""}：原文 ${esc(e.raw)} → ${esc(e.value)}${e.note ? ` · ${esc(e.note)}` : ""}</li>`).join("");
   const amt = f.evidence_amt != null ? `¥${esc(f.evidence_amt)}` : "";
   const rid = riskId(f);
   const disp = getDisp(rid);
@@ -1489,11 +1520,11 @@ function findingRow(f, metaMap, showOps) {
     </summary>
     <div class="body">
       <div class="msg">${esc(f.message)}</div>
-      <div class="meta">票号 <code>${esc(f.invoice_no)}</code> · 字段 <code>${esc(f.field)}</code> · 原文「${esc(f.evidence)}」 · 判定 ${esc(conf)}</div>
+      <div class="meta">票号 <code>${esc(f.invoice_no)}</code> · 相关字段 <code>${esc(fieldTerm(f.field))}</code> · 原文「${esc(f.evidence)}」 · 判定 ${esc(conf)}</div>
       ${chain ? `<ul class="chain"><b>证据链：</b>${chain}</ul>` : ""}
       <div class="sug"><b>建议：</b>${esc(f.suggestion)}</div>
       ${explainBlock(f)}
-      <div class="ops">${ops}${showOps ? `<span class="hint" style="margin-top:0;">${st !== "pending" ? "处置时间 " + esc(t0) : "处置后状态保留在本浏览器（localStorage），导出 CSV 将携带处置信息"}</span>` : ""}</div>
+      <div class="ops">${ops}${showOps ? `<span class="hint" style="margin-top:0;">${st !== "pending" ? "处置时间 " + esc(t0) : "处置后状态保留在本机浏览器，导出 CSV 将携带处置信息"}</span>` : ""}</div>
     </div>
   </details>`;
 }
