@@ -57,6 +57,7 @@
 
   /* ---------- 工作台：左右分栏 ---------- */
   .layout{ display:grid; grid-template-columns:340px 1fr; gap:16px; align-items:start; }
+  @media (min-width:1600px){ .layout{ grid-template-columns:300px 1fr; } }
   @media (max-width:900px){ .layout{ grid-template-columns:1fr; } }
   .input-panel{ display:flex; flex-direction:column; gap:14px; position:sticky; top:16px; }
   @media (max-width:900px){ .input-panel{ position:static; } }
@@ -367,7 +368,7 @@ code{ overflow-wrap:anywhere; word-break:break-word; }
   .report-zone .view-risk-col{ min-width:0; }
   .report-zone .view-invoice-col{ min-width:0; max-height:calc(100vh - 260px); overflow:auto; padding-right:4px; }
   .view-switch{ display:none; }
-  .rule-open-btn{ display:none; }
+  .rule-open-btn{ display:inline-flex; }
 }
 /* 720–1280px：纵向双段，发票明细默认折叠（保留 tab 语义切换） */
 @media (max-width:1279px){
