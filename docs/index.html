@@ -415,40 +415,63 @@
   .op.undo:hover{ background:var(--brand-weak); }
   .flt.active{ background:var(--brand-weak); color:var(--brand); border-color:var(--brand); font-weight:600; }
 
-  /* 打印：只保留独立报告 DOM（RV-91：报告打印与工作台隔离；RV-92：模态与按钮一并排除，防白页/残留） */
+  /* 报告 DOM（RV-91/94）：基础样式屏幕+打印共用（预览模态与打印同源），打印时精简列 */
   #report-print-root{ display:none; }
+  .rp{ font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif; color:#1a1f26; font-size:12px; line-height:1.65; }
+  .rp .rp-head{ border-bottom:2px solid #1a1f26; padding-bottom:8px; margin-bottom:12px; }
+  .rp .rp-title{ font-size:18px; font-weight:800; }
+  .rp .rp-meta{ font-size:11px; color:#5c6470; margin-top:4px; }
+  .rp h2{ font-size:13px; font-weight:700; margin:14px 0 6px; }
+  .rp table{ width:100%; border-collapse:collapse; table-layout:fixed; }
+  .rp th, .rp td{ border:1px solid #d9dce1; padding:4px 6px; font-size:11px; text-align:left; word-break:break-word; }
+  .rp th{ background:#f0f2f5; font-weight:700; }
+  .rp .rp-summary{ display:flex; flex-wrap:wrap; gap:16px; }
+  .rp .rp-summary .sm{ min-width:130px; }
+  .rp .rp-summary .sm b{ display:block; font-size:11px; color:#5c6470; font-weight:600; }
+  .rp .rp-summary .sm span{ font-size:16px; font-weight:800; font-variant-numeric:tabular-nums; }
+  .rp .rp-pc{ display:flex; gap:12px; flex-wrap:wrap; }
+  .rp .pc{ border-left:3px solid #d9dce1; padding:2px 10px; }
+  .rp .pc.ok{ border-left-color:#2f7d4f; } .rp .pc.review{ border-left-color:#b45309; } .rp .pc.block{ border-left-color:#b42318; } .rp .pc.unknown{ border-left-color:#8b929e; }
+  .rp .pc b{ font-size:15px; }
+  .rp .pc span{ font-size:11px; color:#5c6470; }
+  .rp .risk-hi{ color:#b42318; font-weight:700; } .rp .risk-mid{ color:#b45309; } .rp .risk-lo{ color:#5c6470; }
+  .rp .rp-disc{ margin-top:16px; padding-top:8px; border-top:1px solid #d9dce1; font-size:10.5px; color:#5c6470; }
+  .rp .rp-foot{ margin-top:20px; border-top:1px solid #d9dce1; padding-top:6px; font-size:10px; color:#8b929e; }
+  /* RV-94 双表：屏幕完整 12 列 / 打印专用 9 列精简表（display 切换，避免隐藏列+colgroup 错位） */
+  .rp .rp-tbl-print{ display:none; }
+  .rp table col.p-no{ width:7mm; } .rp table col.p-invno{ width:32mm; } .rp table col.p-date{ width:19mm; }
+  .rp table col.p-kind{ width:9mm; } .rp table col.p-seller{ width:30mm; } .rp table col.p-total{ width:20mm; }
+  .rp table col.p-pc{ width:21mm; } .rp table col.p-risk{ width:27mm; } .rp table col.p-cnt{ width:9mm; }
   @media print{
     body > *:not(#report-print-root){ display:none !important; }
     .rev-overlay, .rpPreviewOv, #rpPreviewOv{ display:none !important; }
     #report-print-root{ display:block !important; }
     body{ background:#fff; }
-    .rp{ font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif; color:#1a1f26; font-size:12px; line-height:1.65; }
-    .rp .rp-head{ border-bottom:2px solid #1a1f26; padding-bottom:8px; margin-bottom:12px; }
-    .rp .rp-title{ font-size:18px; font-weight:800; }
-    .rp .rp-meta{ font-size:11px; color:#5c6470; margin-top:4px; }
-    .rp h2{ font-size:13px; font-weight:700; margin:14px 0 6px; }
-    .rp table{ width:100%; border-collapse:collapse; table-layout:fixed; }
-    .rp th, .rp td{ border:1px solid #d9dce1; padding:4px 6px; font-size:11px; text-align:left; word-break:break-all; }
-    .rp th{ background:#f0f2f5; font-weight:700; }
+    @page{ margin:12mm 10mm; }
+    .rp h2{ page-break-after:avoid; }
     .rp tr{ break-inside:avoid; }
     .rp thead{ display:table-header-group; }
-    .rp .rp-summary{ display:flex; flex-wrap:wrap; gap:16px; }
-    .rp .rp-summary .sm{ min-width:130px; }
-    .rp .rp-summary .sm b{ display:block; font-size:11px; color:#5c6470; font-weight:600; }
-    .rp .rp-summary .sm span{ font-size:16px; font-weight:800; font-variant-numeric:tabular-nums; }
-    .rp .rp-pc{ display:flex; gap:12px; flex-wrap:wrap; }
-    .rp .pc{ border-left:3px solid #d9dce1; padding:2px 10px; }
-    .rp .pc.ok{ border-left-color:#2f7d4f; } .rp .pc.review{ border-left-color:#b45309; } .rp .pc.block{ border-left-color:#b42318; } .rp .pc.unknown{ border-left-color:#8b929e; }
-    .rp .pc b{ font-size:15px; }
-    .rp .pc span{ font-size:11px; color:#5c6470; }
-    .rp .risk-hi{ color:#b42318; font-weight:700; } .rp .risk-mid{ color:#b45309; } .rp .risk-lo{ color:#5c6470; }
-    .rp .rp-disc{ margin-top:16px; padding-top:8px; border-top:1px solid #d9dce1; font-size:10.5px; color:#5c6470; }
-    .rp .rp-foot{ margin-top:20px; border-top:1px solid #d9dce1; padding-top:6px; font-size:10px; color:#8b929e; }
+    .rp .rp-tbl-screen{ display:none; }
+    .rp .rp-tbl-print{ display:table; }
+    /* 风险清单 7 列打印列宽 */
+    .rp table col.r-no{ width:7mm; } .rp table col.r-id{ width:11mm; } .rp table col.r-name{ width:26mm; }
+    .rp table col.r-sev{ width:9mm; } .rp table col.r-invno{ width:32mm; } .rp table col.r-msg{ width:68mm; } .rp table col.r-disp{ width:14mm; }
   }
 
 /* 复核工作台（RV-17）：modal 弹窗 */
 .rev-overlay{position:fixed;inset:0;background:rgba(15,23,42,.45);z-index:99;display:flex;align-items:center;justify-content:center;padding:16px;}
 .rev-modal{background:#fff;border-radius:14px;max-width:520px;width:100%;max-height:86vh;overflow:auto;padding:18px 20px;box-shadow:0 18px 50px rgba(0,0,0,.25);}
+/* RV-94 报告预览模态（P0-2）：移动端全屏 + 内容横向滚动 + 底部操作栏固定 */
+.rev-modal.rp-modal{ max-width:900px; display:flex; flex-direction:column; overflow:hidden; align-items:stretch; }
+#rpPreviewOv{ padding:16px; }
+.rp-scroll{ max-height:72vh; -webkit-overflow-scrolling:touch; }
+@media (max-width:719px){
+  #rpPreviewOv{ padding:0; }
+  #rpPreviewOv .rp-modal{ max-width:100%; max-height:100%; border-radius:0; padding:12px 14px; }
+  #rpPreviewOv .rp-scroll{ max-height:none; border-radius:6px; }
+  #rpPreviewOv .rp-actions{ flex-shrink:0; margin:10px 0 0; }
+  #rpPreviewOv .rp-actions .btn-ghost{ font-size:13px; white-space:nowrap; flex-shrink:0; }
+}
 .rev-head{font-size:15px;font-weight:700;margin-bottom:10px;}
 .rev-todo-note{font-size:12.5px;color:#b45309;background:#fef3e2;border-radius:8px;padding:8px 10px;margin-bottom:10px;}
 .rev-done-note{font-size:12.5px;color:#2f7d4f;background:#e8f6ee;border-radius:8px;padding:8px 10px;margin-bottom:10px;}
@@ -987,6 +1010,7 @@ function demoReport() {
     "findings": [
       {
         "rule_id": "R10",
+        "rule_name": "金额税额勾稽（行级）",
         "severity": "高",
         "confidence": "确定",
         "invoice_no": "26440000000000100002",
@@ -1003,6 +1027,7 @@ function demoReport() {
       },
       {
         "rule_id": "R1",
+        "rule_name": "重复报销 / 整文件重复",
         "severity": "高",
         "confidence": "确定",
         "invoice_no": "26440000000000100001",
@@ -1017,6 +1042,7 @@ function demoReport() {
       },
       {
         "rule_id": "R9",
+        "rule_name": "差额征税专项",
         "severity": "中",
         "confidence": "疑似",
         "invoice_no": "26440000000000100003",
@@ -1032,6 +1058,7 @@ function demoReport() {
       },
       {
         "rule_id": "R11",
+        "rule_name": "红冲关联",
         "severity": "中",
         "confidence": "疑似",
         "invoice_no": "26440000000000100004",
@@ -1601,6 +1628,14 @@ function reportDOMHtml(m) {
     <td style="text-align:right">${esc(t.amount)}</td><td style="text-align:right">${esc(t.tax)}</td><td style="text-align:right">${esc(t.total)}</td>
     <td>${pcSymbol[t.precheck] || ""} ${esc(t.precheck)}</td><td>${sevTxt(t.risk)}</td><td>${esc(t.risk_tags || "—")}</td><td>${t.problem_count}</td>
   </tr>`).join("");
+  // RV-94 打印专用精简表（9 列）：#/票号/日期/蓝红/销售方/价税合计/预审结论/风险(含标签)/问题数
+  const printRows = m.tickets.map((t, i) => `<tr>
+    <td>${i + 1}</td><td>${esc(t.invoice_no)}</td><td>${esc(t.issue_date)}</td><td>${esc(t.kind)}</td><td>${esc(t.seller_name)}</td>
+    <td style="text-align:right">${esc(t.total)}</td>
+    <td>${pcSymbol[t.precheck] || ""} ${esc(t.precheck)}</td>
+    <td>${sevTxt(t.risk)}${t.risk_tags ? "｜" + esc(t.risk_tags) : ""}</td>
+    <td>${t.problem_count}</td>
+  </tr>`).join("");
   const riskRows = m.risks.map((f, i) => `<tr>
     <td>${i + 1}</td><td>${esc(f.rule_id)}</td><td>${esc(f.rule_name)}</td><td>${sevTxt(f.severity)}</td><td>${esc(f.invoice_no)}</td><td>${esc(f.message)}</td><td>${esc(f.status)}</td>
   </tr>`).join("");
@@ -1631,10 +1666,12 @@ function reportDOMHtml(m) {
     <h2>三、优先处理项</h2>
     <div>${prioHtml}</div>
     <h2>四、逐票结论（${m.tickets.length} 张）</h2>
-    <table><thead><tr><th style="width:26px">#</th><th style="width:110px">发票号码</th><th style="width:70px">开票日期</th><th style="width:36px">蓝/红</th><th>销售方</th><th style="width:64px">金额</th><th style="width:64px">税额</th><th style="width:70px">价税合计</th><th style="width:76px">预审结论</th><th style="width:36px">风险</th><th style="width:90px">风险标签</th><th style="width:30px">问题数</th></tr></thead>
+    <table class="rp-tbl-screen"><thead><tr><th style="width:26px">#</th><th style="width:110px">发票号码</th><th style="width:70px">开票日期</th><th style="width:36px">蓝/红</th><th>销售方</th><th style="width:64px">金额</th><th style="width:64px">税额</th><th style="width:70px">价税合计</th><th style="width:76px">预审结论</th><th style="width:36px">风险</th><th style="width:90px">风险标签</th><th style="width:30px">问题数</th></tr></thead>
     <tbody>${rows}</tbody></table>
+    <table class="rp-tbl-print"><colgroup><col class="p-no"><col class="p-invno"><col class="p-date"><col class="p-kind"><col class="p-seller"><col class="p-total"><col class="p-pc"><col class="p-risk"><col class="p-cnt"></colgroup><thead><tr><th>#</th><th>发票号码</th><th>开票日期</th><th>蓝/红</th><th>销售方</th><th>价税合计</th><th>预审结论</th><th>风险</th><th>问题数</th></tr></thead>
+    <tbody>${printRows}</tbody></table>
     <h2>五、风险清单（${m.risks.length} 条）</h2>
-    <table><thead><tr><th style="width:26px">#</th><th style="width:50px">检查项</th><th>检查项名称</th><th style="width:36px">级别</th><th style="width:110px">发票号码</th><th>问题描述</th><th style="width:56px">处置</th></tr></thead>
+    <table><colgroup><col class="r-no"><col class="r-id"><col class="r-name"><col class="r-sev"><col class="r-invno"><col class="r-msg"><col class="r-disp"></colgroup><thead><tr><th class="r-no">#</th><th class="r-id">检查项</th><th class="r-name">检查项名称</th><th class="r-sev">级别</th><th class="r-invno">发票号码</th><th class="r-msg">问题描述</th><th class="r-disp">处置</th></tr></thead>
     <tbody>${riskRows}</tbody></table>
     <div class="rp-disc"><b>范围说明：</b>${esc(m.header.scope)}<br/><b>免责声明：</b>${esc(m.disclaimer)}<br/>生成方式：浏览器本地生成，数据未上传第三方。</div>
     <div class="rp-foot">检查方案 ${esc(m.header.ruleset)} · 本报告结论基于当前批次文件结构化数据，最终以电子税务局查验结果及主管税务机关认定为准。</div>
@@ -1652,15 +1689,13 @@ function openReportPreview() {
   const ov = document.createElement("div");
   ov.className = "rev-overlay";
   ov.id = "rpPreviewOv";
-  ov.style.alignItems = "flex-start";
-  ov.style.padding = "20px";
-  ov.innerHTML = `<div class="rev-modal" style="max-width:900px;padding:20px 24px;">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+  ov.innerHTML = `<div class="rev-modal rp-modal">
+    <div class="rp-headbar" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-shrink:0;">
       <div style="font-size:15px;font-weight:700;">预审报告预览</div>
       <button class="btn-ghost" id="rpCloseBtn" type="button" style="padding:4px 12px;">关闭</button>
     </div>
-    <div style="max-height:72vh;overflow:auto;border:1px solid var(--line);border-radius:8px;padding:16px;">${reportDOMHtml(m)}</div>
-    <div style="display:flex;gap:8px;margin-top:12px;justify-content:flex-end;">
+    <div class="rp-scroll" style="overflow:auto;border:1px solid var(--line);border-radius:8px;padding:16px;flex:1;min-height:0;">${reportDOMHtml(m)}</div>
+    <div class="rp-actions" style="display:flex;gap:8px;margin-top:12px;justify-content:flex-end;flex-shrink:0;">
       <button class="btn-ghost" id="rpPrintBtn" type="button">打印 / 另存为 PDF</button>
     </div>
   </div>`;
