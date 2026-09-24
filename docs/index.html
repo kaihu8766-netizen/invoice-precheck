@@ -359,6 +359,62 @@ code{ overflow-wrap:anywhere; word-break:break-word; }
   .inv-full{ max-width:120px; }
   .inv-meta{ flex-basis:100%; }
 }
+
+/* ========== UI-3 第二批（RV-75）：同屏不互斥 + 规则抽屉 + 移动端 ========== */
+/* 布局双形态：≥1280px 左右分栏（risk|invoice 各自独立滚动） */
+@media (min-width:1280px){
+  .report-zone{ display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:14px; align-items:start; }
+  .report-zone .view-risk-col{ min-width:0; }
+  .report-zone .view-invoice-col{ min-width:0; max-height:calc(100vh - 260px); overflow:auto; padding-right:4px; }
+  .view-switch{ display:none; }
+  .rule-open-btn{ display:none; }
+}
+/* 720–1280px：纵向双段，发票明细默认折叠（保留 tab 语义切换） */
+@media (max-width:1279px){
+  .report-zone{ display:block; }
+  .view-invoice-col{ margin-top:10px; }
+  .rule-open-btn{ display:inline-flex; }
+}
+/* <720px 移动端：三段纵向同屏展开，采集默认 */
+@media (max-width:719px){
+  .view-invoice-col .inv-group{ max-height:60vh; overflow:auto; }
+  .kpis{ grid-template-columns:repeat(2,1fr); }
+  .report-zone .view-risk-col .finding .body{ padding:6px 8px; }
+  .finding summary{ padding:6px 8px; }
+  .vs{ font-size:12px; padding:5px 10px; }
+  .rule-drawer{ width:100% !important; }
+}
+
+/* 规则分析 overlay 抽屉（低频解释视图，保留下层可见） */
+.rule-drawer{ position:fixed; top:0; right:0; bottom:0; width:40%; min-width:420px; max-width:560px; background:#fff; border-left:1px solid var(--line); box-shadow:-8px 0 30px rgba(15,23,42,.12); z-index:80; transform:translateX(100%); transition:transform .22s ease; display:flex; flex-direction:column; }
+.rule-drawer.open{ transform:translateX(0); }
+.rule-drawer .rd-head{ display:flex; align-items:center; gap:8px; padding:12px 16px; border-bottom:1px solid var(--line); }
+.rule-drawer .rd-head h3{ font-size:14px; font-weight:700; margin:0; }
+.rule-drawer .rd-close{ margin-left:auto; border:none; background:var(--line-soft); border-radius:8px; padding:4px 10px; font:inherit; font-size:12.5px; cursor:pointer; }
+.rule-drawer .rd-body{ padding:12px 16px; overflow:auto; flex:1; }
+.rule-drawer .rd-body .rule-card{ margin-bottom:10px; }
+.rule-open-btn{ align-items:center; gap:4px; border:1px solid var(--line); background:#fff; border-radius:8px; padding:4px 10px; font:inherit; font-size:12.5px; color:var(--sub); cursor:pointer; }
+.rule-open-btn:hover{ border-color:var(--brand); color:var(--brand); }
+/* 排序指示器（异常不强制置顶：保留自然序 + 可切换） */
+.sort-bar{ display:flex; align-items:center; gap:8px; margin:10px 0 6px; font-size:12px; color:var(--sub); flex-wrap:wrap; }
+.sort-bar .sg{ display:flex; border:1px solid var(--line); border-radius:8px; overflow:hidden; }
+.sort-bar .sg button{ border:none; background:#fff; padding:4px 12px; font:inherit; font-size:12px; color:var(--sub); cursor:pointer; }
+.sort-bar .sg button.active{ background:var(--brand); color:#fff; font-weight:600; }
+/* 移动端采集默认 + 只读查看（能力降级不阻断） */
+.mob-view-bar{ display:none; }
+@media (max-width:719px){
+  .mob-view-bar{ display:flex; gap:8px; margin:10px 0; }
+  .mob-view-bar .mv{ flex:1; border:1px solid var(--line); background:#fff; border-radius:8px; padding:7px 0; font:inherit; font-size:12.5px; color:var(--sub); cursor:pointer; text-align:center; }
+  .mob-view-bar .mv.active{ background:var(--brand); color:#fff; border-color:var(--brand); font-weight:600; }
+}
+.op.disabled{ opacity:.45; cursor:not-allowed; }
+/* 锚点定位：sticky KPI 遮挡补偿 */
+.inv-anchor{ scroll-margin-top:96px; }
+.inv-jump{ border:none; background:transparent; color:var(--brand); cursor:pointer; font-size:12px; padding:0 2px; }
+.inv-jump:hover{ text-decoration:underline; }
+@keyframes flashInv{ 0%,100%{ background:transparent; } 50%{ background:#fff3bf; } }
+.flash-inv{ animation:flashInv 1.1s ease 2; }
+@media (prefers-reduced-motion:reduce){ .flash-inv{ animation:none; } .rule-drawer{ transition:none; } }
 </style>
 <script>
 /* ES5 兼容探针（RV-39：独立于主脚本，主脚本解析失败也能点亮） */
@@ -1164,6 +1220,16 @@ document.addEventListener("click", (e) => {
     setView(vs.dataset.view);
     return;
   }
+  const mv = e.target.closest(".mob-view-bar .mv");
+  if (mv) {
+    setView(mv.dataset.view);
+    return;
+  }
+  const ij = e.target.closest(".inv-jump");
+  if (ij) {
+    jumpToInvoice(ij.dataset.no);
+    return;
+  }
   const op = e.target.closest(".op");
   if (op) {
     setDisp(op.dataset.rid, op.dataset.st);
@@ -1204,6 +1270,8 @@ document.addEventListener("click", (e) => {
   }
 });
 let __lastReport = null;
+// UI-3（RV-75）：发票明细排序内存态（票号序默认，异常优先可切，不强制置顶）
+let __invSort = "natural";
 // F-08 KPI 下钻状态：{kpi: "review"|"pass"|"fail"|null, rule: "R3"|null}（会话态，不入 localStorage）
 let __drill = { kpi: null, rule: null };
 function setKpiActive(k) {
@@ -1226,13 +1294,16 @@ function drillKpi(k) {
 }
 function drillRule(rid) {
   if (!__lastReport) return;
-  setView("rule");
-  const card = document.querySelector(`.rule-card[data-rule="${rid}"]`);
-  if (card) {
-    card.scrollIntoView({ behavior: "smooth", block: "center" });
-    card.classList.add("flash");
-    setTimeout(() => card.classList.remove("flash"), 2000);
-  }
+  // UI-3（RV-75）：规则跳转 → 打开抽屉并滚动高亮规则卡（不再切视图）
+  openRuleDrawer();
+  setTimeout(() => {
+    const card = document.querySelector(`.rule-drawer .rule-card[data-rule="${rid}"]`);
+    if (card) {
+      card.scrollIntoView({ behavior: "smooth", block: "center" });
+      card.classList.add("flash");
+      setTimeout(() => card.classList.remove("flash"), 2000);
+    }
+  }, 120);
 }
 function drillRuleInv(rid) {
   if (!__lastReport) return;
@@ -1249,10 +1320,28 @@ function clearDrill() {
 function renderInvoiceView() {
   const d = __lastReport;
   if (!d) return;
-  const el = document.getElementById("view-invoice");
-  if (!el) return;
+  // UI-3（RV-75）：重渲染发票明细列（含 sort-bar，active 由 __invSort 回显）
+  const col = document.querySelector(".view-invoice-col");
+  if (!col) return;
   const metaMap = buildRuleMetaMap(d.rules);
-  el.innerHTML = invoiceViewHtml(d, metaMap);
+  const nat = __invSort === "risk" ? "" : " active";
+  const risk = __invSort === "risk" ? " active" : "";
+  col.innerHTML = `<div class="sort-bar"><span>发票明细 ${(d.invoices || []).length} 张</span><span class="sg" id="invSortSeg"><button type="button" data-sort="natural" class="${nat}">票号序</button><button type="button" data-sort="risk" class="${risk}">异常优先</button></span><button class="rule-open-btn" type="button" id="btnOpenRules">📊 规则分析</button></div>${invoiceViewHtml(d, metaMap)}`;
+  bindInvSort();
+  bindRuleDrawer();
+}
+function jumpToInvoice(no) {
+  if (!__lastReport) return;
+  const isMob = window.innerWidth <= 719;
+  if (isMob) setView("invoice");
+  setTimeout(() => {
+    const t = document.getElementById("inv-" + no);
+    if (t) {
+      t.scrollIntoView({ behavior: "smooth", block: "center" });
+      t.classList.add("flash-inv");
+      setTimeout(() => t.classList.remove("flash-inv"), 1200);
+    }
+  }, isMob ? 150 : 0);
 }
 function render(d) {
   __lastReport = d;
@@ -1280,7 +1369,7 @@ function findingRow(f, metaMap, showOps) {
       <span class="bar ${sevCls}"></span>
       <span class="sev ${sevCls}">${sev === "高" ? "▲" : sev === "中" ? "●" : "·"} <span class="rule-link" data-rule="${esc(f.rule_id)}" title="点击跳转规则分析">${esc(f.rule_id)}</span> ${esc(sev)}</span>
       <span class="rname">${esc(resolveRuleMeta(f.rule_id, metaMap))}</span>
-      <span class="ticket">${esc(shortNo(f.invoice_no))}</span>
+      <span class="ticket">${esc(shortNo(f.invoice_no))} <button type="button" class="inv-jump" data-no="${esc(f.invoice_no)}" title="定位到发票明细">↗</button></span>
       ${badge}
       ${amt ? `<span class="amt">${amt}</span>` : ""}
       <span class="caret">▸</span>
@@ -1370,7 +1459,7 @@ function invoiceViewHtml(d, metaMap) {
   return `${notExec ? `<div class="view-note">⚠ 部分规则未执行（数据不足/未配置），不能据此判定无命中</div>` : ""}
   ${drillNote}
   <div class="inv-group">${invs.map((i) => `
-    <details class="inv-card${i.clean ? " clean" : ""}${notExec && i.clean ? " partial" : ""}">
+    <details class="inv-card${i.clean ? " clean" : ""}${notExec && i.clean ? " partial" : ""}" id="inv-${esc(i.invoice_no)}">
       <summary class="inv-head">
         <span class="inv-no">${esc(shortNo(i.invoice_no))}</span>
         <span class="inv-full">${esc(i.invoice_no)}</span>
@@ -1433,25 +1522,35 @@ function applyFltState(v) {
   if (h) h.textContent = off ? "筛选仅作用于风险视图" : "";
 }
 function setView(v) {
-  if (!["risk", "invoice", "rule"].includes(v)) v = "risk";
+  // UI-3（RV-75）：桌面端 risk/invoice 同屏不再互斥；rule 走抽屉；<720px 保留 risk/invoice 只读切换
+  if (v === "rule") { openRuleDrawer(); return; }
+  if (!["risk", "invoice"].includes(v)) v = "risk";
   try {
     localStorage.setItem(VIEW_KEY, v);
   } catch (e) {
   }
-  document.querySelectorAll(".report-view").forEach((el) => {
-    el.hidden = el.id !== "view-" + v;
-  });
-  document.querySelectorAll(".vs").forEach((b) => b.classList.toggle("active", b.dataset.view === v));
+  const isMob = window.innerWidth <= 719;
+  if (isMob) {
+    document.querySelectorAll(".report-zone > div").forEach((el) => {
+      el.style.display = (el.classList.contains("view-risk-col") && v === "risk") || (el.classList.contains("view-invoice-col") && v === "invoice") ? "" : "none";
+    });
+    document.querySelectorAll(".mob-view-bar .mv").forEach((b) => b.classList.toggle("active", b.dataset.view === v));
+  } else {
+    document.querySelectorAll(".report-zone > div").forEach((el) => { el.style.display = ""; });
+  }
   applyFltState(v);
   updatePrintHead(v);
 }
 function applyView() {
   let v = localStorage.getItem(VIEW_KEY);
-  if (!["risk", "invoice", "rule"].includes(v)) v = "risk";
-  document.querySelectorAll(".report-view").forEach((el) => {
-    el.hidden = el.id !== "view-" + v;
-  });
-  document.querySelectorAll(".vs").forEach((b) => b.classList.toggle("active", b.dataset.view === v));
+  if (!["risk", "invoice"].includes(v)) v = "risk";
+  const isMob = window.innerWidth <= 719;
+  if (isMob) {
+    document.querySelectorAll(".report-zone > div").forEach((el) => {
+      el.style.display = (el.classList.contains("view-risk-col") && v === "risk") || (el.classList.contains("view-invoice-col") && v === "invoice") ? "" : "none";
+    });
+    document.querySelectorAll(".mob-view-bar .mv").forEach((b) => b.classList.toggle("active", b.dataset.view === v));
+  }
   applyFltState(v);
   updatePrintHead(v);
 }
@@ -1461,6 +1560,85 @@ function updatePrintHead(v) {
   if (!ph || !__lastReport) return;
   const name = { risk: "风险处理", invoice: "发票明细", rule: "规则分析" }[v] || "风险处理";
   ph.textContent = name + " · 规则包 " + (((_a = __lastReport.ruleset) == null ? void 0 : _a.version) || __lastReport.ruleset_version || "?") + " · 生成 " + (__lastReport.generated_at || "");
+}
+// UI-3（RV-75）：规则分析 overlay 抽屉（保留下层可见、Esc 关闭、返回锚点、深链）
+let __ruleReturnAnchor = null;
+function openRuleDrawer(anchorId) {
+  if (anchorId) __ruleReturnAnchor = anchorId;
+  const d = __lastReport;
+  if (!d) return;
+  const metaMap = buildRuleMetaMap(d.rules);
+  const drawer = document.getElementById("ruleDrawer");
+  if (!drawer) {
+    const div = document.createElement("div");
+    div.id = "ruleDrawer";
+    div.className = "rule-drawer";
+    div.setAttribute("role", "dialog");
+    div.setAttribute("aria-modal", "true");
+    div.setAttribute("aria-label", "规则分析");
+    div.innerHTML = `<div class="rd-head"><h3>规则分析 <span class="sub">${(d.rules || []).length} 条 · 三态口径</span></h3><button class="rd-close" type="button">关闭 Esc</button></div><div class="rd-body">${ruleViewHtml(d, metaMap)}</div>`;
+    document.body.appendChild(div);
+    div.querySelector(".rd-close").onclick = closeRuleDrawer;
+  } else {
+    drawer.querySelector(".rd-body").innerHTML = ruleViewHtml(d, metaMap);
+  }
+  requestAnimationFrame(() => document.getElementById("ruleDrawer").classList.add("open"));
+  if (history.pushState) {
+    try { history.pushState({ ruleOpen: true }, "", "#rule=open"); } catch (e) {}
+  }
+  const closeBtn = document.getElementById("ruleDrawer").querySelector(".rd-close");
+  if (closeBtn) closeBtn.focus();
+}
+function closeRuleDrawer(returnToAnchor) {
+  const drawer = document.getElementById("ruleDrawer");
+  if (drawer) drawer.classList.remove("open");
+  if (history.replaceState) {
+    try { history.replaceState({}, "", location.pathname + location.search); } catch (e) {}
+  }
+  if (returnToAnchor !== false && __ruleReturnAnchor) {
+    const t = document.getElementById(__ruleReturnAnchor);
+    if (t) { t.scrollIntoView({ behavior: "smooth", block: "center" }); t.classList.add("flash-inv"); setTimeout(() => t.classList.remove("flash-inv"), 1200); }
+  }
+  const trig = document.querySelector(".rule-open-btn");
+  if (trig) trig.focus();
+}
+function bindRuleDrawer() {
+  const btn = document.getElementById("btnOpenRules");
+  if (btn && !btn.dataset.bound) {
+    btn.dataset.bound = "1";
+    btn.onclick = () => openRuleDrawer();
+  }
+  document.addEventListener("keydown", (ev) => {
+    const drawer = document.getElementById("ruleDrawer");
+    if (drawer && drawer.classList.contains("open") && ev.key === "Escape") {
+      closeRuleDrawer(false);
+    }
+  }, { once: false });
+  // 深链：加载时 #rule=open 或 #rule=xxx
+  const m = /#rule=([\w-]+)/.exec(location.hash);
+  if (m && m[1] === "open") setTimeout(() => openRuleDrawer(), 60);
+}
+// UI-3（RV-75）：发票明细排序（自然序/异常优先，不强制置顶）
+function bindInvSort() {
+  const seg = document.getElementById("invSortSeg");
+  if (!seg || seg.dataset.bound) return;
+  seg.dataset.bound = "1";
+  seg.querySelectorAll("button").forEach((b) => {
+    b.onclick = () => {
+      seg.querySelectorAll("button").forEach((x) => x.classList.toggle("active", x === b));
+      __invSort = b.dataset.sort;
+      const d = __lastReport;
+      if (!d || !d.invoices) return;
+      if (b.dataset.sort === "risk") {
+        const byInv = {};
+        (d.findings || []).forEach((f) => (byInv[f.invoice_no] = byInv[f.invoice_no] || []).push(f));
+        d.invoices.sort((a, b2) => (byInv[b2.invoice_no] ? byInv[b2.invoice_no].length : 0) - (byInv[a.invoice_no] ? byInv[a.invoice_no].length : 0) || a.invoice_no.localeCompare(b2.invoice_no));
+      } else {
+        d.invoices.sort((a, b2) => a.invoice_no.localeCompare(b2.invoice_no));
+      }
+      renderInvoiceView();
+    };
+  });
 }
 function __origRender(d) {
   var _a, _b, _c, _d, _e, _f, _g, _h, _i;
@@ -1527,6 +1705,10 @@ function __origRender(d) {
     <button class="vs" data-view="invoice">发票明细</button>
     <button class="vs" data-view="rule">规则分析</button>
   </div>
+  <div class="mob-view-bar">
+    <button class="mv active" data-view="risk">风险清单</button>
+    <button class="mv" data-view="invoice">发票明细</button>
+  </div>
   <div class="section">
     <div class="section-head">
       <div class="tools">
@@ -1540,9 +1722,16 @@ function __origRender(d) {
       </div>
     </div>
     ${dispBar}
-    <div id="view-risk" class="report-view"><h2>风险清单 <span class="sub">${(d.findings || []).length} 条命中 · 按严重度排序</span></h2>${findings}</div>
-    <div id="view-invoice" class="report-view" hidden><h2>发票明细 <span class="sub">${(d.invoices || []).length} 张票 · 无命中票最后</span></h2>${invoiceViewHtml(d, metaMap)}</div>
-    <div id="view-rule" class="report-view" hidden><h2>规则分析 <span class="sub">${(d.rules || []).length} 条规则 · 三态口径</span></h2>${ruleViewHtml(d, metaMap)}</div>
+    <div class="report-zone">
+      <div class="view-risk-col">
+        <h2>风险清单 <span class="sub">${(d.findings || []).length} 条命中 · 按严重度排序</span></h2>
+        ${findings}
+      </div>
+      <div class="view-invoice-col">
+        <div class="sort-bar"><span>发票明细 ${(d.invoices || []).length} 张</span><span class="sg" id="invSortSeg"><button type="button" data-sort="natural"${__invSort !== "risk" ? " class=\"active\"" : ""}>票号序</button><button type="button" data-sort="risk"${__invSort === "risk" ? " class=\"active\"" : ""}>异常优先</button></span><button class="rule-open-btn" type="button" id="btnOpenRules">📊 规则分析</button></div>
+        ${invoiceViewHtml(d, metaMap)}
+      </div>
+    </div>
   </div>
   <div class="meta">
     <div>规则包：${esc(((_g = d.ruleset) == null ? void 0 : _g.version) || d.ruleset_version)}（生效 ${esc(((_h = d.ruleset) == null ? void 0 : _h.effective_date) || "")}）· 批次 ${esc(d.batch_id)} · 生成 ${esc(d.generated_at)}</div>
@@ -1551,6 +1740,8 @@ function __origRender(d) {
   <div class="disc">${esc(d.disclaimer || DISCLAIMER)}</div>`;
     el.innerHTML = html;
     applyView();
+    bindRuleDrawer();
+    bindInvSort();
   } catch (e) {
     console.error("[render] 失败:", e);
     el.innerHTML = `<div class="card card-pad high"><b>报告渲染失败</b><br/>${esc(String(e && e.message || e))}<br/><button class="btn" style="margin-top:10px" onclick="render(demoReport())">重试</button></div>`;
