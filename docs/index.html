@@ -1740,11 +1740,12 @@ function bindExportMenu() {
   const btn = document.getElementById("btnExport");
   const list = document.getElementById("dlList");
   if (!btn || !list) return;
-  btn.onclick = (e) => { e.stopPropagation(); list.classList.toggle("open"); };
-  document.addEventListener("click", (e) => {
-    if (!list.contains(e.target)) list.classList.remove("open");
-  });
-  list.addEventListener("click", () => list.classList.remove("open"));
+  const close = () => { list.classList.remove("open"); btn.setAttribute("aria-expanded", "false"); };
+  const open = () => { list.classList.add("open"); btn.setAttribute("aria-expanded", "true"); };
+  btn.onclick = (e) => { e.stopPropagation(); list.classList.contains("open") ? close() : open(); };
+  document.addEventListener("click", (e) => { if (!list.contains(e.target)) close(); });
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && list.classList.contains("open")) { close(); btn.focus(); } });
+  list.addEventListener("click", close);
 }
 function applyView() {
   let v = localStorage.getItem(VIEW_KEY);
@@ -1998,7 +1999,7 @@ function __origRender(d) {
       <div class="tools">
         <span class="hint" id="fltHint" style="margin:0 4px 0 0;"></span>
         <div class="dl-menu">
-          <button class="btn" id="btnExport" type="button">导出 ▾</button>
+          <button class="btn" id="btnExport" type="button" aria-haspopup="true" aria-expanded="false">导出 ▾</button>
           <div class="dl-list" id="dlList">
             <button class="btn-ghost" onclick="exportInvoicesXLSX()">导出 Excel</button>
             <button class="btn-ghost" onclick="exportInvoicesCSV()">导出 CSV</button>
