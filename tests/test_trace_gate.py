@@ -4,6 +4,7 @@
 F-ID 去重全校验 / scheme-RV 判定（phase+feature+status）。
 """
 import re
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -180,6 +181,59 @@ class TestAuditScheme(unittest.TestCase):
         log_cmd = captured[0]
         self.assertTrue(any(tg.ARCHIVE_DIR in str(a) for a in log_cmd), "git log 必须带 ARCHIVE_DIR 前缀")
         self.assertTrue(any(a.endswith(".md") for a in log_cmd), "git log 须含档案 basename")
+
+
+class TestRequiresTraceMatrix(unittest.TestCase):
+    """RV-82（声明式 requires_trace）命令矩阵测试：无 TRACE 仓时 classify 成功、
+    依赖 TRACE 命令 SystemExit。防"本地绿 CI 红"回归 + 防误拦/漏拦。"""
+
+    def _run_main(self, argv):
+        import contextlib, io
+        buf = io.StringIO()
+        with mock.patch.object(sys, "argv", ["trace_gate"] + argv):
+            with contextlib.redirect_stderr(buf), contextlib.redirect_stdout(buf):
+                code = tg.main()
+        return code, buf.getvalue()
+
+    def _set_trace_missing(self):
+        self._orig_trace = tg.TRACE
+        tg.TRACE = Path("/nonexistent/project-trace")
+
+    def tearDown(self):
+        if hasattr(self, "_orig_trace"):
+            tg.TRACE = self._orig_trace
+
+    def test_classify_without_trace_succeeds(self):
+        """classify 声明 requires_trace=False：无 TRACE 也放行（只读 gate_rules.yaml）。"""
+        self._set_trace_missing()
+        code, out = self._run_main(["classify", "--staged"])
+        self.assertNotIn("FATAL: TRACE", out, "classify 不应要求 TRACE")
+
+    def test_dependent_cmd_without_trace_exits(self):
+        """依赖 TRACE 的命令（gate/check/ids/check-rv/preflight/check-scheme/audit-scheme）无 TRACE 必拦。"""
+        self._set_trace_missing()
+        cases = [
+            ["gate", "--task", "架构"],
+            ["check", "--message", "feat(x): RV-20260923-99 (F-20260923-99)"],
+            ["ids", "--grep", "RV-"],
+            ["check-rv", "--message", "feat(x): (F-20260923-99, RV-20260923-99)"],
+            ["preflight", "--desc", "x"],
+            ["check-scheme", "--message", "feat: x (F-20260923-99)"],
+            ["audit-scheme"],
+        ]
+        for argv in cases:
+            with self.subTest(argv=argv):
+                with mock.patch.object(sys, "argv", ["trace_gate"] + argv):
+                    with self.assertRaises(SystemExit):
+                        tg.main()
+
+    def test_classify_does_not_fallback_to_trace_check(self):
+        """classify 即使显式给 --staged 也不触发 _require_trace（声明式豁免生效）。
+        无 --staged 返回 2（缺参提示），但不抛 SystemExit——证明没走 TRACE 检查。"""
+        self._set_trace_missing()
+        code, out = self._run_main(["classify"])
+        self.assertEqual(code, 2, "无 --staged 应返回缺参码 2（而非被 TRACE 拦）")
+        self.assertIn("--staged", out, "应提示缺 --staged 而非 TRACE 错误")
 
 
 if __name__ == "__main__":

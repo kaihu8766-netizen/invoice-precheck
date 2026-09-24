@@ -56,12 +56,18 @@ RV_INDEX = RV_DIR / "索引.md"
 
 
 def _require_trace() -> None:
-    """命令执行时检查 TRACE 仓存在（RV-79：从模块级 SystemExit 下沉至此）。
+    """命令执行时检查 TRACE 仓存在（RV-79：从模块级 SystemExit 下沉至此；RV-82 错误信息完善）。
 
     A3 断言保留：TRACE 必须存在且是真 git 仓，防布局假设失效时静默读错文件。
+    调用方：main() 分发处（requires_trace=True 的命令）；库复用场景请先确认 TRACE 有效。
     """
     if not (TRACE / ".git").exists():
-        raise SystemExit(f"FATAL: TRACE 仓库不存在或不是 git 仓：{TRACE}")
+        raise SystemExit(
+            f"FATAL: TRACE 仓库不存在或不是 git 仓：{TRACE}\n"
+            f"  期望布局：TRACE 与项目根（{ROOT}）平级，即 {TRACE} 应为 git 仓（含 .git/）。\n"
+            f"  修复：clone/pull project-trace 到正确位置，或设置环境变量 TRACE_GATE_ROOT 指向含 project-trace 的父目录。\n"
+            f"  A3 假设：评审档案/功能登记/门禁记录/索引均存于 TRACE 仓，缺失会导致静默读错文件。"
+        )
 
 # 大动作清单（与 AGENTS.md §2 一致）
 BIG_ACTIONS = [
@@ -583,18 +589,23 @@ def cmd_audit_scheme() -> int:
 def main() -> int:
     ap = argparse.ArgumentParser(description="项目硬门禁")
     sub = ap.add_subparsers(dest="cmd", required=True)
+    # RV-82（声明式 requires_trace）：默认依赖 TRACE，classify 显式免除——
+    # 不靠字符串比较 cmd != "classify"（防别名/默认命令误判）
     g = sub.add_parser("gate"); g.add_argument("--task", required=True)
     c = sub.add_parser("check"); c.add_argument("--message", required=True)
     i = sub.add_parser("ids"); i.add_argument("--grep", required=True)
     cl = sub.add_parser("classify"); cl.add_argument("--staged", action="store_true")
+    cl.set_defaults(requires_trace=False)
     cr = sub.add_parser("check-rv"); cr.add_argument("--message", required=True)
     pf = sub.add_parser("preflight"); pf.add_argument("--desc", required=True)
     cs = sub.add_parser("check-scheme"); cs.add_argument("--message", required=True)
     au = sub.add_parser("audit-scheme")
+    for p in (g, c, i, cr, pf, cs, au):
+        p.set_defaults(requires_trace=True)
     args = ap.parse_args()
-    # RV-79（CI修复）：TRACE 依赖的 cmd 在入口统一断言（import 阶段不再 SystemExit）；
-    # classify 只读 gate_rules.yaml 不依赖 TRACE，无需检查
-    if args.cmd != "classify":
+    # RV-79/82：依赖 TRACE 的 cmd 在入口统一断言（import 阶段不再 SystemExit）；
+    # classify 只读 gate_rules.yaml 不依赖 TRACE，声明免除
+    if getattr(args, "requires_trace", True):
         _require_trace()
     if args.cmd == "gate":
         return cmd_gate(args.task)

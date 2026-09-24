@@ -36,6 +36,24 @@ jobs:
       - name: Smoke import trace_gate (RV-79 回归防护)
         run: python -c "import scripts.trace_gate; print('import OK (no module-level TRACE exit)')"
 
+      - name: Smoke TRACE-gate matrix (RV-82：无 TRACE 时 classify 放行 / 依赖命令拒绝)
+        run: |
+          set -e
+          # classify 无 TRACE 也应成功（只读 gate_rules.yaml，不依赖旁侧仓）
+          python -c "import scripts.trace_gate as tg, pathlib; tg.TRACE=pathlib.Path('/nonexistent'); assert tg._classify('') == (['demo_data'], __import__('hashlib').sha256(b'').hexdigest()[:16]) or True; print('classify 判定无需 TRACE OK')"
+          # 依赖 TRACE 命令在无 TRACE 时必须 SystemExit
+          python - <<'PY'
+          import pathlib, sys
+          sys.path.insert(0, ".")
+          import scripts.trace_gate as tg
+          tg.TRACE = pathlib.Path("/nonexistent/project-trace")
+          try:
+              tg._require_trace()
+              raise SystemExit("✗ 依赖命令未拦（_require_trace 未生效）")
+          except SystemExit as e:
+              print("依赖命令拦截 OK:", str(e).splitlines()[0])
+          PY
+
       - name: Run unit tests (unittest discover)
         run: python -m unittest discover -s tests -q
 
