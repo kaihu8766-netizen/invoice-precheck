@@ -33,6 +33,9 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
+      - name: Smoke import trace_gate (RV-79 回归防护)
+        run: python -c "import scripts.trace_gate; print('import OK (no module-level TRACE exit)')"
+
       - name: Run unit tests (unittest discover)
         run: python -m unittest discover -s tests -q
 

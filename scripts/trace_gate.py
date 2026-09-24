@@ -41,9 +41,10 @@ except Exception as _e:
 
 # 溯源仓库路径（与 invoice-precheck 平级）
 TRACE = ROOT.parent / "project-trace"
-# A3补强：断言 TRACE 是真 git 仓，防布局假设失效时静默读错文件
-if not (TRACE / ".git").exists():
-    raise SystemExit(f"FATAL: TRACE 仓库不存在或不是 git 仓：{TRACE}")
+# RV-79（CI修复）：TRACE 存在性检查从模块级下沉到命令执行时——import 永不因外部环境
+# 崩溃（CI 只有本仓、无旁侧 trace 仓；模块级 SystemExit 曾导致 tests/test_trace_gate.py
+# import 失败 → CI unittest 步骤全红）。正确语义：库模块 import 不应退出进程，
+# 外部依赖在使用时检查。各 cmd_* 入口调用 _require_trace()。
 # RV-30：评审档案相对 TRACE 仓库根的目录（git log -- <path> 用，path 相对仓库根；抽常量防目录改名漏改）
 ARCHIVE_DIR = "03-会议与日志/DeepSeek评审"
 RV_DIR = TRACE / ARCHIVE_DIR
@@ -52,6 +53,15 @@ FEATURE_DIR = TRACE / "03-会议与日志" / "功能登记"
 DECISIONS = TRACE / "DECISIONS.md"
 OPEN_ISSUES = TRACE / "OPEN_ISSUES.md"
 RV_INDEX = RV_DIR / "索引.md"
+
+
+def _require_trace() -> None:
+    """命令执行时检查 TRACE 仓存在（RV-79：从模块级 SystemExit 下沉至此）。
+
+    A3 断言保留：TRACE 必须存在且是真 git 仓，防布局假设失效时静默读错文件。
+    """
+    if not (TRACE / ".git").exists():
+        raise SystemExit(f"FATAL: TRACE 仓库不存在或不是 git 仓：{TRACE}")
 
 # 大动作清单（与 AGENTS.md §2 一致）
 BIG_ACTIONS = [
@@ -582,6 +592,10 @@ def main() -> int:
     cs = sub.add_parser("check-scheme"); cs.add_argument("--message", required=True)
     au = sub.add_parser("audit-scheme")
     args = ap.parse_args()
+    # RV-79（CI修复）：TRACE 依赖的 cmd 在入口统一断言（import 阶段不再 SystemExit）；
+    # classify 只读 gate_rules.yaml 不依赖 TRACE，无需检查
+    if args.cmd != "classify":
+        _require_trace()
     if args.cmd == "gate":
         return cmd_gate(args.task)
     if args.cmd == "check":
