@@ -65,7 +65,7 @@ class TestReportModel(unittest.TestCase):
         self.assertEqual(d["fileCount"], 6)
         self.assertEqual(d["invoiceCount"], 5)
         self.assertEqual(d["failedCount"], 1)
-        self.assertIn("0.3.0", d["ruleset"])
+        self.assertIn("0.3.1", d["ruleset"])
 
     def test_summary_consistency(self):
         """价税净额 = 蓝票合计 + 红冲（负数）；四类结论计数=发票数。"""
@@ -181,6 +181,41 @@ class TestReportModel(unittest.TestCase):
         self.assertTrue(d["same"], "模型应复用同一实例")
         self.assertEqual(d["expA"], d["expB"], "导出时间戳应一致（快照语义）")
         self.assertEqual(d["nameA"], d["nameB"], "文件名应一致（同一快照）")
+
+    def test_dual_table_consistency(self):
+        """RV-95 B1/B12：屏幕 12 列表与打印 9 列表同源——行数、票号序列、价税合计一致；
+        rule_name 非空（B8）；打印表 aria-hidden（B3）。"""
+        out = render_check("""
+        const root = document.createElement("div");
+        root.innerHTML = reportDOMHtml(m);
+        const sRows = root.querySelectorAll(".rp-tbl-screen tbody tr");
+        const pRows = root.querySelectorAll(".rp-tbl-print tbody tr");
+        const sInv = Array.from(sRows).map(r => r.children[1].textContent.trim());
+        const pInv = Array.from(pRows).map(r => r.children[1].textContent.trim());
+        const sTotal = Array.from(sRows).map(r => r.children[7].textContent.trim());
+        const pTotal = Array.from(pRows).map(r => r.children[5].textContent.trim());
+        const riskTable = Array.from(root.querySelectorAll("table")).find(tb => tb.innerHTML.includes("问题描述"));
+        const riskRows = Array.from(riskTable.querySelectorAll("tbody tr")).map(r => {
+          const cells = r.children;
+          return { id: cells[1].textContent.trim(), name: cells[2].textContent.trim() };
+        });
+        window.__report_test_output = {
+          sCount: sRows.length, pCount: pRows.length,
+          invSame: JSON.stringify(sInv) === JSON.stringify(pInv),
+          totalSame: JSON.stringify(sTotal) === JSON.stringify(pTotal),
+          printAria: root.querySelector(".rp-tbl-print").getAttribute("aria-hidden"),
+          nameNonEmpty: riskRows.every(r => r.name.length > 0),
+          names: riskRows.map(r => r.name)
+        };
+        """)
+        d = __import__("json").loads(out)
+        self.assertEqual(d["sCount"], 5)
+        self.assertEqual(d["pCount"], 5)
+        self.assertTrue(d["invSame"], "两表票号序列应一致")
+        self.assertTrue(d["totalSame"], "两表价税合计应一致")
+        self.assertEqual(d["printAria"], "true")
+        self.assertTrue(d["nameNonEmpty"], f"rule_name 有空值: {d['names']}")
+        self.assertEqual(len(d["names"]), 4)
 
 
 if __name__ == "__main__":

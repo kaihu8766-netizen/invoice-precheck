@@ -417,7 +417,7 @@
 
   /* 报告 DOM（RV-91/94）：基础样式屏幕+打印共用（预览模态与打印同源），打印时精简列 */
   #report-print-root{ display:none; }
-  .rp{ font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif; color:#1a1f26; font-size:12px; line-height:1.65; }
+  .rp{ -webkit-print-color-adjust:exact; print-color-adjust:exact; font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif; color:#1a1f26; font-size:12px; line-height:1.65; }
   .rp .rp-head{ border-bottom:2px solid #1a1f26; padding-bottom:8px; margin-bottom:12px; }
   .rp .rp-title{ font-size:18px; font-weight:800; }
   .rp .rp-meta{ font-size:11px; color:#5c6470; margin-top:4px; }
@@ -439,9 +439,9 @@
   .rp .rp-foot{ margin-top:20px; border-top:1px solid #d9dce1; padding-top:6px; font-size:10px; color:#8b929e; }
   /* RV-94 双表：屏幕完整 12 列 / 打印专用 9 列精简表（display 切换，避免隐藏列+colgroup 错位） */
   .rp .rp-tbl-print{ display:none; }
-  .rp table col.p-no{ width:7mm; } .rp table col.p-invno{ width:32mm; } .rp table col.p-date{ width:19mm; }
-  .rp table col.p-kind{ width:9mm; } .rp table col.p-seller{ width:30mm; } .rp table col.p-total{ width:20mm; }
-  .rp table col.p-pc{ width:21mm; } .rp table col.p-risk{ width:27mm; } .rp table col.p-cnt{ width:9mm; }
+  .rp table col.p-no{ width:7mm; } .rp table col.p-invno{ width:32mm; } .rp table col.p-date{ width:18mm; }
+  .rp table col.p-kind{ width:8mm; } .rp table col.p-seller{ width:30mm; } .rp table col.p-total{ width:20mm; }
+  .rp table col.p-pc{ width:21mm; } .rp table col.p-risk{ width:31mm; } .rp table col.p-cnt{ width:7mm; }
   @media print{
     body > *:not(#report-print-root){ display:none !important; }
     .rev-overlay, .rpPreviewOv, #rpPreviewOv{ display:none !important; }
@@ -452,6 +452,7 @@
     .rp tr{ break-inside:avoid; }
     .rp thead{ display:table-header-group; }
     .rp .rp-tbl-screen{ display:none; }
+    .rp .rp-headbar, .rp .rp-actions{ display:none !important; }
     .rp .rp-tbl-print{ display:table; }
     /* 风险清单 7 列打印列宽 */
     .rp table col.r-no{ width:7mm; } .rp table col.r-id{ width:11mm; } .rp table col.r-name{ width:26mm; }
@@ -467,9 +468,9 @@
 .rp-scroll{ max-height:72vh; -webkit-overflow-scrolling:touch; }
 @media (max-width:719px){
   #rpPreviewOv{ padding:0; }
-  #rpPreviewOv .rp-modal{ max-width:100%; max-height:100%; border-radius:0; padding:12px 14px; }
+  #rpPreviewOv .rp-modal{ max-width:100%; max-height:100%; height:100dvh; border-radius:0; padding:12px 14px; }
   #rpPreviewOv .rp-scroll{ max-height:none; border-radius:6px; }
-  #rpPreviewOv .rp-actions{ flex-shrink:0; margin:10px 0 0; }
+  #rpPreviewOv .rp-actions{ flex-shrink:0; margin:10px 0 0; padding-bottom:env(safe-area-inset-bottom); }
   #rpPreviewOv .rp-actions .btn-ghost{ font-size:13px; white-space:nowrap; flex-shrink:0; }
 }
 .rev-head{font-size:15px;font-weight:700;margin-bottom:10px;}
@@ -610,7 +611,7 @@ code{ overflow-wrap:anywhere; word-break:break-word; }
       <div class="logo">票</div>
       <div>
         <div class="brand-name">发票预审工作台</div>
-        <div class="brand-sub">财务合规预审 · 检查方案 v<span id="ver">0.3.0</span></div>
+        <div class="brand-sub">财务合规预审 · 检查方案 v<span id="ver">0.3.1</span></div>
       </div>
     </div>
     <div class="top-right">
@@ -822,7 +823,7 @@ function buildReportModel(d, opts) {
   const riskRows = findings.map((f) => {
     const disp = dispMap[riskId(f)];
     return {
-      rule_id: f.rule_id, rule_name: f.rule_name || "", severity: f.severity || "中",
+      rule_id: f.rule_id, rule_name: f.rule_name || f.rule_id, severity: f.severity || "中",
       invoice_no: f.invoice_no || "", message: f.message || "", suggestion: f.suggestion || "",
       status: disp && disp.status ? disp.status : "待处理"
     };
@@ -1080,8 +1081,8 @@ function demoReport() {
       { "invoice_no": "26440000000000100005", "invoice_type": "增值税电子普通发票", "issue_date": "2026-08-05", "amount": "120.00", "tax": "7.20", "total": "127.20", "seller_name": "示例咨询有限公司", "status": "未见异常", "warning_count": 0, "item_count": 1, "invoice_status": "normal", "file_format": "xml", "precheck": "建议入账", "risk_tags": [], "check_results": { "A": { "status": "pass", "message": "发票状态：正常" }, "B": { "status": "pass", "message": "金额 120.00 + 税额 7.20 = 价税合计 127.20，勾稽一致" }, "C": { "status": "pass", "message": "已检测到 XML 源文件，满足数电票入账归档要求" }, "D": { "status": "pass", "message": "未见异常凭证/进项转出提示" }, "E": { "status": "pass", "message": "未发现重复报销" }, "F": { "status": "pass", "message": "非红字发票" } } }
     ],
     "failed": [{ "file": "扫描件-无文本层.pdf", "error": "PDF 无可提取文字且本地识别不可用，疑似扫描件" }],
-    "ruleset_version": "0.3.0",
-    "ruleset": { "version": "0.3.0", "name": "发票合规检查方案", "effective_date": "2026-09-23", "scope_note": "政策依据按主题引用；预警标准（限额/连号窗口/大额上限）为占位口径，待真实业务数据校准" },
+    "ruleset_version": "0.3.1",
+    "ruleset": { "version": "0.3.1", "name": "发票合规检查方案", "effective_date": "2026-09-23", "scope_note": "政策依据按主题引用；预警标准（限额/连号窗口/大额上限）为占位口径，待真实业务数据校准" },
     "rules": rules,
     "rules_summary": { "enabled_count": 10, "命中": 4, "未命中": 4, "未执行": 2, "note": "未检查的检查项因数据不足或未配置未判定，不计入发现问题" },
     "generated_at": ts,
@@ -1123,7 +1124,7 @@ function riskId(f) {
     var _a;
     return e.field + ":" + ((_a = e.raw) != null ? _a : "");
   }).join("|");
-  return RID_SCHEMA + ":" + fnv1a64([f.rule_id, f.invoice_no || "", "0.3.0", path].join("|"));
+  return RID_SCHEMA + ":" + fnv1a64([f.rule_id, f.invoice_no || "", "0.3.1", path].join("|"));
 }
 function loadDisp() {
   try {
@@ -1668,7 +1669,7 @@ function reportDOMHtml(m) {
     <h2>四、逐票结论（${m.tickets.length} 张）</h2>
     <table class="rp-tbl-screen"><thead><tr><th style="width:26px">#</th><th style="width:110px">发票号码</th><th style="width:70px">开票日期</th><th style="width:36px">蓝/红</th><th>销售方</th><th style="width:64px">金额</th><th style="width:64px">税额</th><th style="width:70px">价税合计</th><th style="width:76px">预审结论</th><th style="width:36px">风险</th><th style="width:90px">风险标签</th><th style="width:30px">问题数</th></tr></thead>
     <tbody>${rows}</tbody></table>
-    <table class="rp-tbl-print"><colgroup><col class="p-no"><col class="p-invno"><col class="p-date"><col class="p-kind"><col class="p-seller"><col class="p-total"><col class="p-pc"><col class="p-risk"><col class="p-cnt"></colgroup><thead><tr><th>#</th><th>发票号码</th><th>开票日期</th><th>蓝/红</th><th>销售方</th><th>价税合计</th><th>预审结论</th><th>风险</th><th>问题数</th></tr></thead>
+    <table class="rp-tbl-print" aria-hidden="true"><colgroup><col class="p-no"><col class="p-invno"><col class="p-date"><col class="p-kind"><col class="p-seller"><col class="p-total"><col class="p-pc"><col class="p-risk"><col class="p-cnt"></colgroup><thead><tr><th>#</th><th>发票号码</th><th>开票日期</th><th>蓝/红</th><th>销售方</th><th>价税合计</th><th>预审结论</th><th>风险</th><th>问题数</th></tr></thead>
     <tbody>${printRows}</tbody></table>
     <h2>五、风险清单（${m.risks.length} 条）</h2>
     <table><colgroup><col class="r-no"><col class="r-id"><col class="r-name"><col class="r-sev"><col class="r-invno"><col class="r-msg"><col class="r-disp"></colgroup><thead><tr><th class="r-no">#</th><th class="r-id">检查项</th><th class="r-name">检查项名称</th><th class="r-sev">级别</th><th class="r-invno">发票号码</th><th class="r-msg">问题描述</th><th class="r-disp">处置</th></tr></thead>
@@ -1689,11 +1690,15 @@ function openReportPreview() {
   const ov = document.createElement("div");
   ov.className = "rev-overlay";
   ov.id = "rpPreviewOv";
+  ov.setAttribute("role", "dialog");
+  ov.setAttribute("aria-modal", "true");
+  ov.setAttribute("aria-label", "预审报告预览");
   ov.innerHTML = `<div class="rev-modal rp-modal">
-    <div class="rp-headbar" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-shrink:0;">
+    <div class="rp-headbar" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-shrink:0;">
       <div style="font-size:15px;font-weight:700;">预审报告预览</div>
       <button class="btn-ghost" id="rpCloseBtn" type="button" style="padding:4px 12px;">关闭</button>
     </div>
+    <div style="font-size:12px;color:var(--muted,#5c6470);margin-bottom:10px;flex-shrink:0;">屏幕预览为完整 12 列；打印 / 另存为 PDF 时自动输出 9 列精简版。</div>
     <div class="rp-scroll" style="overflow:auto;border:1px solid var(--line);border-radius:8px;padding:16px;flex:1;min-height:0;">${reportDOMHtml(m)}</div>
     <div class="rp-actions" style="display:flex;gap:8px;margin-top:12px;justify-content:flex-end;flex-shrink:0;">
       <button class="btn-ghost" id="rpPrintBtn" type="button">打印 / 另存为 PDF</button>
@@ -1702,7 +1707,9 @@ function openReportPreview() {
   document.body.appendChild(ov);
   const close = () => { ov.remove(); document.removeEventListener("keydown", esc); };
   const esc = (e) => { if (e.key === "Escape") close(); };
-  ov.querySelector("#rpCloseBtn").onclick = close;
+  const closeBtn = ov.querySelector("#rpCloseBtn");
+  closeBtn.onclick = close;
+  setTimeout(() => { try { closeBtn.focus(); } catch (e) {} }, 0);
   ov.querySelector("#rpPrintBtn").onclick = () => { renderReportDOM(m); setTimeout(() => { window.print(); }, 100); };
   document.addEventListener("keydown", esc);
   ov.addEventListener("click", (e) => { if (e.target === ov) close(); });
