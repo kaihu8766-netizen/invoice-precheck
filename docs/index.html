@@ -140,15 +140,19 @@
   .inv-status.red_flush{ color:var(--mid); } .inv-status.red_flush::before{ background:var(--mid); }
   .inv-status.void{ color:var(--sub); } .inv-status.void::before{ background:var(--weak); }
   .inv-status.abnormal{ color:var(--high); } .inv-status.abnormal::before{ background:var(--high); }
-  .precheck-tag{ font-size:11px; font-weight:700; white-space:nowrap; display:inline-flex; align-items:center; gap:4px; }
-  .precheck-tag::before{ content:""; width:7px; height:7px; border-radius:50%; flex-shrink:0; }
-  .precheck-tag.pass{ color:var(--ok); } .precheck-tag.pass::before{ background:var(--ok); }
-  .precheck-tag.review{ color:var(--mid); } .precheck-tag.review::before{ background:var(--mid); }
-  .precheck-tag.block{ color:var(--high); } .precheck-tag.block::before{ background:var(--high); }
-  .precheck-tag.unknown{ color:var(--sub); } .precheck-tag.unknown::before{ background:var(--weak); }
+  .precheck-tag{ font-size:11px; font-weight:600; white-space:nowrap; display:inline-flex; align-items:center; padding:1px 8px; border:1px solid var(--line); border-radius:10px; background:#fff; }
+  .precheck-tag.pass{ color:var(--ok); border-color:#cfe6d8; }
+  .precheck-tag.review{ color:var(--mid); border-color:#ecdcc0; }
+  .precheck-tag.block{ color:var(--high); border-color:#ecd0cd; }
+  .precheck-tag.unknown{ color:var(--sub); border-color:var(--line); }
   .tag{ display:inline-flex; align-items:center; font-size:11px; padding:0 8px; border-radius:10px; border:1px solid var(--line); color:var(--sub); background:#fff; }
   .tag.warn{ color:var(--mid); border-color:#e8dcc2; background:#fdfaf5; }
   .tag.block{ color:var(--high); border-color:#ecd0cd; background:#fdf6f5; }
+  .risk-tags{ position:relative; font-size:11px; }
+  .risk-tags summary{ list-style:none; cursor:pointer; color:var(--sub); font-weight:600; user-select:none; }
+  .risk-tags summary::-webkit-details-marker{ display:none; }
+  .risk-tags[open] summary{ color:var(--ink); }
+  .rt-inner{ position:absolute; right:0; top:calc(100% + 4px); z-index:20; display:flex; flex-wrap:wrap; gap:4px; background:#fff; border:1px solid var(--line); border-radius:8px; box-shadow:0 8px 24px rgba(15,23,42,.12); padding:8px; min-width:140px; }
   .check-summary{ font-size:12px; color:var(--sub); margin-top:6px; line-height:1.7; }
   .check-summary .ck{ display:inline-block; margin-right:10px; }
   .check-summary .ck.warn{ color:var(--mid); }
@@ -602,13 +606,12 @@ code{ overflow-wrap:anywhere; word-break:break-word; }
         <button id="btnCamera" class="btn btn-ghost camera-btn" type="button" style="margin-top:10px;width:100%;justify-content:center;align-items:center;gap:6px;">📷 拍照识别发票</button>
         <div class="filelist" id="fileList"></div>
         <button id="btnReview" class="btn btn-primary" style="margin-top:12px;">运行预审</button>
-        <div class="hint" id="runHint">运行后下方显示预审工作台。文件仅发往你配置的后端，不发送第三方。</div>
-        <div class="hint" style="margin-top:6px;">📌 数电票报销入账归档需保留 XML 源文件；仅上传 PDF / OFD 时，预审会提示补传 XML。</div>
+        <div class="hint" id="runHint" style="margin-top:8px;line-height:1.6;">文件仅发往你配置的后端，不发送第三方 · 数电票归档需保留 XML 源文件（仅传 PDF / OFD 会提示补传）</div>
       </section>
 
       <section class="card card-pad demo-only">
         <h3>演示样例</h3>
-        <div class="hint">内置 4 张样例发票（含 1 张图片版走本地识别）+ 1 个识别失败文件，覆盖重复报销、金额勾稽、差额征税、红冲关联、缺 XML 归档与"需人工复核"（识别低置信度）展示。演示故事：财务上传一批发票 → 自动识别 → 合规预审 → 处置 → 导出。</div>
+        <div class="hint">4 张样例发票（含 1 张图片版本地识别）+ 1 个识别失败文件，覆盖重复报销、金额勾稽、差额征税、红冲关联、缺 XML、需人工复核场景。</div>
         <button id="btnRun" class="btn btn-ghost" style="margin-top:10px;">重新运行演示</button>
         <details class="card" style="margin-top:10px;border:1px dashed var(--line);background:#fafbfc;">
           <summary style="cursor:pointer;padding:8px 12px;font-size:12.5px;font-weight:600;color:var(--sub);">数据限制说明（演示数据口径）</summary>
@@ -1630,7 +1633,8 @@ function invoiceViewHtml(d, metaMap) {
     const invSt = i.invoice_status || "normal";
     const invStLabel = { normal: "正常", red_flush: "红冲", void: "作废", abnormal: "异常" }[invSt] || "正常";
     const pcTagCls = { "建议入账": "pass", "建议核对": "review", "阻断入账": "block", "无法预审": "unknown" }[i.pc] || "review";
-    const tags = (i.risk_tags || []).map((t) => `<span class="tag${t === "重复报销" || t === "金额勾稽" || t === "异常" ? " block" : " warn"}">${esc(t)}</span>`).join("");
+    const tags = (i.risk_tags || []);
+    const tagsHtml = tags.length ? `<details class="risk-tags"><summary>${tags.length} 项风险 ▾</summary><span class="rt-inner">${tags.map((t) => `<span class="tag${t === "重复报销" || t === "金额勾稽" || t === "异常" ? " block" : " warn"}">${esc(t)}</span>`).join("")}</span></details>` : "";
     const cks = (i.check_results || {});
     const ckHtml = Object.keys(CHECK_META).map((code) => {
       const c = cks[code];
@@ -1652,7 +1656,7 @@ function invoiceViewHtml(d, metaMap) {
         </span>
         <span class="inv-right">
           <span class="precheck-tag ${pcTagCls}">${esc(i.pc)}</span>
-          ${tags}
+          ${tagsHtml}
           ${i.clean ? notExec ? `<span class="stb q">？ 未完全检查</span>` : `<span class="stb ok">✓ 未见异常</span>` : `<span class="stb warn">${i.fs.length} 条问题</span>`}
           ${reviewBadge(i)}
           ${i.review_needed || getRev(i.invoice_no) ? `<button class="btn-ghost rev-btn" onclick="event.preventDefault();event.stopPropagation();openReviewModal('${esc(i.invoice_no)}')">复核</button>` : ""}
