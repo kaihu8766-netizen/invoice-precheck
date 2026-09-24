@@ -12,23 +12,22 @@
 <title>发票合规预审 · 演示</title>
 <style>
   :root{
-    --brand:#3370ff; --brand-weak:#eaf0ff;
-    --ok:#2f7d4f; --ok-bg:#e8f4ee;
-    --mid:#b45309; --mid-bg:#fef3c7;
-    --high:#b42318; --high-bg:#fdecea;
-    --ink:#1f2329; --sub:#646a73; --weak:#8f959e;
-    --line:#e2e5ea; --line-soft:#eef0f3;
-    --bg:#f6f7f9; --card:#fff;
-    --r-lg:12px; --r-md:8px; --r-sm:6px;
-    --shadow:0 1px 2px rgba(15,23,42,.04), 0 1px 3px rgba(15,23,42,.06);
-    /* UI-2 视觉降噪（RV-74 第一批）：浅蓝渐变页面层、圆角加大、弱边框 */
-    --bg-grad:linear-gradient(180deg,#eef4ff 0%,#f6f7f9 320px,#f6f7f9 100%);
-    --r-xl:16px; --r-lg:14px;
-    --line-soft2:#f2f4f8;
+    --brand:#3370ff; --brand-weak:#eef4ff;
+    --ok:#2f7d4f; --ok-bg:#f2f8f4;
+    --mid:#b45309; --mid-bg:#fbf4ea;
+    --high:#b42318; --high-bg:#fcf1ef;
+    --ink:#1a1f26; --sub:#5c6470; --weak:#8b929e;
+    --line:#e4e7ec; --line-soft:#f0f2f5;
+    --bg:#f7f8fa; --card:#fff;
+    --r-lg:12px; --r-md:10px; --r-sm:8px;
+    --shadow:0 1px 2px rgba(15,23,42,.03);
+    /* RV-88 清爽化：去渐变、纯白卡片、极淡阴影 */
+    --r-xl:14px;
+    --line-soft2:#f5f6f8;
   }
   *{ box-sizing:border-box; margin:0; padding:0; }
   html,body{ height:100%; }
-  body{ font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif; background:var(--bg-grad); color:var(--ink); font-size:14px; line-height:1.6; }
+  body{ font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif; background:var(--bg); color:var(--ink); font-size:14px; line-height:1.6; }
   .app{ max-width:1180px; margin:0 auto; padding:0 20px 48px; }
 
   /* UI-2 溢出修复（RV-74 D）：按字段类型，禁止从中间折断关键字段 */
@@ -135,19 +134,21 @@
   .todo-chip b{ color:var(--high); }
   .todo-chip.mid b{ color:var(--mid); }
   /* 逐票清单：发票状态 / 预审结论 / 风险标签 */
-  .inv-status{ font-size:11px; font-weight:700; padding:1px 8px; border-radius:10px; white-space:nowrap; }
-  .inv-status.normal{ background:var(--ok-bg); color:var(--ok); }
-  .inv-status.red_flush{ background:var(--mid-bg); color:var(--mid); }
-  .inv-status.void{ background:var(--line-soft); color:var(--sub); }
-  .inv-status.abnormal{ background:var(--high-bg); color:var(--high); }
-  .precheck-tag{ font-size:11px; font-weight:700; padding:1px 8px; border-radius:10px; white-space:nowrap; }
-  .precheck-tag.pass{ background:var(--ok-bg); color:var(--ok); }
-  .precheck-tag.review{ background:var(--mid-bg); color:var(--mid); }
-  .precheck-tag.block{ background:var(--high-bg); color:var(--high); }
-  .precheck-tag.unknown{ background:var(--line-soft); color:var(--sub); }
-  .tag{ display:inline-block; font-size:11px; padding:0 8px; border-radius:10px; border:1px solid var(--line); color:var(--sub); background:#fff; }
-  .tag.warn{ color:var(--mid); border-color:#f0d9a8; background:#fff7e8; }
-  .tag.block{ color:var(--high); border-color:#f0c4c0; background:#fdecea; }
+  .inv-status{ font-size:11px; font-weight:700; white-space:nowrap; display:inline-flex; align-items:center; gap:4px; }
+  .inv-status::before{ content:""; width:7px; height:7px; border-radius:50%; flex-shrink:0; }
+  .inv-status.normal{ color:var(--ok); } .inv-status.normal::before{ background:var(--ok); }
+  .inv-status.red_flush{ color:var(--mid); } .inv-status.red_flush::before{ background:var(--mid); }
+  .inv-status.void{ color:var(--sub); } .inv-status.void::before{ background:var(--weak); }
+  .inv-status.abnormal{ color:var(--high); } .inv-status.abnormal::before{ background:var(--high); }
+  .precheck-tag{ font-size:11px; font-weight:700; white-space:nowrap; display:inline-flex; align-items:center; gap:4px; }
+  .precheck-tag::before{ content:""; width:7px; height:7px; border-radius:50%; flex-shrink:0; }
+  .precheck-tag.pass{ color:var(--ok); } .precheck-tag.pass::before{ background:var(--ok); }
+  .precheck-tag.review{ color:var(--mid); } .precheck-tag.review::before{ background:var(--mid); }
+  .precheck-tag.block{ color:var(--high); } .precheck-tag.block::before{ background:var(--high); }
+  .precheck-tag.unknown{ color:var(--sub); } .precheck-tag.unknown::before{ background:var(--weak); }
+  .tag{ display:inline-flex; align-items:center; font-size:11px; padding:0 8px; border-radius:10px; border:1px solid var(--line); color:var(--sub); background:#fff; }
+  .tag.warn{ color:var(--mid); border-color:#e8dcc2; background:#fdfaf5; }
+  .tag.block{ color:var(--high); border-color:#ecd0cd; background:#fdf6f5; }
   .check-summary{ font-size:12px; color:var(--sub); margin-top:6px; line-height:1.7; }
   .check-summary .ck{ display:inline-block; margin-right:10px; }
   .check-summary .ck.warn{ color:var(--mid); }
@@ -195,30 +196,36 @@
 
   /* KPI 摘要 */
   .kpis{ display:grid; grid-template-columns:repeat(4,1fr); gap:10px; padding:14px 16px 4px; }
-  @media (max-width:720px){ .kpis{ grid-template-columns:repeat(2,1fr); } }
-  .kpi.total{ background:var(--brand-weak); border:1px solid var(--line); border-top:2px solid var(--brand); }
-  .kpi.total .l{ color:var(--brand); font-weight:600; }
+  @media (max-width:720px){
+    .kpis{ grid-template-columns:repeat(2,1fr); }
+    .kpi{ min-width:0; }
+    .kpi .n{ font-size:17px; }
+    .kpi.amt3 .n.net{ font-size:18px; }
+    .kpi.amt3 .n.sub{ font-size:10px; white-space:normal; line-height:1.4; }
+  }
+  .kpi{ background:#fff; border:1px solid var(--line-soft); border-left:3px solid var(--line-soft); border-radius:var(--r-md); padding:10px 12px; }
+  .kpi.total{ border-left-color:var(--brand); }
+  .kpi.total .l{ color:var(--sub); font-weight:600; }
+  .kpi .l{ color:var(--sub); }
   .ctxbar{ border-bottom:1px solid var(--line-soft); }
   .ctxmeta{ font-size:11.5px; color:var(--weak); padding:6px 16px 12px; overflow-wrap:anywhere; }
+  .cm-line{ display:block; line-height:1.5; }
+  .cm-detail{ margin-top:3px; }
+  .cm-detail summary{ cursor:pointer; color:var(--sub); }
+  .cm-inner{ margin-top:4px; padding-left:10px; border-left:2px solid var(--line); line-height:1.6; }
   .kpi .mini{ display:block; font-size:10.5px; font-weight:500; color:var(--sub); margin-top:1px; }
-  .kpi.amt3{ padding-top:8px; padding-bottom:8px; }
-  .kpi.amt3 .n{ font-size:15px; line-height:1.25; }
-  .kpi.amt3 .n.sub{ font-size:13px; color:var(--high); }
-  .kpi.amt3 .n.net{ font-size:19px; }
-  .kpi.amt3 .l{ font-size:10.5px; }
-  .kpi.amt3 .l.sub, .kpi.amt3 .l.net{ margin-top:0; }
-  .kpi.amt3 .l.net{ color:var(--brand); font-weight:600; }
-  .kpi{ background:#fafbfc; border:1px solid var(--line-soft); border-radius:var(--r-md); padding:10px 12px; }
-  .kpi .n{ font-size:20px; font-weight:800; line-height:1.2; font-variant-numeric:tabular-nums; }
-  .kpi .l{ font-size:11.5px; color:var(--sub); margin-top:2px; word-break:keep-all; line-height:1.4; }
+  .kpi.amt3{ padding-top:8px; padding-bottom:8px; display:flex; flex-direction:column; justify-content:center; }
+  .kpi.amt3 .n{ font-size:16px; line-height:1.3; }
+  .kpi.amt3 .n.net{ font-size:20px; }
+  .kpi.amt3 .n.sub{ font-size:11px; font-weight:600; color:var(--sub); margin-top:3px; font-variant-numeric:tabular-nums; }
+  .kpi .n{ font-size:20px; font-weight:800; line-height:1.2; font-variant-numeric:tabular-nums; text-align:right; }
   .kpi .n.ok{ color:var(--ok); } .kpi .n.mid{ color:var(--mid); } .kpi .n.high{ color:var(--high); }
-  .kpi.main{ background:var(--brand-weak); border-color:#d6e2ff; }
   /* F-08 KPI 下钻：可点击 KPI 交互态（主动筛选） */
   .kpi[data-drill]{ cursor:pointer; transition:border-color .12s ease, box-shadow .12s ease; }
-  .kpi[data-drill]:hover{ border-color:var(--brand); box-shadow:0 1px 4px rgba(79,107,154,.18); }
-  .kpi[data-drill].active{ border-color:var(--brand); border-top-width:2px; background:var(--brand-weak); }
-  .kpi[data-drill].active .n, .kpi[data-drill].active .l{ color:var(--brand); }
-  .kpi .drill-hint{ display:block; font-size:10px; color:var(--weak); margin-top:2px; }
+  .kpi[data-drill]:hover{ border-color:var(--brand); box-shadow:0 1px 4px rgba(79,107,154,.14); }
+  .kpi[data-drill].active{ border-color:var(--brand); box-shadow:0 0 0 1px var(--brand) inset; }
+  .kpi[data-drill].active .n{ color:var(--brand); }
+  .kpi .drill-hint{ display:block; font-size:10px; color:var(--weak); margin-top:2px; text-align:right; }
   .drill-note{ display:flex; align-items:center; gap:8px; font-size:12px; color:#3d5bb3; background:#eef3fb; border:1px solid #d6e2ff; border-radius:8px; padding:6px 10px; margin-bottom:10px; flex-wrap:wrap; }
   .drill-note .clear{ margin-left:auto; font-size:12px; }
   .rule-link{ cursor:pointer; text-decoration:underline dotted; color:var(--brand); }
@@ -242,8 +249,16 @@
   .section-head{ display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; flex-wrap:wrap; gap:8px; }
   .section-head h2{ font-size:15px; font-weight:700; }
   .section-head .sub{ font-size:12px; color:var(--sub); }
-  .tools{ display:flex; gap:6px; flex-wrap:wrap; min-width:0; }
+  .tools{ display:flex; gap:6px; flex-wrap:wrap; min-width:0; align-items:center; }
   .tools .btn-ghost{ padding:4px 10px; font-size:12px; }
+  .flt-seg{ display:flex; gap:2px; background:var(--line-soft); border:1px solid var(--line); border-radius:var(--r-md); padding:2px; }
+  .flt-seg .btn-ghost{ border:none; background:transparent; color:var(--sub); padding:4px 12px; font-size:12px; font-weight:500; border-radius:calc(var(--r-md) - 2px); }
+  .flt-seg .btn-ghost.active{ background:#fff; color:var(--ink); font-weight:600; box-shadow:var(--shadow); }
+  .dl-menu{ position:relative; }
+  .dl-list{ display:none; position:absolute; right:0; top:calc(100% + 4px); background:#fff; border:1px solid var(--line); border-radius:var(--r-md); box-shadow:0 8px 24px rgba(15,23,42,.12); padding:4px; z-index:30; min-width:120px; }
+  .dl-list.open{ display:block; }
+  .dl-list .btn-ghost{ display:block; width:100%; text-align:left; border:none; padding:6px 10px; font-size:12.5px; border-radius:6px; }
+  .dl-list .btn-ghost:hover{ background:var(--brand-weak); }
   .finding{ border:1px solid var(--line); border-radius:var(--r-md); background:#fff; margin-bottom:5px; }
   .finding summary{ list-style:none; display:flex; align-items:center; gap:8px; padding:7px 10px; cursor:pointer; border-radius:var(--r-md); flex-wrap:wrap; }
   .finding summary::-webkit-details-marker{ display:none; }
@@ -398,6 +413,8 @@
 
 /* UI-2 溢出根治（RV-74 D）：长字段按类型处理，关键字段禁止中间折断 */
 .inv-head{ display:flex; align-items:center; gap:8px; flex-wrap:wrap; min-width:0; }
+.inv-left{ display:flex; align-items:center; gap:8px; flex-wrap:wrap; min-width:0; flex:1 1 auto; }
+.inv-right{ display:flex; align-items:center; gap:6px; flex-wrap:wrap; justify-content:flex-end; flex-shrink:0; }
 .inv-no{ font-weight:700; font-size:13px; flex-shrink:0; }
 .inv-full{ font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:12px; color:var(--sub); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:180px; flex-shrink:1; }
 .inv-meta{ font-size:12px; color:var(--sub); overflow-wrap:anywhere; word-break:break-word; min-width:0; flex:1 1 auto; }
@@ -515,13 +532,12 @@ code{ overflow-wrap:anywhere; word-break:break-word; }
     </div>
     <div class="top-right">
       <span id="subjectChip" class="subject-chip" style="display:none;" title="当前校验主体（R2 抬头/税号）"><span class="nm" id="subjectChipName">示例科技有限公司</span><button class="btn-edit" id="btnEditSubject" type="button">修改</button></span>
-      <span id="modeLabel" class="badge demo">演示模式（内置样例）</span>
-      <div class="seg">
+      <div class="seg" role="group" aria-label="运行模式">
         <button id="btnDemo" class="active">演示模式</button>
         <button id="btnLive">真实模式</button>
       </div>
       <div style="position:relative;">
-        <button id="btnSettings" class="btn-settings" type="button">⚙ 设置</button>
+        <button id="btnSettings" class="btn-settings" type="button" aria-label="设置">⚙</button>
         <div id="settingsDrawer" class="settings-drawer">
           <h4>连接后端</h4>
           <div class="fld">
@@ -1628,16 +1644,20 @@ function invoiceViewHtml(d, metaMap) {
     return `
     <details class="inv-card${i.clean ? " clean" : ""}${notExec && i.clean ? " partial" : ""}" id="inv-${esc(i.invoice_no)}">
       <summary class="inv-head">
-        <span class="inv-status ${invSt}">${esc(invStLabel)}</span>
-        <span class="precheck-tag ${pcTagCls}">${esc(i.pc)}</span>
-        <span class="inv-no">${esc(shortNo(i.invoice_no))}</span>
-        <span class="inv-full">${esc(i.invoice_no)}</span>
-        <span class="inv-meta">${esc(i.seller_name || "")} · ${esc(i.issue_date || "")} · ${fmtMoney(i.total || i.amount)}${i.tax ? `（税额 ${fmtMoney(i.tax)}）` : ""}</span>
-        ${tags}
-        ${i.clean ? notExec ? `<span class="stb q">？ 未完全检查</span>` : `<span class="stb ok">✓ 未见异常</span>` : `<span class="stb warn">${i.fs.length} 条问题</span>`}
-        ${reviewBadge(i)}
-        ${i.review_needed || getRev(i.invoice_no) ? `<button class="btn-ghost rev-btn" onclick="event.preventDefault();event.stopPropagation();openReviewModal('${esc(i.invoice_no)}')">复核</button>` : ""}
-        <span class="caret">▸</span>
+        <span class="inv-left">
+          <span class="inv-status ${invSt}">${esc(invStLabel)}</span>
+          <span class="inv-no">${esc(shortNo(i.invoice_no))}</span>
+          <span class="inv-full">${esc(i.invoice_no)}</span>
+          <span class="inv-meta">${esc(i.seller_name || "")} · ${esc(i.issue_date || "")} · ${fmtMoney(i.total || i.amount)}${i.tax ? `（税额 ${fmtMoney(i.tax)}）` : ""}</span>
+        </span>
+        <span class="inv-right">
+          <span class="precheck-tag ${pcTagCls}">${esc(i.pc)}</span>
+          ${tags}
+          ${i.clean ? notExec ? `<span class="stb q">？ 未完全检查</span>` : `<span class="stb ok">✓ 未见异常</span>` : `<span class="stb warn">${i.fs.length} 条问题</span>`}
+          ${reviewBadge(i)}
+          ${i.review_needed || getRev(i.invoice_no) ? `<button class="btn-ghost rev-btn" onclick="event.preventDefault();event.stopPropagation();openReviewModal('${esc(i.invoice_no)}')">复核</button>` : ""}
+          <span class="caret">▸</span>
+        </span>
       </summary>
       <div class="inv-body">
         ${ckNote ? `<div class="check-summary">${ckHtml}<div style="margin-top:4px;">${ckNote}</div></div>` : ""}
@@ -1715,6 +1735,16 @@ function setView(v) {
   }
   applyFltState(v);
   updatePrintHead(v);
+}
+function bindExportMenu() {
+  const btn = document.getElementById("btnExport");
+  const list = document.getElementById("dlList");
+  if (!btn || !list) return;
+  btn.onclick = (e) => { e.stopPropagation(); list.classList.toggle("open"); };
+  document.addEventListener("click", (e) => {
+    if (!list.contains(e.target)) list.classList.remove("open");
+  });
+  list.addEventListener("click", () => list.classList.remove("open"));
 }
 function applyView() {
   let v = localStorage.getItem(VIEW_KEY);
@@ -1883,7 +1913,7 @@ function __origRender(d) {
       invs4.forEach((i) => { if ((i.invoice_status || "normal") === "red_flush") red += Math.round(Number(i.total || 0) * 100) / 100; });
       return fmtMoney(String(blue + red));
     })();
-    const redAmt = s.red_flush_amount ? `红冲 ${fmtMoney(String(Math.abs(Number(s.red_flush_amount)).toFixed(2)))}` : "";
+    const redAmt = s.red_flush_amount ? fmtMoney(String(Math.abs(Number(s.red_flush_amount)).toFixed(2))) : "";
     const taxAmt = (() => {
       // 用整数分累加避免浮点误差（150.3699…→150.37）
       let t = 0;
@@ -1912,7 +1942,7 @@ function __origRender(d) {
     </div>
     <div class="kpis">
       <div class="kpi total main"><div class="n">${esc(invs4.length)}</div><div class="l">发票张数</div></div>
-      <div class="kpi total main amt3"><div class="n">${blueTotal}</div><div class="l">蓝票价税合计</div><div class="n sub">${redTotal}</div><div class="l sub">红字冲减</div><div class="n net">${totalAmt}</div><div class="l net">价税合计净额</div></div>
+      <div class="kpi total main amt3"><div class="n net">${totalAmt}</div><div class="l">价税合计净额</div><div class="n sub">蓝票 ${blueTotal} · 红冲 ${redTotal}</div></div>
       <div class="kpi total main"><div class="n">${taxAmt}</div><div class="l">税额（不含红冲）</div></div>
       <div class="kpi total main"><div class="n">${redAmt ? esc(redAmt) : "—"}</div><div class="l">红冲 / 作废</div></div>
     </div>
@@ -1923,7 +1953,12 @@ function __origRender(d) {
       <div class="kpi precheck weak${drillCls("unknown")}" data-drill="unknown" role="button" tabindex="0" aria-pressed="${_drill.kpi === "unknown"}" title="查看信息不全、无法给出预审结论的发票"><div class="n">${esc(precheckCnt["无法预审"] || 0)}</div><div class="l">无法预审</div></div>
     </div>
     ${prioTags ? `<div class="todo-bar"><span class="lb">优先处理：</span>${prioTags}</div>` : ""}
-    <div class="ctxmeta" title="批次/生成时间/统计口径">统计口径：预审结论四类之和=发票张数（识别失败文件独立计，不纳入预审结论统计）；人工复核为建议核对子集；价税合计净额=蓝票价税合计−红字冲减（税额同口径剔除红冲）；红字冲减为负数显式单列；同一张发票按 无法预审＞阻断入账＞建议核对＞建议入账 唯一归类；本工作台面向受票方（购方）财务部门，「进项转出」按购方视角表述</div>
+    <div class="ctxmeta" title="批次/生成时间/统计口径">
+      <span class="cm-line">统计口径：建议入账+建议核对+阻断入账+无法预审=发票张数（识别失败文件独立计，不纳入预审结论统计）</span>
+      <details class="cm-detail"><summary>细则：价税口径与归类优先级</summary>
+        <div class="cm-inner">价税合计净额=蓝票价税合计−红字冲减（税额同口径剔除红冲）；红字冲减为负数显式单列；同一张发票按 无法预审＞阻断入账＞建议核对＞建议入账 唯一归类；人工复核为建议核对子集；本工作台面向受票方（购方）财务部门，「进项转出」按购方视角表述</div>
+      </details>
+    </div>
   </div>`;
     const rname = (id) => resolveRuleMeta(id, metaMap);
     const findings = (d.findings || []).length === 0 ? `<div class="card card-pad"><div class="hint">本批次未发现问题，报告完成 ✓<br/>未发现问题不等于绝对合规，请结合检查项覆盖范围判断。</div></div>` : (d.findings || []).map((f) => findingRow(f, metaMap, true)).join("");
@@ -1956,13 +1991,20 @@ function __origRender(d) {
   </div>
   <div class="section">
     <div class="section-head">
-      <div class="tools">
-        <span class="hint" id="fltHint" style="margin:0 4px 0 0;"></span>
+      <div class="flt-seg" role="group" aria-label="按处置状态筛选">
         <button class="btn-ghost flt active" data-flt="all">全部</button>
         <button class="btn-ghost flt" data-flt="pending">待处理</button>
-        <button class="btn" onclick="exportInvoicesXLSX()">导出 Excel</button>
-        <button class="btn-ghost" onclick="exportInvoicesCSV()">导出 CSV</button>
-        <button class="btn-ghost" onclick="exportCSV(${JSON.stringify(d.findings || []).replace(/"/g, "&quot;")}, ${JSON.stringify(d.rules || []).replace(/"/g, "&quot;")})">导出风险</button>
+      </div>
+      <div class="tools">
+        <span class="hint" id="fltHint" style="margin:0 4px 0 0;"></span>
+        <div class="dl-menu">
+          <button class="btn" id="btnExport" type="button">导出 ▾</button>
+          <div class="dl-list" id="dlList">
+            <button class="btn-ghost" onclick="exportInvoicesXLSX()">导出 Excel</button>
+            <button class="btn-ghost" onclick="exportInvoicesCSV()">导出 CSV</button>
+            <button class="btn-ghost" onclick="exportCSV(${JSON.stringify(d.findings || []).replace(/"/g, "&quot;")}, ${JSON.stringify(d.rules || []).replace(/"/g, "&quot;")})">导出风险</button>
+          </div>
+        </div>
         <button class="btn-ghost" onclick="window.print()">打印</button>
       </div>
     </div>
@@ -1988,6 +2030,7 @@ function __origRender(d) {
     bindRuleDrawer();
     bindInvSort();
     bindPrioChips();
+    bindExportMenu();
   } catch (e) {
     console.error("[render] 失败:", e);
     el.innerHTML = `<div class="card card-pad high"><b>报告渲染失败</b><br/>${esc(String(e && e.message || e))}<br/><button class="btn" style="margin-top:10px" onclick="render(demoReport())">重试</button></div>`;
@@ -1995,8 +2038,6 @@ function __origRender(d) {
 }
 function setMode(live) {
   document.body.classList.toggle("live", live);
-  $("modeLabel").textContent = live ? "真实模式（连后端）" : "演示模式（内置样例）";
-  $("modeLabel").className = "badge " + (live ? "live" : "demo");
   $("btnDemo").classList.toggle("active", !live);
   $("btnLive").classList.toggle("active", live);
   if (live) {
