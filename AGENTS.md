@@ -114,6 +114,10 @@ python3 scripts/trace_gate.py check --message "你的 commit message"
 - 门禁自改（scripts/trace_gate.py、.githooks/commit-msg、scripts/gate_rules.yaml、deepseek_gate.py）同样命中 gate_self 红线，必须评审。
 - 事前对齐门禁（RV-22 诚实定位）：闸门 3 强制"功能提交必须有已批准方案评审"（防遗忘）；方案是否真的事前由 audit-scheme 事后审计（时间戳可查）；无法防止"用 fix 前缀包装功能提交"——该行为会绕过闸门 3，但会被用户监督/审计发现，属于恶意绕过范畴（不防）。
 
+## 已知陷阱（RV-78 沉淀，可复用教训）
+- **混合文件（HTML+JS+模板串）的区间判定：用显式哨兵锚点，不用花括号配平**。模板串内孤立 `{`/`}`、`${}` 插值、行/块注释都会让朴素配平失准（漏判或大面积误伤）。方案：`// @demo-data:begin/end` 哨兵对，区间由哨兵行号决定，零歧义；删改哨兵行本身=命中；找不到哨兵对必须 fail-closed（判命中），防删哨兵绕过。
+- 关键词匹配做红线类别时，注意路径自触发（例：gate_rules.yaml 路径含 "rules" 误命中 rules_engine）。keywords 应精确到文件级（如 "rules.py"），避免宽泛子串。
+
 ## 执行者纪律（RV-15 采纳，用户批准后生效）
 - 不得主动使用 `git commit --no-verify`、`git -c core.hooksPath=/dev/null`、修改 gate_self 文件来绕过门禁。
 - 确需变更门禁机制：先提 RV 评审 → 用户明确批准 → 变更时在 commit message 留痕（RV-ID）。
