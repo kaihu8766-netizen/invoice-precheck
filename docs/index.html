@@ -651,6 +651,7 @@ function resolveRuleMeta(ruleId, map) {
 function demoRuleName(id) {
   return (RULES_META.find((r) => r.rule_id === id) || {}).name || id;
 }
+// @demo-data:begin（RV-78：哨兵锚点，删改此行=命中 demo_data 需事前对齐）
 function demoReport() {
   const now = /* @__PURE__ */ new Date();
   const ts = now.getFullYear() + "-" + String(now.getMonth() + 1).padStart(2, "0") + "-" + String(now.getDate()).padStart(2, "0") + " " + String(now.getHours()).padStart(2, "0") + ":" + String(now.getMinutes()).padStart(2, "0") + ":" + String(now.getSeconds()).padStart(2, "0");
@@ -751,6 +752,7 @@ function demoReport() {
     "disclaimer": DISCLAIMER
   };
 }
+// @demo-data:end（RV-78：哨兵锚点，删改此行=命中 demo_data 需事前对齐）
 function explainBlock(f) {
   const e = f.explanation;
   if (!e) return "";

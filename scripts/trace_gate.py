@@ -191,57 +191,68 @@ def cmd_ids(grep: str) -> int:
 
 
 def _data_segments(path: Path, markers: list[str]) -> list[tuple[int, int]]:
-    """扫码定位数据段行区间（RV-77：结构区间判定主判据）。
+    """定位数据段行区间（RV-78：显式哨兵锚点，弃用花括号配平——HTML/JS 混合文件
+    中模板串/插值/注释会让朴素配平失准，哨兵零歧义）。
 
-    对文本文件按行扫描：找到标记行（如 'demoReport = {'）后，用花括号配平
-    定位到结构结束，返回 [start_line, end_line]（1-based，含两端）。
-    支持多个标记，取并集。
+    哨兵格式（gate_rules.yaml data_segments 定义 begin/end 标记对）：
+        // @demo-data:begin
+        function demoReport() { ... }
+        // @demo-data:end
+    区间 = [begin行, end行]（闭区间，删改哨兵行本身=命中）。
+
+    fail-closed（RV-78）：文件不存在/读取失败/找不到成对哨兵 → 返回 [(0,0)] 哨兵
+    对用 (0,0) 表示"无法定位=全文件视为数据段"（由调用方判断：空区间与任何变更行
+    不相交则不会误报；但调用方对找不到哨兵单独处理 fail-closed）。
+    返回：[(start,end), ...]；找不到任何哨兵对时返回 []（调用方据此 fail-closed）。
     """
     if not path.exists():
-        return []
+        return [(0, 0)]
     try:
         lines = path.read_text(encoding="utf-8").splitlines()
     except Exception:
-        return []
+        return [(0, 0)]
+    # markers: ["begin", "end"] 或含 ":begin"/":end" 字样
+    begin_m = next((m for m in markers if "begin" in m), None)
+    end_m = next((m for m in markers if "end" in m), None)
+    if not begin_m or not end_m:
+        return [(0, 0)]
     segs = []
-    depth = 0
-    in_seg = False
-    start = 0
+    begin = 0
     for i, ln in enumerate(lines, start=1):
-        if not in_seg and any(m in ln for m in markers):
-            in_seg = True
-            start = i
-            depth = ln.count("{") - ln.count("}")
-            continue
-        if in_seg:
-            depth += ln.count("{") - ln.count("}")
-            if depth <= 0:
-                segs.append((start, i))
-                in_seg = False
-    return segs
+        if begin == 0 and begin_m in ln:
+            begin = i
+        elif begin > 0 and end_m in ln:
+            segs.append((begin, i))
+            begin = 0
+    return segs if segs else [(0, 0)]
 
 
 def _diff_changed_lines(diff: str) -> set[int]:
-    """从 unified diff（-U0）解析变更行号集合（RV-77：变更行 ∩ 数据段 = 命中 demo_data）。
+    """从 unified diff（-U0）解析变更行号集合（RV-77/78：变更行 ∩ 数据段 = 命中 demo_data）。
 
-    解析 @@ -a,b +c,d @@ 头：新增侧行号 c..c+d-1（含 0 表示从 c 起连续插入）。
+    解析 @@ -a,b +c,d @@ 头：跟踪旧侧游标（删除行 → 旧侧行号）与新侧游标（新增行 → 新侧行号）。
     过滤 0（diff 头 +0 特例：新增文件首行实际从行 1 起；行号 0 不与任何数据段相交）。
     """
     import re as _re
     out = set()
-    cur = 0
+    old = 0; new = 0
     for ln in diff.splitlines():
         m = _re.match(r"@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@", ln)
         if m:
-            cur = int(m.group(3))
+            old = int(m.group(1)); new = int(m.group(3))
             continue
         if not ln.startswith(("+", "-", " ")):
             continue
-        if ln.startswith("+"):
-            if cur > 0:
-                out.add(cur)
-        if not ln.startswith("-"):
-            cur += 1
+        if ln.startswith("-"):
+            if old > 0:
+                out.add(old)
+            old += 1
+        elif ln.startswith("+"):
+            if new > 0:
+                out.add(new)
+            new += 1
+        else:
+            old += 1; new += 1
     return out
 
 
@@ -272,21 +283,29 @@ def _classify(staged_diff: str) -> tuple[list[str], str]:
     for name, rule in rules.items():
         paths = rule.get("paths", []); kws = rule.get("keywords", []); segs = rule.get("data_segments", [])
         file_hit = any(f.startswith(p) for f in files for p in paths)
-        # RV-77 结构区间主判据（demo_data 专属）：paths 仅限定目标文件，命中与否由
-        # 数据段行区间 ∩ diff 变更行决定——改 CSS/文案/模板不命中，改数据语义必命中
-        if segs and changed_lines:
+        # RV-77/78 结构区间主判据（demo_data 专属）：paths 仅限定目标文件，命中与否由
+        # 哨兵数据段行区间 ∩ diff 变更行决定——改 CSS/文案/模板不命中，改数据语义/删哨兵必命中
+        if segs:
+            seg_hit = False
             for f in files:
-                if any(f.startswith(p) for p in paths):
-                    for s, e in _data_segments(ROOT / f, segs):
-                        if changed_lines & set(range(s, e + 1)):
-                            hits.append(name); break
-                    else:
-                        continue
+                if not any(f.startswith(p) for p in paths):
+                    continue
+                segments = _data_segments(ROOT / f, segs)
+                # RV-78 fail-closed：文件不存在/读取失败/找不到成对哨兵 → 判命中（防删哨兵绕过）
+                if not segments or segments == [(0, 0)]:
+                    seg_hit = True
                     break
-            if name in hits:
-                continue
+                for s, e in segments:
+                    if changed_lines & set(range(s, e + 1)):
+                        seg_hit = True
+                        break
+                if seg_hit:
+                    break
+            if seg_hit:
+                hits.append(name)
+            continue
         # 非 demo_data 类：paths 前缀命中即算（红线类语义：改了该文件就要审）
-        if file_hit and not segs:
+        if file_hit:
             hits.append(name); continue
         if any(k in f for f in files for k in kws):
             hits.append(name)

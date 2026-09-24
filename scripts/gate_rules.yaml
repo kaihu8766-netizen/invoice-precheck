@@ -27,8 +27,9 @@ rules:
       - "pyproject.toml"
       - ".github/"
     keywords: ["gate", "hook", "钩子"]
-  demo_data:              # 演示数据口径（RV-77 采纳：改 demo 数据语义 → 需事前对齐，非安全红线）
+  demo_data:              # 演示数据口径（RV-77/78：改 demo 数据语义 → 需事前对齐，非安全红线）
     paths: ["docs/index.html"]
-    data_segments:        # 数据段行区间定位（结构区间判定主判据；见 trace_gate.py _data_segments）
-      - "function demoReport"
+    data_segments:        # 哨兵锚点对（RV-78 弃用花括号配平）：begin/end 行号定区间，删改哨兵=命中
+      - "@demo-data:begin"
+      - "@demo-data:end"
     keywords: ["demoReport", "summary", "invoices", "findings"]
