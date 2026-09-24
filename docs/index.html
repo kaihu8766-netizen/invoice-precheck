@@ -370,11 +370,13 @@ code{ overflow-wrap:anywhere; word-break:break-word; }
   .view-switch{ display:none; }
   .rule-open-btn{ display:inline-flex; }
 }
-/* 720–1280px：纵向双段，发票明细默认折叠（保留 tab 语义切换） */
+/* 720–1280px：纵向双段，发票明细默认折叠（RV-76：统一断点，<1280 全用新切换栏，旧互斥 tab 隐藏） */
 @media (max-width:1279px){
   .report-zone{ display:block; }
   .view-invoice-col{ margin-top:10px; }
   .rule-open-btn{ display:inline-flex; }
+  .view-switch{ display:none; }
+  .mob-view-bar{ display:flex; gap:8px; margin:10px 0; }
 }
 /* <720px 移动端：三段纵向同屏展开，采集默认 */
 @media (max-width:719px){
@@ -402,8 +404,10 @@ code{ overflow-wrap:anywhere; word-break:break-word; }
 .sort-bar .sg{ display:flex; border:1px solid var(--line); border-radius:8px; overflow:hidden; }
 .sort-bar .sg button{ border:none; background:#fff; padding:4px 12px; font:inherit; font-size:12px; color:var(--sub); cursor:pointer; }
 .sort-bar .sg button.active{ background:var(--brand); color:#fff; font-weight:600; }
-/* 移动端采集默认 + 只读查看（能力降级不阻断） */
-.mob-view-bar{ display:none; }
+/* 窄屏切换栏（RV-76：默认 none，<1280 显示新栏；基础 none 不再覆盖 max-width:1279 的 flex） */
+@media (min-width:1280px){
+  .mob-view-bar{ display:none; }
+}
 @media (max-width:719px){
   .mob-view-bar{ display:flex; gap:8px; margin:10px 0; }
   .mob-view-bar .mv{ flex:1; border:1px solid var(--line); background:#fff; border-radius:8px; padding:7px 0; font:inherit; font-size:12.5px; color:var(--sub); cursor:pointer; text-align:center; }
@@ -1334,7 +1338,7 @@ function renderInvoiceView() {
 }
 function jumpToInvoice(no) {
   if (!__lastReport) return;
-  const isMob = window.innerWidth <= 719;
+  const isMob = window.innerWidth <= 1279;
   if (isMob) setView("invoice");
   setTimeout(() => {
     const t = document.getElementById("inv-" + no);
@@ -1531,7 +1535,7 @@ function setView(v) {
     localStorage.setItem(VIEW_KEY, v);
   } catch (e) {
   }
-  const isMob = window.innerWidth <= 719;
+  const isMob = window.innerWidth <= 1279;
   if (isMob) {
     document.querySelectorAll(".report-zone > div").forEach((el) => {
       el.style.display = (el.classList.contains("view-risk-col") && v === "risk") || (el.classList.contains("view-invoice-col") && v === "invoice") ? "" : "none";
@@ -1546,7 +1550,7 @@ function setView(v) {
 function applyView() {
   let v = localStorage.getItem(VIEW_KEY);
   if (!["risk", "invoice"].includes(v)) v = "risk";
-  const isMob = window.innerWidth <= 719;
+  const isMob = window.innerWidth <= 1279;
   if (isMob) {
     document.querySelectorAll(".report-zone > div").forEach((el) => {
       el.style.display = (el.classList.contains("view-risk-col") && v === "risk") || (el.classList.contains("view-invoice-col") && v === "invoice") ? "" : "none";
