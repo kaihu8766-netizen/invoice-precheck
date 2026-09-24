@@ -23,8 +23,8 @@ from .models import EvidenceLink, Finding, NormalizedInvoice
 from .rules import RULESET_META, RULESET_VERSION
 
 DISCLAIMER = (
-    "基于 XML 结构化数据的规则预审，不替代人工复核与税务判断；"
-    "命中项需核原始凭证，未命中不等于合规；规则版本与覆盖范围已列明。"
+    "本工作台基于发票文件结构化数据做合规预审，不替代人工复核与税务判断；"
+    "发现问题需核原始凭证，未发现问题不等于合规；检查方案版本与覆盖范围已列明。"
 )
 SCOPE_NOTE = "本报告基于数电票 XML 结构化数据的确定性规则生成；公开+合成集验证通过，真实分布未验证。"
 
