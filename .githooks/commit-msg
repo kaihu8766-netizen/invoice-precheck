@@ -33,4 +33,16 @@ if [ -f scripts/trace_gate.py ]; then
         exit $RC
     fi
 fi
+
+# 闸门 4（F-20260926-01）：轻量评审通道——message 声明 [LIGHT] 时，门禁重算 staged diff
+# 白名单/限额/配额/RV adopted+hash 全通过才放行；不满足 → 拒绝（防"标LIGHT但diff是重改动"）
+if printf '%s' "$MSG" | grep -q '\[LIGHT\]'; then
+    if [ -f scripts/trace_gate.py ]; then
+        python3 scripts/trace_gate.py light --message "$MSG"
+        RC=$?
+        if [ $RC -ne 0 ]; then
+            exit $RC
+        fi
+    fi
+fi
 exit 0

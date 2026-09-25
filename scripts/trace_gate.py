@@ -350,6 +350,227 @@ def _classify(staged_diff: str, rules_path: Path | None = None) -> tuple[list[st
     return sorted(set(hits)), diff_hash
 
 
+def _numstat_stats(diff: str) -> dict:
+    """从 staged diff 文本解析变更统计（F-20260926-01）。
+
+    diff --git 头 + 每文件变更块：返回 {files: [路径], added: 总增行, deleted: 总删行,
+    max_line_chars: 单行最大长度, binary: [二进制文件]}。不依赖 git numstat 子命令，
+    直接解析统一 diff 格式（与 _classify 同源）。
+    """
+    import re
+    files, added, deleted, max_chars, binary = [], 0, 0, 0, []
+    cur = None
+    for ln in diff.splitlines():
+        if ln.startswith("diff --git"):
+            m = re.search(r"b/(\S+)", ln)
+            cur = m.group(1) if m else "?"
+            files.append(cur)
+            continue
+        if ln.startswith("Binary files") or "GIT binary patch" in ln:
+            if cur and cur not in binary:
+                binary.append(cur)
+            continue
+        if ln.startswith("@@") and cur:
+            m = re.search(r"-(\d+)(?:,\d+)? \+(\d+)(?:,\d+)?", ln)
+            continue  # 行号信息，统计在下面按行
+        if cur and (ln.startswith("+") and not ln.startswith("+++") or
+                    ln.startswith("-") and not ln.startswith("---")):
+            body = ln[1:]
+            max_chars = max(max_chars, len(body))
+            if ln.startswith("+"):
+                added += 1
+            else:
+                deleted += 1
+    return {"files": files, "added": added, "deleted": deleted,
+            "max_line_chars": max_chars, "binary": binary}
+
+
+def _is_in_segments(path: Path, changed_lines: set[int], markers: list[str]) -> bool:
+    """变更行是否与给定标记区间相交（F-20260926-01，index.html <script> 区间检测）。
+
+    RV-146：不复用 _data_segments（其 begin/end 哨兵约定与 <script> 不兼容——
+    markers 不含 "begin"/"end" 会返回 (0,0) fail-closed → index.html 恒拒死路径）。
+    直接按 start/end 字面行定位所有成对区间；找不到起点/终点对 → fail-closed 判命中。
+    """
+    if not path.exists():
+        return True
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except Exception:
+        return True
+    start_m = markers[0] if markers else "<script>"
+    end_m = markers[1] if len(markers) > 1 else "</script>"
+    segs = []
+    begin = 0
+    for i, ln in enumerate(lines, start=1):
+        if begin == 0 and start_m in ln:
+            begin = i
+        elif begin > 0 and end_m in ln:
+            segs.append((begin, i))
+            begin = 0
+    if not segs:
+        return True  # fail-closed：找不到成对 <script> → 判命中（防删标签绕过）
+    return any(changed_lines & set(range(s, e + 1)) for s, e in segs)
+
+
+def _classify_light(staged_diff: str, message: str, rules_path: Path | None = None,
+                    root: Path | None = None, quota_check: bool = True) -> tuple[bool, list[str], dict]:
+    """F-20260926-01：轻量评审通道判定（H1-H5 全量机器强制）。
+
+    返回 (是否轻量, 拒绝原因列表, 统计信息)。任一条件不满足 → (False, 原因, stats)。
+    """
+    import yaml, re, subprocess
+    root = root or ROOT
+    rules_path = rules_path or (Path(__file__).parent / "gate_rules.yaml")
+    cfg = yaml.safe_load(rules_path.read_text(encoding="utf-8")).get("light_whitelist", {})
+    limits = cfg.get("limits", {})
+    reasons = []
+    stats = {"diff_hash": "", "files": [], "added": 0, "deleted": 0,
+             "max_line_chars": 0, "binary": [], "quota": {}}
+
+    # 0. diff_hash（H3：必须非空、非空串哈希）
+    import hashlib
+    stats["diff_hash"] = hashlib.sha256(staged_diff.encode("utf-8", "replace")).hexdigest()[:16]
+    if not staged_diff.strip():
+        reasons.append("空 staged diff（无内容可轻量评审）")
+        return False, reasons, stats
+
+    # 1. 红线/demo_data 兜底：命中任何 classify 类 → 非轻量（H1 红线集 + demo 段）
+    hits, _ = _classify(staged_diff, rules_path)
+    if hits:
+        reasons.append(f"命中评审类别（{', '.join(hits)}），必须走全量评审")
+        return False, reasons, stats
+
+    # 2. 白名单制（H1）：变更文件集 ⊆ 显式白名单
+    files = _numstat_stats(staged_diff)["files"]
+    stats["files"] = files
+    import fnmatch
+    wl = [pat for r in cfg.get("rules", []) for pat in r.get("match", [])]
+    for f in files:
+        if not any(fnmatch.fnmatch(f, pat) for pat in wl):
+            reasons.append(f"文件不在轻量白名单：{f}（机制/代码文件必须走全量）")
+            return False, reasons, stats
+
+    # 3. index.html 专属：变更行不得落在 <script> 区间（防内联 JS 逻辑混入"文案"）
+    changed = _diff_changed_lines(staged_diff) if staged_diff.strip() else set()
+    for f in files:
+        if f == "docs/index.html":
+            if _is_in_segments(root / f, changed, ["<script>", "</script>"]):
+                reasons.append("docs/index.html 改动命中 <script> 区间（JS 逻辑），必须走全量")
+                return False, reasons, stats
+
+    # 4. 限额（H2 + H4）：文件数/总行数/单行字符/二进制/新增
+    st = _numstat_stats(staged_diff)
+    stats.update(st)
+    n_files = len(set(st["files"]))
+    if n_files > limits.get("max_files", 3):
+        reasons.append(f"文件数 {n_files} > {limits.get('max_files')}")
+    total = st["added"] + st["deleted"]
+    if total > limits.get("max_lines", 30):
+        reasons.append(f"变更行 {total} > {limits.get('max_lines')}")
+    if st["max_line_chars"] > limits.get("max_line_chars", 500):
+        reasons.append(f"单行 {st['max_line_chars']} 字符 > {limits.get('max_line_chars')}（H2）")
+    if st["binary"]:
+        reasons.append(f"二进制文件（{', '.join(st['binary'])}）必须走全量（H4）")
+    # 新增文件（H4）：unified diff 的 "new file mode" 行即新增标志（RV-146：
+    # staged 后 ls-files 已含新文件，恒返回 0 → 原实现 fail-open 失效）
+    new_files = []
+    cur_file = None
+    for ln in staged_diff.splitlines():
+        if ln.startswith("diff --git"):
+            m2 = re.search(r"b/(\S+)", ln)
+            cur_file = m2.group(1) if m2 else None
+        elif ln.startswith("new file mode") and cur_file:
+            new_files.append(cur_file)
+    for f in set(new_files):
+        reasons.append(f"新增文件 {f} 必须走全量（H4）")
+        return False, reasons, stats
+
+    # 5. 配额（H5）：同文件 7 天累计 LIGHT 行数 / 每周 LIGHT 提交次数
+    # （quota_check=False 仅测试用：跳过 git log 查询，不跳过 RV 校验）
+    if quota_check:
+        try:
+            q_lines = subprocess.run(
+                ["git", "log", "--since=7 days ago", "--grep=LIGHT", "--format=%H", "--numstat", "--", "."],
+                capture_output=True, text=True, cwd=root).stdout
+            from collections import defaultdict
+            per_file = defaultdict(int)
+            for ln in q_lines.splitlines():
+                if ln.strip() and "\t" in ln:
+                    a, d, fname = ln.split("\t")
+                    # RV-143 反证2：配额须按变更总量（新增+删除）累计，只加新增行漏算删除
+                    if a.isdigit() and d.isdigit() and fname in files:
+                        per_file[fname] += int(a) + int(d)
+            for f in set(files):
+                if per_file.get(f, 0) >= limits.get("quota_file_lines_7d", 50):
+                    reasons.append(f"文件 {f} 7 天累计 LIGHT 变更 {per_file[f]} 行 ≥ 配额（H5），强制全量")
+            commits = subprocess.run(
+                ["git", "log", "--since=7 days ago", "--grep=LIGHT", "--format=%H"],
+                capture_output=True, text=True, cwd=root).stdout.strip().splitlines()
+            n_light = len([c for c in commits if c.strip()])
+            stats["quota"]["light_commits_7d"] = n_light
+            if n_light > limits.get("quota_light_commits_7d", 5):
+                reasons.append(f"7 天 LIGHT 提交 {n_light} 次 > {limits.get('quota_light_commits_7d')}（H5），强制全量")
+        except Exception as e:
+            reasons.append(f"配额检查失败（{e}），fail-closed 按全量处理")
+
+    # 6. RV 校验（H3）：message 必须引用已 adopted 的 review RV，且 diff_hash 匹配
+    m = re.search(r"\bRV-([0-9]{6,8}(?:-[0-9]+)?)\b", message)
+    if not m:
+        reasons.append("轻量提交必须带已 adopted 的 review RV-ID（H3）")
+        return False, reasons, stats
+    rv = m.group(1)
+    ymd, no = rv.split("-")[0], "-".join(rv.split("-")[1:])
+    arch_glob = f"{ymd[:4]}-{ymd[4:6]}-{ymd[6:]}-{no}"
+    idx = _read_text(RV_INDEX)
+    rv_line = next((ln for ln in idx.splitlines() if arch_glob in ln), None)
+    arch = None
+    if rv_line:
+        cm = re.search(r"\|\s*([^|]+\.md)\s*\|", rv_line)
+        if cm:
+            arch = cm.group(1).strip()
+    if not arch or not (Path(RV_INDEX).parent / arch).exists():
+        reasons.append(f"RV-{rv} 档案不存在，轻量提交被拒")
+        return False, reasons, stats
+    atext = (Path(RV_INDEX).parent / arch).read_text(encoding="utf-8")
+    if not re.search(r"^status:\s*adopted", atext, re.M):
+        reasons.append(f"RV-{rv} 未置 adopted（轻量评审须批准后提交，H3）")
+        return False, reasons, stats
+    dm = _extract_hash_field(atext, "diff_hash")
+    if not dm or dm == "e3b0c44298fc1c14":
+        reasons.append(f"RV-{rv} diff_hash 缺失或为空哈希（H3 空 hash 拒绝）")
+        return False, reasons, stats
+    if dm != stats["diff_hash"]:
+        reasons.append(f"RV-{rv} diff_hash({dm}) ≠ 当前 staged({stats['diff_hash']})（H3）")
+        return False, reasons, stats
+
+    return (len(reasons) == 0), reasons, stats
+
+
+def cmd_light(message: str, rules: str = "") -> int:
+    """light --message <msg>：轻量评审通道判定（F-20260926-01，commit-msg 闸门 4 调用）。
+
+    [LIGHT] 标记提交 → 重算 staged diff：白名单/限额/配额/RV adopted+hash 全通过才放行。
+    """
+    import subprocess
+    diff = subprocess.run(["git", "diff", "--cached", "--binary", "--", ".", *EXCLUDE_PATHS],
+                          capture_output=True, text=True, cwd=ROOT).stdout
+    rp = Path(rules).resolve() if rules else None
+    if rp and not rp.is_file():
+        print(f"[light] FAIL：--rules 文件不存在：{rp}", file=sys.stderr)
+        return 2
+    ok, reasons, stats = _classify_light(diff, message, rp)
+    print(f"[light] diff_hash={stats['diff_hash']} 文件={len(set(stats['files']))} "
+          f"变更行={stats['added'] + stats['deleted']} 单行max={stats['max_line_chars']}")
+    if not ok:
+        for r in reasons:
+            print(f"[light] ✗ {r}", file=sys.stderr)
+        print("[light] FAIL：不满足轻量条件，[LIGHT] 标记无效——请去掉标记走全量评审", file=sys.stderr)
+        return 1
+    print("[light] OK：白名单/限额/配额/RV 校验全部通过")
+    return 0
+
+
 def cmd_classify(staged: bool, rules: str = "") -> int:
     """classify --staged：分类当前 staged diff，输出命中红线类别 + diff_hash。"""
     import subprocess
@@ -761,6 +982,10 @@ def main() -> int:
     au = sub.add_parser("audit-scheme")
     rs = sub.add_parser("redline-scan")
     rs.set_defaults(requires_trace=False)  # RV-126：只扫本仓 tracked 文件，不依赖 project-trace（CI 无 TRACE 也能跑）
+    lt = sub.add_parser("light")  # F-20260926-01：轻量评审通道判定（commit-msg 闸门 4 调用）
+    lt.add_argument("--message", required=True)
+    lt.add_argument("--rules", default="", help="自定义规则文件（默认本仓 gate_rules.yaml）")
+    lt.set_defaults(requires_trace=False)
     for p in (g, c, i, cr, pf, cs, au):
         p.set_defaults(requires_trace=True)
     args = ap.parse_args()
@@ -786,6 +1011,8 @@ def main() -> int:
         return cmd_audit_scheme()
     if args.cmd == "redline-scan":
         return cmd_redline_scan()
+    if args.cmd == "light":
+        return cmd_light(args.message, args.rules)
     return 0
 
 

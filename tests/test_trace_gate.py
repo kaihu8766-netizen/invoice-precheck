@@ -268,5 +268,211 @@ class TestCheckRVAnchoredRegex(unittest.TestCase):
         self.assertIsNone(tg._extract_hash_field(self.ARCH_NORMAL, "nonexistent_hash"))
 
 
+class TestLightChannel(unittest.TestCase):
+    """F-20260926-01：轻量评审通道判定（RV-20260926-140 方案评审 H1-H5 回归）。
+
+    反向用例（DeepSeek 建议）：
+    - 白名单 md 文档改动 → 轻量通过
+    - 白名单外（app/*.py 机制文件）→ 拒绝
+    - docs/index.html 命中 <script> 区间 → 拒绝（JS 逻辑夹带）
+    - 超行数/文件数 → 拒绝
+    - 二进制/新增文件 → 拒绝
+    - 无 adopted RV / 空 hash / hash 不匹配 → 拒绝
+    """
+
+    def _mk_arch(self, rv_glob: str, diff_hash: str, status: str = "adopted") -> Path:
+        """在临时 RV 目录造档案；返回路径。"""
+        # 复用 make_arch 形态但带 diff_hash
+        f = Path(self.rv_dir) / f"{rv_glob}.md"
+        f.write_text(
+            "---\n"
+            f"id: RV-{rv_glob}\n"
+            f"phase: review\n"
+            f"status: {status}\n"
+            f"diff_hash: {diff_hash}\n"
+            "---\n# 测试档案\n",
+            encoding="utf-8",
+        )
+        return f
+
+    def setUp(self):
+        import tempfile, hashlib
+        self.rv_dir = tempfile.mkdtemp()
+        self._orig_rv_index = tg.RV_INDEX
+        tg.RV_INDEX = Path(self.rv_dir) / "索引.md"
+        # 索引行格式与生产一致：| 序号 | 日期 | 主题 | 见档案（xx.md） | 状态 | 档案名 | 见档案 |
+        tg.RV_INDEX.write_text("| 序号 | 日期 | 主题 | 档案 | 状态 | 文件 | 备注 |\n", encoding="utf-8")
+
+    def tearDown(self):
+        tg.RV_INDEX = self._orig_rv_index
+
+    def _staged_diff(self, spec: str) -> str:
+        """构造最小 unified diff 文本（b/ 路径 + 变更行）。"""
+        return spec
+
+    def test_md_doc_pass(self):
+        """白名单 md 文档 + adopted RV + hash 匹配 → 轻量通过。"""
+        diff = (
+            "diff --git a/README.md b/README.md\n"
+            "index 111..222 100644\n"
+            "--- a/README.md\n"
+            "+++ b/README.md\n"
+            "@@ -1,3 +1,3 @@\n"
+            " title\n"
+            "-old line\n"
+            "+new line\n"
+        )
+        import hashlib
+        h = hashlib.sha256(diff.encode()).hexdigest()[:16]
+        self._mk_arch("2026-09-26-141", h)
+        # 索引追加 141 行
+        with open(tg.RV_INDEX, "a", encoding="utf-8") as f:
+            f.write(f"| 141 | 2026-09-26 | 轻量测试 | 见档案（2026-09-26-141.md） | adopted | 2026-09-26-141.md | 见档案 |\n")
+        ok, reasons, stats = tg._classify_light(diff, "docs: t (RV-20260926-141)", root=Path("."), quota_check=False)
+        self.assertTrue(ok, f"应通过，原因: {reasons}")
+
+    def test_non_whitelist_rejected(self):
+        """app/main.py（机制文件）→ 拒绝。"""
+        diff = (
+            "diff --git a/app/main.py b/app/main.py\n"
+            "index 111..222 100644\n"
+            "--- a/app/main.py\n"
+            "+++ b/app/main.py\n"
+            "@@ -1,1 +1,1 @@\n"
+            "-x\n"
+            "+y\n"
+        )
+        ok, reasons, _ = tg._classify_light(diff, "docs: t (RV-20260926-141)", quota_check=False)
+        self.assertFalse(ok)
+        self.assertTrue(any("白名单" in r for r in reasons))
+
+    def test_index_html_script_segment_rejected(self):
+        """docs/index.html 改动落在 <script> 区间 → 拒绝（JS 逻辑夹带）。"""
+        diff = (
+            "diff --git a/docs/index.html b/docs/index.html\n"
+            "index 111..222 100644\n"
+            "--- a/docs/index.html\n"
+            "+++ b/docs/index.html\n"
+            "@@ -10,2 +10,2 @@\n"
+            "<script>\n"
+            "-const x = 1;\n"
+            "+const x = 2;\n"
+        )
+        # 构造带 script 标记的文件（行 10-11 为 script 区间）
+        import tempfile
+        f = tempfile.NamedTemporaryFile("w", suffix=".html", delete=False)
+        f.write("\n".join([f"line{i}" for i in range(1, 9)] + ["<script>", "const x = 1;", "</script>"]))
+        f.close()
+        self.addCleanup(lambda: Path(f.name).unlink(missing_ok=True))
+        # 复写 root 指向临时文件所在目录
+        ok, reasons, _ = tg._classify_light(
+            diff, "docs: t (RV-20260926-141)", root=Path(f.name).parent, quota_check=False)
+        self.assertFalse(ok)
+        self.assertTrue(any("script" in r or "JS" in r for r in reasons), reasons)
+
+    def test_no_rv_rejected(self):
+        """无 RV 引用 → 拒绝。"""
+        diff = (
+            "diff --git a/README.md b/README.md\n"
+            "index 111..222 100644\n"
+            "--- a/README.md\n"
+            "+++ b/README.md\n"
+            "@@ -1,1 +1,1 @@\n"
+            "-x\n"
+            "+y\n"
+        )
+        ok, reasons, _ = tg._classify_light(diff, "docs: t")
+        self.assertFalse(ok)
+        self.assertTrue(any("RV" in r for r in reasons))
+
+    def test_empty_hash_rejected(self):
+        """RV 档案 diff_hash 为空/空哈希 → 拒绝（H3 空 hash 封堵）。"""
+        diff = (
+            "diff --git a/README.md b/README.md\n"
+            "index 111..222 100644\n"
+            "--- a/README.md\n"
+            "+++ b/README.md\n"
+            "@@ -1,1 +1,1 @@\n"
+            "-x\n"
+            "+y\n"
+        )
+        self._mk_arch("2026-09-26-142", "e3b0c44298fc1c14")
+        with open(tg.RV_INDEX, "a", encoding="utf-8") as f:
+            f.write(f"| 142 | 2026-09-26 | 空hash测试 | 见档案（2026-09-26-142.md） | adopted | 2026-09-26-142.md | 见档案 |\n")
+        ok, reasons, _ = tg._classify_light(diff, "docs: t (RV-20260926-142)", quota_check=False)
+        self.assertFalse(ok)
+        self.assertTrue(any("空哈希" in r or "空 hash" in r for r in reasons))
+
+    def test_line_limit_rejected(self):
+        """总变更行 > 30 → 拒绝。"""
+        diff_lines = ["diff --git a/README.md b/README.md", "index 111..222 100644",
+                      "--- a/README.md", "+++ b/README.md", "@@ -1,40 +1,40 @@"]
+        diff_lines += ["-" + f"line{i}" for i in range(20)]
+        diff_lines += ["+" + f"line{i}" for i in range(20)]
+        diff = "\n".join(diff_lines) + "\n"
+        import hashlib
+        h = hashlib.sha256(diff.encode()).hexdigest()[:16]
+        self._mk_arch("2026-09-26-143", h)
+        with open(tg.RV_INDEX, "a", encoding="utf-8") as f:
+            f.write(f"| 143 | 2026-09-26 | 行限测试 | 见档案（2026-09-26-143.md） | adopted | 2026-09-26-143.md | 见档案 |\n")
+        ok, reasons, _ = tg._classify_light(diff, "docs: t (RV-20260926-143)", quota_check=False)
+        self.assertFalse(ok)
+        self.assertTrue(any("变更行" in r for r in reasons), reasons)
+
+
+    def test_new_file_rejected(self):
+        """H4（RV-146 修复）：新增文件（new file mode）→ 拒绝（staged 后 ls-files 失效路径回归）。"""
+        import hashlib
+        diff = (
+            "diff --git a/docs/reviews/x.md b/docs/reviews/x.md\n"
+            "new file mode 100644\n"
+            "index 0000000..1111111\n"
+            "--- /dev/null\n"
+            "+++ b/docs/reviews/x.md\n"
+            "@@ -0,0 +1,3 @@\n"
+            "+line1\n"
+            "+line2\n"
+            "+line3\n"
+        )
+        h = hashlib.sha256(diff.encode()).hexdigest()[:16]
+        self._mk_arch("2026-09-26-146", h)
+        with open(tg.RV_INDEX, "a", encoding="utf-8") as f:
+            f.write(f"| 146 | 2026-09-26 | 新增文件测试 | 见档案（2026-09-26-146.md） | adopted | 2026-09-26-146.md | 见档案 |\n")
+        ok, reasons, _ = tg._classify_light(diff, "docs: t (RV-20260926-146)", quota_check=False)
+        self.assertFalse(ok)
+        self.assertTrue(any("新增文件" in r for r in reasons), reasons)
+
+    def test_index_html_non_script_pass(self):
+        """RV-146/149 修复：index.html 改动在 <script> 区间外 → 轻量通过（死路径回归）。
+
+        RV-149：改为临时 root（不覆盖真实 docs/index.html，杜绝中断污染+行尾归一化）。
+        """
+        import tempfile, hashlib, shutil
+        # 结构：标题(1) script(2-4) 哨兵begin(6) 哨兵end(7) 文案(9) —— 改动行9在 script 与哨兵之外
+        tmp_root = Path(tempfile.mkdtemp(prefix="lt_root_"))
+        self.addCleanup(shutil.rmtree, tmp_root, ignore_errors=True)
+        (tmp_root / "docs").mkdir()
+        (tmp_root / "docs" / "index.html").write_text(
+            "<html>\n<title>t</title>\n<script>\nvar x=1;\n</script>\n"
+            "<!-- @demo-data:begin -->\nDEMO\n<!-- @demo-data:end -->\n<p>文案</p>\n</html>\n",
+            encoding="utf-8")
+        diff = (
+            "diff --git a/docs/index.html b/docs/index.html\n"
+            "index 111..222 100644\n"
+            "--- a/docs/index.html\n"
+            "+++ b/docs/index.html\n"
+            "@@ -9,1 +9,1 @@\n"
+            "-<p>旧文案</p>\n"
+            "+<p>新文案</p>\n"
+        )
+        h = hashlib.sha256(diff.encode()).hexdigest()[:16]
+        self._mk_arch("2026-09-26-147", h)
+        with open(tg.RV_INDEX, "a", encoding="utf-8") as f:
+            f.write(f"| 147 | 2026-09-26 | index文案测试 | 见档案（2026-09-26-147.md） | adopted | 2026-09-26-147.md | 见档案 |\n")
+        ok, reasons, _ = tg._classify_light(diff, "docs: t (RV-20260926-147)",
+                                            root=tmp_root, quota_check=False)
+        self.assertTrue(ok, f"非 script 区间文案改动应通过，原因: {reasons}")
+
+
 if __name__ == "__main__":
     unittest.main()

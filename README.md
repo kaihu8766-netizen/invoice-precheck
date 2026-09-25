@@ -89,3 +89,10 @@ R2 抬头/税号校验要真正工作，必须配置本公司主体（前端"真
 - 首版仅支持**单主体**（集团多法人/代开场景暂不覆盖）；配置结构 `company_entities` 数组预留多主体扩展
 - 安全：`data/` 0700、config.json 0600 原子写（tmp+fsync+os.replace，Windows 重试）；`/api/config` 需 X-API-Key，税号脱敏返回；`/healthz` 暴露 `config_initialized`
 - 部署约束：首版单实例（多副本下本地 config.json 不共享）
+
+## 轻量评审通道（[LIGHT]）
+
+> F-20260926-01：小改动（纯文档/纯文案）可走轻量评审——`docs: ... [LIGHT] (RV-...)` 提交。
+> 门禁重算 staged diff：白名单制（md 文档 / docs/index.html 非 script 区间）、限额（3 文件/30 行/单行 500 字符）、
+> 配额（同文件 7 天 50 行 / 每周 5 次）、必带 adopted RV 且 diff_hash 匹配。任一不满足 → 拒绝并升级全量。
+> 详见 `scripts/gate_rules.yaml` 的 `light_whitelist`。

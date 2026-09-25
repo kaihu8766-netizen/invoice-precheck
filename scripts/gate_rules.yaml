@@ -34,3 +34,19 @@ rules:
       - "@demo-data:begin"
       - "@demo-data:end"
     keywords: ["demoReport", "summary", "invoices", "findings"]
+
+# ---- 轻量评审通道（F-20260926-01，RV-20260926-140 方案评审采纳 H1-H5） ----
+# [LIGHT] 提交资格判定：变更文件集 ⊆ 白名单 + 未命中任何红线/demo_data + 限额内
+# H1 白名单制（DeepSeek 修订）：只放明确的纯文档/纯文案类型，机制文件一律全量
+light_whitelist:
+  rules:
+    - type: markdown_docs        # 纯 md 文档（代码库文档；流程状态文档已被 EXCLUDE_PATHS 排除出 diff）
+      match: ["*.md", "**/*.md"]   # 根目录与子目录 md 都算（fnmatch ** 不匹配根文件）
+    - type: index_html           # 前端页面：仅限"非 demo_data 段 + 非 <script> 区间"的文案/样式改动
+      match: ["docs/index.html"]
+  limits:
+    max_files: 3                 # 单次 [LIGHT] 提交最多 3 个文件
+    max_lines: 30                # 单次 [LIGHT] 提交总变更行 ≤30（numstat added+deleted）
+    max_line_chars: 500          # 单文件单行 ≤500 字符（防大段逻辑压成一行绕过，H2）
+    quota_file_lines_7d: 50      # 同文件 7 天累计 LIGHT 变更行 ≥50 → 强制全量（H5）
+    quota_light_commits_7d: 5    # 每周 LIGHT 提交 >5 次 → 强制全量（H5）
