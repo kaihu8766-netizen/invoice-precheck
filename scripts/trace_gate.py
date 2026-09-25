@@ -354,6 +354,18 @@ def cmd_classify(staged: bool, rules: str = "") -> int:
     return 0 if not hits else 1
 
 
+def _extract_hash_field(atext: str, hash_field: str) -> str | None:
+    """从 RV 档案 frontmatter 提取 hash 字段值（16 位十六进制）。
+
+    RV-112：^ 行首锚定（re.M）——防 diff_hash 为空时 re.search 向后滑动匹配
+    project_trace_diff_hash: 行的子串 diff_hash:（RV-111/112 双向误配缺陷修复）。
+    RV-114：抽成独立函数供 cmd_check_rv 与回归测试共同调用——测试必须耦合生产代码，
+    否则"回退修复后测试仍全绿"=假回归保护。
+    """
+    m = re.search(rf"^{re.escape(hash_field)}:\s*([0-9a-f]{{16}})", atext, re.M)
+    return m.group(1) if m else None
+
+
 def cmd_check_rv(message: str, rules: str = "", hash_field: str = "diff_hash") -> int:
     """check-rv --message <msg>：命中红线时校验提交带已批准且 diff_hash 匹配的 RV-ID。
 
@@ -402,17 +414,15 @@ def cmd_check_rv(message: str, rules: str = "", hash_field: str = "diff_hash") -
         print(f"✗ RV-{rv} 档案不存在（{arch}），提交被拒", file=sys.stderr)
         return 1
     atext = arch_path.read_text(encoding="utf-8")
-    # RV-112：正则加 ^ 行首锚定（re.M）——防 diff_hash 为空时 re.search 向后滑动匹配
-    # project_trace_diff_hash: 行的子串 diff_hash:（RV-111/112 双向误配缺陷修复）
-    dm = re.search(rf"^{re.escape(hash_field)}:\s*([0-9a-f]{{16}})", atext, re.M)
+    dm = _extract_hash_field(atext, hash_field)
     if not dm:
         print(f"✗ RV-{rv} 档案未记录 {hash_field}（需用新版 deepseek_gate.py 生成），提交被拒", file=sys.stderr)
         return 1
-    if dm.group(1) != cur_hash:
-        print(f"✗ RV-{rv} 的 diff_hash({dm.group(1)}) ≠ 当前 staged({cur_hash})，提交被拒", file=sys.stderr)
+    if dm != cur_hash:
+        print(f"✗ RV-{rv} 的 {hash_field}({dm}) ≠ 当前 staged({cur_hash})，提交被拒", file=sys.stderr)
         print("  原因：评审后改动过红线文件；请重新评审或提交未评审的新改动", file=sys.stderr)
         return 1
-    print(f"[check-rv] 通过：RV-{rv} diff_hash 匹配（{cur_hash}）")
+    print(f"[check-rv] 通过：RV-{rv} {hash_field} 匹配（{cur_hash}）")
     return 0
 
 

@@ -236,5 +236,37 @@ class TestRequiresTraceMatrix(unittest.TestCase):
         self.assertIn("--staged", out, "应提示缺 --staged 而非 TRACE 错误")
 
 
+class TestCheckRVAnchoredRegex(unittest.TestCase):
+    """RV-112/114：hash 字段提取必须 ^ 行首锚定——防 diff_hash 为空时向后滑动匹配
+    project_trace_diff_hash: 行的子串 diff_hash:（双向误配缺陷回归）。
+
+    RV-114 修正：测试**直接调用生产函数 tg._extract_hash_field**（真耦合）——
+    回退生产锚定修复后本测试必须失败，杜绝"假回归保护"。
+    """
+
+    ARCH_WITH_EMPTY_DIFF = (
+        "---\nid: RV-20260925-99\ndiff_hash: \nproject_trace_diff_hash: a2eaaf9f12a764e1\n"
+        "status: adopted\n---\n# body\n"
+    )
+    ARCH_NORMAL = (
+        "---\nid: RV-20260925-99\ndiff_hash: 9d54e362fc4adf81\nproject_trace_diff_hash: a2eaaf9f12a764e1\n"
+        "status: adopted\n---\n# body\n"
+    )
+
+    def test_anchored_does_not_match_substring(self):
+        """diff_hash 为空 + pt hash 非空：生产函数必须返回 None（不滑动匹配子串）。"""
+        self.assertIsNone(tg._extract_hash_field(self.ARCH_WITH_EMPTY_DIFF, "diff_hash"))
+
+    def test_anchored_still_matches_normal(self):
+        """正常形态：两字段各自正确提取，互不干扰。"""
+        self.assertEqual(tg._extract_hash_field(self.ARCH_NORMAL, "diff_hash"), "9d54e362fc4adf81")
+        self.assertEqual(
+            tg._extract_hash_field(self.ARCH_NORMAL, "project_trace_diff_hash"), "a2eaaf9f12a764e1")
+
+    def test_anchored_rejects_missing_field(self):
+        """字段缺失返回 None（fail-closed 拒绝路径）。"""
+        self.assertIsNone(tg._extract_hash_field(self.ARCH_NORMAL, "nonexistent_hash"))
+
+
 if __name__ == "__main__":
     unittest.main()
