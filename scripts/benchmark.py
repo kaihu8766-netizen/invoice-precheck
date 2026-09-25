@@ -107,8 +107,8 @@ def _run_private_copy() -> dict:
             inv = parse_document(pth.read_bytes())
             ok = bool(inv.invoice_no and inv.total > 0)   # 解析成功=有票号且金额有效（防字段丢失伪装成功）
             gk = ok and inv.amount + inv.tax == inv.total
+            # 安全红线：不输出真实票号/金额（只留布尔指标），真实字段仅存在于本机受控副本区
             rows.append({"file": pth.name, "parsed": ok, "reconcile": gk,
-                         "invoice_no": inv.invoice_no, "total": str(inv.total),
                          "review_needed": inv.review_needed})
         except Exception as e:
             rows.append({"file": pth.name, "parsed": False, "error": f"{type(e).__name__}: {str(e)[:60]}"})
@@ -133,12 +133,25 @@ def _run_archived() -> dict:
     rec = sum(1 for r in data
               if Decimal(r.get("total", "0")) > 0
               and Decimal(r.get("amount", "0")) + Decimal(r.get("tax", "0")) == Decimal(r.get("total", "0")))
+    # 安全红线：rows 只输出脱敏字段（anon.*），真实票号/税号/公司名/金额绝不落盘
+    rows = []
+    for r in data:
+        a = r.get("anon") or {}
+        rows.append({
+            "file": r.get("file", "—"),
+            "anon_invoice_no": a.get("invoice_no", "—"),
+            "buyer_name": a.get("buyer_name", "—"),
+            "seller_name": a.get("seller_name", "—"),
+            "parsed": bool(r.get("invoice_no")),
+            "reconcile": bool(Decimal(r.get("total", "0")) > 0
+                              and Decimal(r.get("amount", "0")) + Decimal(r.get("tax", "0")) == Decimal(r.get("total", "0")))
+        })
     return {
         "group": "real_archived",
-        "note": "真实脱敏 14 张（源文件已按红线删除，结果为验证时记录，不可重跑）",
+        "note": "真实脱敏 14 张（源文件已按红线删除，结果为验证时记录，不可重跑；仅输出脱敏字段）",
         "count": len(data), "parse_rate": f"{ok}/{len(data)}",
         "reconcile_rate": f"{rec}/{len(data)}",
-        "rows": data,
+        "rows": rows,
     }
 
 
