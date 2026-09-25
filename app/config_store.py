@@ -49,7 +49,11 @@ def _deep_copy(obj):
     return json.loads(json.dumps(obj, ensure_ascii=False))
 
 
+# RV-125（DISC-01/#31）：schema 版本——升版旧配置可迁移；未知高版本拒绝加载（不静默）
+SCHEMA_VERSION = 1
+
 DEFAULT_CONFIG: dict = {
+    "schema_version": SCHEMA_VERSION,
     "company_entities": [
         {"id": "default", "name": "", "tax_id": "", "enabled": True},
     ],
@@ -102,14 +106,32 @@ def is_default_rules(cfg: dict) -> bool:
 
 
 def load_config() -> dict:
-    """加载配置：默认值 <- 本地文件 <- 环境变量覆盖。任何异常回退默认，不崩溃。"""
+    """加载配置：默认值 <- 本地文件 <- 环境变量覆盖。任何异常回退默认，不崩溃。
+
+    RV-125（#31）schema 版本语义：
+    - 文件版本 < SCHEMA_VERSION → 按版本分支迁移（v0→v1：补默认字段）
+    - 文件版本 > SCHEMA_VERSION → 拒绝加载、回退默认并显式告警（不静默用旧数据覆盖新语义）
+    """
     cfg = _deep_copy(DEFAULT_CONFIG)
     try:
         if CONFIG_PATH.exists():
             d = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
+            ver = int(d.get("schema_version", 0) or 0)
+            if ver > SCHEMA_VERSION:
+                import logging as _lg
+                _lg.getLogger("invoice-precheck").error(
+                    "config.json schema_version=%s 高于当前支持 %s——拒绝加载，回退默认（升级程序后再读）",
+                    ver, SCHEMA_VERSION)
+                return cfg
+            # 迁移：v0 → v1（无字段变化，仅补版本号；未来 v1→v2 在此分支）
+            if ver < SCHEMA_VERSION:
+                import logging as _lg
+                _lg.getLogger("invoice-precheck").warning(
+                    "config.json schema_version=%s 低于当前 %s——按迁移路径升级", ver, SCHEMA_VERSION)
             for k in ("company_entities", "r2", "rules", "meta"):
                 if k in d and isinstance(d[k], type(cfg[k])):
                     cfg[k] = d[k]
+            cfg["schema_version"] = SCHEMA_VERSION
     except Exception:  # 文件损坏/格式异常 → 用默认并保持可写
         pass
     env_name = os.environ.get("INVOICE_COMPANY_NAME", "").strip()
@@ -135,6 +157,8 @@ def save_config(cfg: dict) -> None:
       os.replace 偶发共享冲突 → 指数退避重试 3 次
     """
     import time
+    cfg = dict(cfg)
+    cfg["schema_version"] = SCHEMA_VERSION  # RV-125（#31）：保存时固化版本，杜绝旧文件无版本
     payload = json.dumps(cfg, ensure_ascii=False, indent=2).encode("utf-8")
     tmp = CONFIG_PATH.with_suffix(".json.tmp")
     try:

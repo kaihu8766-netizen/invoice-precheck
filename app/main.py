@@ -7,10 +7,11 @@
 - POST /review   整批解析+规则 → 一页风险报告（需 X-API-Key）
 
 鉴权（D 阶段公网部署前置，方案 A：Cloudflare Tunnel 本地穿透）：
-- API Key 经环境变量 INVOICE_API_KEY 注入；未设置时使用开发默认 key（启动打警告日志，
-  仅限本地开发，公网部署必须设置强 key——部署脚本负责生成）
+- API Key 经环境变量 INVOICE_API_KEY 注入；未设置时必须显式 INVOICE_ALLOW_DEV_KEY=1
+  才允许开发默认 key（RV-125/#11 硬门：否则拒绝启动——防公网误用默认 key 暴露）
 - 请求头 X-API-Key 比对（hmac.compare_digest 防时序攻击）；缺失/错误 → 401
-- CORS 放行所有源 + X-API-Key 请求头（演示页跨域调用；生产部署应收紧白名单，见部署文档）
+- CORS：本地开发（INVOICE_ALLOW_DEV_KEY=1）放行所有源；否则默认收紧 localhost:8000
+  （RV-125；生产白名单见部署文档）
 
 安全边界（二轮审查 P0）：
 - 文件数/单文件/总大小上限（防内存 DoS）；类型前置校验（parse_document 内 detect_type：
@@ -51,18 +52,26 @@ MAX_FILE_BYTES = 10 * 1024 * 1024   # 10MB（与 parser.MAX_FILE_SIZE 一致）
 MAX_TOTAL_BYTES = 50 * 1024 * 1024  # 50MB
 
 # 鉴权配置（D 阶段）：生产 key 由部署方经环境变量注入；本地未设置时用开发默认 key
+# RV-125（DISC-01/#11）：默认 key 必须显式声明本地开发才允许——公网误用默认 key 从概率问题变为不可能。
+# 硬门：未设 INVOICE_API_KEY 且未显式 INVOICE_ALLOW_DEV_KEY=1 → 拒绝启动（不静默降级为 warning）。
 DEV_API_KEY = "dev-invoice-precheck-key"
+ALLOW_DEV_KEY = os.environ.get("INVOICE_ALLOW_DEV_KEY") == "1"
+if not os.environ.get("INVOICE_API_KEY") and not ALLOW_DEV_KEY:
+    raise RuntimeError(
+        "INVOICE_API_KEY 未设置且未声明 INVOICE_ALLOW_DEV_KEY=1（仅限本机开发）——"
+        "拒绝启动：防开发默认 key 在公网/内网暴露（RV-125 硬门）"
+    )
 API_KEY = os.environ.get("INVOICE_API_KEY") or DEV_API_KEY
 if not os.environ.get("INVOICE_API_KEY"):
     logger.warning(
-        "INVOICE_API_KEY 未设置，使用开发默认 key（仅限本地开发；公网部署必须设置强 key）"
+        "INVOICE_API_KEY 未设置，已显式声明 INVOICE_ALLOW_DEV_KEY=1（仅限本机开发；公网部署必须设置强 key）"
     )
 
 app = FastAPI(title="发票合规预审", version="0.1.0")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # 演示期放行；生产收紧白名单（见 docs/DEPLOY.md）
+    allow_origins=["*"] if ALLOW_DEV_KEY else ["http://localhost:8000"],  # RV-125：非本地开发收紧默认源；生产白名单见 docs/DEPLOY.md
     allow_methods=["*"],
     allow_headers=["X-API-Key", "Content-Type"],
 )

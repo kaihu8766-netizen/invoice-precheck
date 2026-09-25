@@ -790,13 +790,13 @@ function buildReportModel(d, opts) {
   // 预审结论计数（与工作台 precheck 派生口径一致）
   const pc = { "建议入账": 0, "建议核对": 0, "阻断入账": 0, "无法预审": 0 };
   let pcAmt = { "建议入账": 0, "建议核对": 0, "阻断入账": 0, "无法预审": 0 };
-  invs.forEach((i) => { const p = i.precheck || "建议核对"; pc[p] = (pc[p] || 0) + 1; pcAmt[p] = Math.round(((pcAmt[p] || 0) + Number(i.total || 0)) * 100) / 100; });
+  invs.forEach((i) => { const p = i.precheck || "建议核对"; pc[p] = (pc[p] || 0) + 1; pcAmt[p] = (pcAmt[p] || 0) + Math.round(Number(i.total || 0) * 100); });  // RV-125: 整数分累加
   // 蓝票/红冲分列
   const blue = invs.filter((i) => (i.invoice_status || "normal") !== "red_flush" && (i.invoice_status || "normal") !== "void");
   const red = invs.filter((i) => (i.invoice_status || "normal") === "red_flush");
   const blueCnt = blue.length, redCnt = red.length;
-  const blueAmt = blue.reduce((a, i) => a + Number(i.total || 0), 0);
-  const redAmt = red.reduce((a, i) => a + Number(i.total || 0), 0);
+  const blueAmt = blue.reduce((a, i) => a + Math.round(Number(i.total || 0) * 100), 0);  // RV-125: 整数分
+  const redAmt = red.reduce((a, i) => a + Math.round(Number(i.total || 0) * 100), 0);  // RV-125: 整数分
   // 开票日期区间
   const dates = invs.map((i) => i.issue_date || "").filter(Boolean).sort();
   const dateRange = dates.length ? dates[0] + " ~ " + dates[dates.length - 1] : "—";
@@ -840,12 +840,12 @@ function buildReportModel(d, opts) {
       totalCount: s.total_count != null ? s.total_count : invs.length
     },
     summary: {
-      invoiceCount: invs.length, dateRange, blueCnt, blueAmt, redCnt, redAmt,
-      netAmt: Math.round((blueAmt + redAmt) * 100) / 100,
-      amountSum: Math.round(invs.reduce((a, i) => a + Number(i.amount || 0), 0) * 100) / 100,
+      invoiceCount: invs.length, dateRange, blueCnt, blueAmt: blueAmt / 100, redCnt, redAmt: redAmt / 100,  // RV-125: summary 存元
+      netAmt: (blueAmt + redAmt) / 100,  // RV-125: 分→元
+      amountSum: invs.reduce((a, i) => a + Math.round(Number(i.amount || 0) * 100), 0) / 100,  // RV-125: 分→元
       // 税额口径与工作台 KPI 一致：不含红冲（红冲已单列负数展示）
-      taxSum: Math.round(blue.reduce((a, i) => a + Number(i.tax || 0), 0) * 100) / 100,
-      precheck: pc, precheckAmt: pcAmt,
+      taxSum: blue.reduce((a, i) => a + Math.round(Number(i.tax || 0) * 100), 0) / 100,  // RV-125: 分→元
+      precheck: pc, precheckAmt: Object.fromEntries(Object.entries(pcAmt).map(([k, v]) => [k, v / 100])),  // RV-125: summary 存元
       prio, rulesEnabled: (d.rules_summary || {}).enabled_count != null ? d.rules_summary.enabled_count : 0,
       findingsCount: findings.length
     },

@@ -71,3 +71,12 @@ jobs:
 
       - name: Smoke redact pipeline (P0-3)
         run: python scripts/redact.py --help >/dev/null
+
+  # RV-125（DISC-01/#61）：红线扫描独立 job——fail-closed 全仓形态化扫描（合成/样本显式豁免，
+  # 密钥形态永不豁免），与 test job 不混跑，命中即 CI 红。本地等效：python scripts/trace_gate.py redline-scan
+  redline-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Redline scan (fail-closed, RV-125/#61)
+        run: python scripts/trace_gate.py redline-scan

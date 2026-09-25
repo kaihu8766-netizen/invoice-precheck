@@ -395,9 +395,36 @@ def cmd_check_rv(message: str, rules: str = "", hash_field: str = "diff_hash") -
     diff = subprocess.run(["git", "diff", "--cached", "--binary", "--", ".", *EXCLUDE_PATHS],
                           capture_output=True, text=True, cwd=ROOT).stdout
     if not diff.strip():
-        # 空 staged：diff_hash 是全局常量（e3b0c442...），任何 RV 都能"匹配"——冒用后门，直接拒绝
-        print("[check-rv] FAIL：staged 为空，拒绝以空 diff 校验 RV（防全局常量冒用后门）", file=sys.stderr)
-        return 1
+        # 空 staged = 仅排除文件（评审产物/流程文档）改动 = 档案入库提交（RV-128）。
+        # 放行条件：message 引用一个档案存在的 RV（评审产物必然关联评审）。
+        # 安全论证：代码文件不在 EXCLUDE_PATHS——有代码改动必非空 diff；EXCLUDE_PATHS 定义在
+        # trace_gate.py（非排除、gate_self 必审），改排除集必非空 diff+强制 RV → 空 diff 无法冒用全局排除。
+        m0 = re.search(r"\bRV-([0-9]{6,8}(?:-[0-9]+)?)\b", message)
+        if not m0:
+            print("[check-rv] FAIL：空 staged（仅评审产物/流程文档）且无 RV-ID，拒绝", file=sys.stderr)
+            return 1
+        rv0 = m0.group(1)
+        ymd0, no0 = rv0.split("-")[0], "-".join(rv0.split("-")[1:])
+        arch_glob0 = f"{ymd0[:4]}-{ymd0[4:6]}-{ymd0[6:]}-{no0}"
+        idx0 = _read_text(RV_INDEX)
+        rv_line0 = next((ln for ln in idx0.splitlines() if arch_glob0 in ln), None)
+        arch0 = None
+        if rv_line0:
+            cm0 = re.search(r"\|\s*([^|]+\.md)\s*\|", rv_line0)
+            if cm0:
+                arch0 = cm0.group(1).strip()
+        if not arch0 or not (Path(RV_INDEX).parent / arch0).exists():
+            print(f"✗ RV-{rv0} 档案不存在，空 diff 档案提交被拒", file=sys.stderr)
+            return 1
+        # RV-129（RV-128 拒绝点）：空 diff 放行必须档案已 adopted——仅"存在"不够
+        # （档案生成 pending 即提交会退化为"任意已存在 RV 即放行"）。
+        # 流程：评审通过 → 置档案 status=adopted（提交前写入）→ 空 diff 提交（档案已 adopted）→ 放行，无死锁。
+        atext0 = (Path(RV_INDEX).parent / arch0).read_text(encoding="utf-8")
+        if not re.search(r"^status:\s*adopted", atext0, re.M):
+            print(f"✗ RV-{rv0} 档案非 adopted（当前 status 非 adopted），空 diff 档案提交被拒——先按用户拍板置 adopted", file=sys.stderr)
+            return 1
+        print(f"[check-rv] 空 staged 档案入库提交：引用 RV-{rv0}（adopted）→ 放行")
+        return 0
     rp = Path(rules).resolve() if rules else None
     if rp and not rp.is_file():
         print(f"[check-rv] FAIL：--rules 文件不存在：{rp}", file=sys.stderr)
@@ -630,6 +657,90 @@ def cmd_audit_scheme() -> int:
     return 0
 
 
+
+
+# RV-125（DISC-01/#61）：CI 红线扫描（fail-closed）——扫 tracked 文件中的形态化红线特征。
+# 与 evtools.scan_redline 同形态（sk-/ghp_/github_pat_/20位票号/18位税号/本地私有路径），
+# 输出只含 文件:行号:类型（值打码），命中即 exit 1（CI 变红；本地 --help smoke 不触发扫描）。
+REDLINE_SCAN_PATTERNS = [
+    (r"sk-[A-Za-z0-9]{16,}", "deepseek_key"),
+    (r"ghp_[A-Za-z0-9]{20,}", "github_pat_classic"),
+    (r"github_pat_[A-Za-z0-9_]{20,}", "github_pat_fine"),
+    (r"\b[0-9]{20}\b", "invoice_no"),
+    (r"\b[0-9A-Z]{18}\b", "tax_id"),
+    (r"/home/[a-z0-9_]+/invoice-private", "local_path"),
+]
+
+
+def _load_allowlist() -> list[str]:
+    """读取 .redline-scan-allowlist 显式豁免前缀（每行一个路径前缀，# 开头为注释）。"""
+    f = ROOT / ".redline-scan-allowlist"
+    if not f.is_file():
+        return []
+    try:
+        out = []
+        for ln in f.read_text(encoding="utf-8").splitlines():
+            ln = ln.split("#", 1)[0].strip()  # 去行尾注释
+            if ln:
+                out.append(ln)
+        return out
+    except OSError:
+        return []
+
+
+def cmd_redline_scan() -> int:
+    """全仓 tracked 文件红线扫描（fail-closed）：命中任一形态即列出并 exit 1。
+
+    RV-125（DISC-01/#61）分层语义：
+    - 密钥形态（sk-/ghp_/github_pat_）**永不豁免**（硬边界：任何仓库不该有真实密钥形态）
+    - 票号/税号/本地路径形态：命中 .redline-scan-allowlist 声明的合成/演示/样本路径前缀 → 豁免
+      （显式声明机制——防"看起来像合成"的自动猜测逃逸；新增真实数据严禁入清单）
+    """
+    import re as _re
+    import subprocess as _sp
+    allow = _load_allowlist()
+    try:
+        files = _sp.run(["git", "ls-files"], capture_output=True, text=True, cwd=ROOT, timeout=30)
+    except Exception:
+        files = None
+    if files is None or files.returncode != 0:
+        print("[redline-scan] 无法枚举 tracked 文件（git ls-files 失败）——fail-closed", file=sys.stderr)
+        return 1
+    hits, exempted = [], 0
+    for f in files.stdout.splitlines():
+        if not f:
+            continue
+        fp = ROOT / f
+        if not fp.is_file():
+            continue
+        try:
+            text = fp.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        for i, ln in enumerate(text.splitlines(), 1):
+            for pat, kind in REDLINE_SCAN_PATTERNS:
+                m = _re.search(pat, ln)
+                if not m:
+                    continue
+                val = m.group(0)
+                masked = val[:4] + "…" + val[-4:] if len(val) > 8 else "…"
+                if kind in ("deepseek_key", "github_pat_classic", "github_pat_fine"):
+                    hits.append(f"  {f}:{i} [{kind}] {masked}（密钥形态，永不豁免）")
+                elif any(f.startswith(pre) for pre in allow):
+                    exempted += 1  # 合成/演示/样本：显式豁免
+                else:
+                    hits.append(f"  {f}:{i} [{kind}] {masked}")
+                break  # 每行只报第一个命中类型
+    if hits:
+        print(f"[redline-scan] FAIL：发现 {len(hits)} 处未豁免红线命中（值已打码；另有 {exempted} 处已豁免的合成/样本形态）：")
+        for h in hits[:50]:
+            print(h)
+        if len(hits) > 50:
+            print(f"  …（共 {len(hits)} 处，仅显示前 50）")
+        return 1
+    print(f"[redline-scan] 通过：tracked 文件无未豁免红线命中（豁免合成/样本 {exempted} 处；密钥形态零命中；真实敏感词表在本地私有文件，不入 CI）")
+    return 0
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="项目硬门禁")
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -648,6 +759,8 @@ def main() -> int:
     pf = sub.add_parser("preflight"); pf.add_argument("--desc", required=True)
     cs = sub.add_parser("check-scheme"); cs.add_argument("--message", required=True)
     au = sub.add_parser("audit-scheme")
+    rs = sub.add_parser("redline-scan")
+    rs.set_defaults(requires_trace=False)  # RV-126：只扫本仓 tracked 文件，不依赖 project-trace（CI 无 TRACE 也能跑）
     for p in (g, c, i, cr, pf, cs, au):
         p.set_defaults(requires_trace=True)
     args = ap.parse_args()
@@ -671,6 +784,8 @@ def main() -> int:
         return cmd_check_scheme(args.message)
     if args.cmd == "audit-scheme":
         return cmd_audit_scheme()
+    if args.cmd == "redline-scan":
+        return cmd_redline_scan()
     return 0
 
 
