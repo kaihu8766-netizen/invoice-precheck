@@ -67,3 +67,14 @@ cloudflared tunnel --url http://localhost:8000
 - 页面 JS 从 `localStorage` 读 key，fetch 请求带 `X-API-Key` 头
 - 后端地址配置为你的 trycloudflare 地址（页面需支持填写/记忆后端地址）
 - 注意 CORS：当前后端已放行所有源 + `X-API-Key` 头，GitHub Pages 页面可直接调用
+
+## 钩子安装（提交门禁必需）
+
+本地开发/演示推送前需启用提交门禁，否则轻量评审通道（[LIGHT]）与红线圈定不生效：
+
+```bash
+git config core.hooksPath .githooks
+```
+
+- 闸门 1-3：ID 引用 / 红线 diff_hash 匹配 / 事前对齐（F-xxx + scheme RV）
+- 闸门 4：`[LIGHT]` 标记提交由门禁重算 staged diff（白名单/限额/配额/RV），不满足即拒绝
