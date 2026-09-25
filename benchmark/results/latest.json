@@ -1,0 +1,241 @@
+[
+  {
+    "group": "synthetic",
+    "count": 7,
+    "elapsed_s": 3.39,
+    "parse_rate": "7/7",
+    "reconcile_rate": "7/7",
+    "avg_ms": 485,
+    "rows": [
+      {
+        "file": "synthetic_1.pdf",
+        "parsed": true,
+        "reconcile": true,
+        "invoice_no": "25300000000090000000",
+        "issue_date": "2026-08-01",
+        "amount": "100.00",
+        "tax": "13.00",
+        "total": "113.00",
+        "review_needed": false
+      },
+      {
+        "file": "synthetic_2.pdf",
+        "parsed": true,
+        "reconcile": true,
+        "invoice_no": "25300000000090000001",
+        "issue_date": "2026-08-02",
+        "amount": "150.50",
+        "tax": "19.57",
+        "total": "170.07",
+        "review_needed": false
+      },
+      {
+        "file": "synthetic_3.pdf",
+        "parsed": true,
+        "reconcile": true,
+        "invoice_no": "25300000000090000002",
+        "issue_date": "2026-08-03",
+        "amount": "201.00",
+        "tax": "26.13",
+        "total": "227.13",
+        "review_needed": false
+      },
+      {
+        "file": "synthetic_4.pdf",
+        "parsed": true,
+        "reconcile": true,
+        "invoice_no": "25300000000090000003",
+        "issue_date": "2026-08-04",
+        "amount": "251.50",
+        "tax": "32.70",
+        "total": "284.20",
+        "review_needed": false
+      },
+      {
+        "file": "synthetic_5.pdf",
+        "parsed": true,
+        "reconcile": true,
+        "invoice_no": "25300000000090000004",
+        "issue_date": "2026-08-05",
+        "amount": "302.00",
+        "tax": "39.26",
+        "total": "341.26",
+        "review_needed": false
+      },
+      {
+        "file": "synthetic_6_motor_exempt_single.pdf",
+        "parsed": true,
+        "reconcile": true,
+        "invoice_no": "25452000000051553220",
+        "issue_date": "2025-05-12",
+        "amount": "169655.56",
+        "tax": "0",
+        "total": "169655.56",
+        "review_needed": false
+      },
+      {
+        "file": "synthetic_7_motor_exempt_multi.pdf",
+        "parsed": true,
+        "reconcile": true,
+        "invoice_no": "25452000000051553220",
+        "issue_date": "2025-05-12",
+        "amount": "3548937.20",
+        "tax": "0",
+        "total": "3548937.20",
+        "review_needed": false
+      }
+    ]
+  },
+  {
+    "group": "public_official",
+    "count": 2,
+    "elapsed_s": 4.72,
+    "parse_rate": "2/2",
+    "review_rate": "2/2",
+    "note": "官方数电票样张（政府公告附件，格式覆盖；空白模板预期需人工复核）",
+    "rows": [
+      {
+        "file": "全电发票样式-专票-江苏.pdf",
+        "parsed": true,
+        "reconcile": false,
+        "review_needed": true,
+        "review_reason": "关键字段缺失: invoice_no,issue_date,total,buyer_name,seller_name",
+        "note": "官方空白样张：预期字段缺失触发人工复核"
+      },
+      {
+        "file": "全电发票样式-甘肃.pdf",
+        "parsed": true,
+        "reconcile": false,
+        "review_needed": true,
+        "review_reason": "关键字段缺失: invoice_no,issue_date,total,buyer_name,seller_name",
+        "note": "官方空白样张：预期字段缺失触发人工复核"
+      }
+    ]
+  },
+  {
+    "group": "real_private",
+    "note": "未配置 INVOICE_PRIVATE_DIR（受控脱敏副本区），跳过",
+    "rows": []
+  },
+  {
+    "group": "real_archived",
+    "note": "真实脱敏 14 张（源文件已按红线删除，结果为验证时记录，不可重跑；仅输出脱敏字段）",
+    "count": 14,
+    "parse_rate": "14/14",
+    "reconcile_rate": "14/14",
+    "rows": [
+      {
+        "file": "—",
+        "anon_invoice_no": "07557237791652652038",
+        "buyer_name": "演示模具工业有限公司",
+        "seller_name": "演示自动化有限公司",
+        "parsed": true,
+        "reconcile": true
+      },
+      {
+        "file": "—",
+        "anon_invoice_no": "87796127486965823124",
+        "buyer_name": "测试有限公司",
+        "seller_name": "示例有限公司",
+        "parsed": true,
+        "reconcile": true
+      },
+      {
+        "file": "—",
+        "anon_invoice_no": "07421064337289853776",
+        "buyer_name": "测试自动化有限公司",
+        "seller_name": "示例科技股份有限公司",
+        "parsed": true,
+        "reconcile": true
+      },
+      {
+        "file": "—",
+        "anon_invoice_no": "84193353757879524074",
+        "buyer_name": "演示有限公司",
+        "seller_name": "测试物流有限公司",
+        "parsed": true,
+        "reconcile": true
+      },
+      {
+        "file": "—",
+        "anon_invoice_no": "01942693500371183352",
+        "buyer_name": "示例物流有限公司",
+        "seller_name": "示例模具工业有限公司",
+        "parsed": true,
+        "reconcile": true
+      },
+      {
+        "file": "—",
+        "anon_invoice_no": "57686136571888773389",
+        "buyer_name": "示例物流有限公司",
+        "seller_name": "演示有限公司",
+        "parsed": true,
+        "reconcile": true
+      },
+      {
+        "file": "—",
+        "anon_invoice_no": "87191811303445706189",
+        "buyer_name": "演示自动化有限公司",
+        "seller_name": "示例模具工业有限公司",
+        "parsed": true,
+        "reconcile": true
+      },
+      {
+        "file": "—",
+        "anon_invoice_no": "87762692817780424110",
+        "buyer_name": "测试自动化有限公司",
+        "seller_name": "示例有限公司",
+        "parsed": true,
+        "reconcile": true
+      },
+      {
+        "file": "—",
+        "anon_invoice_no": "59561570133207673272",
+        "buyer_name": "示例物流有限公司",
+        "seller_name": "测试有限公司",
+        "parsed": true,
+        "reconcile": true
+      },
+      {
+        "file": "—",
+        "anon_invoice_no": "02405910035121737353",
+        "buyer_name": "测试科技股份有限公司",
+        "seller_name": "测试模具工业有限公司",
+        "parsed": true,
+        "reconcile": true
+      },
+      {
+        "file": "—",
+        "anon_invoice_no": "40648988007996170892",
+        "buyer_name": "演示模具工业有限公司",
+        "seller_name": "测试模具工业有限公司",
+        "parsed": true,
+        "reconcile": true
+      },
+      {
+        "file": "—",
+        "anon_invoice_no": "68651337079967867372",
+        "buyer_name": "演示模具工业有限公司",
+        "seller_name": "示例科技股份有限公司",
+        "parsed": true,
+        "reconcile": true
+      },
+      {
+        "file": "—",
+        "anon_invoice_no": "35477388189271254220",
+        "buyer_name": "示例模具工业有限公司",
+        "seller_name": "演示科技股份有限公司",
+        "parsed": true,
+        "reconcile": true
+      },
+      {
+        "file": "—",
+        "anon_invoice_no": "03407900774586558966",
+        "buyer_name": "演示科技股份有限公司",
+        "seller_name": "示例自动化有限公司",
+        "parsed": true,
+        "reconcile": true
+      }
+    ]
+  }
+]
