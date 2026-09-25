@@ -77,6 +77,10 @@ BIG_ACTIONS = [
 ]
 
 # commit message 合法 ID 引用
+EXCLUDE_PATHS = [":!agent-communication-demo/raw/", ":!agent-communication-demo/evidence-pack/", ":!03-会议与日志/"]
+# RV-123：diff_hash 公共排除集——评审产物(raw/evidence-pack/档案)不属于被评审代码，
+# 与 deepseek_gate project_trace_diff_hash 同口径（否则置 adopted 改档案→hash 必变→死锁）
+
 ID_RE = re.compile(r"\b(?:GATE|RV|DEC|ISS)[-:]\d{6,8}(?:-\d+)?\b|\bISS-\d+\b")
 
 
@@ -336,7 +340,7 @@ def _classify(staged_diff: str, rules_path: Path | None = None) -> tuple[list[st
 def cmd_classify(staged: bool, rules: str = "") -> int:
     """classify --staged：分类当前 staged diff，输出命中红线类别 + diff_hash。"""
     import subprocess
-    diff = subprocess.run(["git", "diff", "--cached", "--binary", "--", ".", ":!agent-communication-demo/raw/"],
+    diff = subprocess.run(["git", "diff", "--cached", "--binary", "--", ".", *EXCLUDE_PATHS],
                           capture_output=True, text=True, cwd=ROOT).stdout if staged else ""
     if not staged:
         print("缺少 --staged；仅支持对 staged 改动分类（commit 前使用）")
@@ -375,7 +379,7 @@ def cmd_check_rv(message: str, rules: str = "", hash_field: str = "diff_hash") -
     --hash-field 指定档案中对比的哈希字段（project-trace 钩子传 project_trace_diff_hash）。
     """
     import subprocess, re, yaml
-    diff = subprocess.run(["git", "diff", "--cached", "--binary", "--", ".", ":!agent-communication-demo/raw/"],
+    diff = subprocess.run(["git", "diff", "--cached", "--binary", "--", ".", *EXCLUDE_PATHS],
                           capture_output=True, text=True, cwd=ROOT).stdout
     if not diff.strip():
         # 空 staged：diff_hash 是全局常量（e3b0c442...），任何 RV 都能"匹配"——冒用后门，直接拒绝
@@ -501,7 +505,7 @@ def cmd_check_scheme(message: str) -> int:
     - 方案档案与代码同次提交：check 读工作区档案，存在即通过（RV-23 口径 5 预期行为）
     """
     import subprocess
-    diff = subprocess.run(["git", "diff", "--cached", "--binary", "--", ".", ":!agent-communication-demo/raw/"],
+    diff = subprocess.run(["git", "diff", "--cached", "--binary", "--", ".", *EXCLUDE_PATHS],
                           capture_output=True, text=True, cwd=ROOT).stdout
     hits, _ = _classify(diff)
     # RV-77：需事前对齐类 = demo_data（演示数据口径语义）；红线类仍由 check-rv 管
