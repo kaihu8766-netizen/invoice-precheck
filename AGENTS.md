@@ -162,7 +162,7 @@ python3 scripts/trace_gate.py check --message "你的 commit message"
 - **C4** 载体清单（CI artifacts/导出物/本地目录/备份 bundle）+ 影响面评估通报判定 + 收官归档（hash 映射落盘 + 引用一致性校验）✓
 - **C5a** 清单命令化（grep 形态正则 + exit code 判定）+ 防忘不防绕标注 ✓
 - **C5b** CI 红线扫描自动化：**○ 未完成 → OPEN_ISSUES #61**（RV-104 要求真实 ISSUE 编号；本地命令化已闭环，自动化承载待做）
-- **门禁覆盖缺口**：project-trace 仓（gate 工具本体）无提交门禁 → **OPEN_ISSUES #62**（RV-106 暴露；装钩子复用 trace_gate，agent-communication-demo/tests 纳入强制评审）
+- **门禁覆盖**：project-trace 仓提交门禁已装（RV-110/#62 闭环）——commit-msg 复用 trace_gate 引擎 + gate_rules.trace.yaml（agent-communication-demo/tests/流程档案纳入 gate_self 强制评审，对比 project_trace_diff_hash）
 - **C6** 敏感路径点名（benchmark/private、data/config.json、*.csv、.env、~/invoice-private）+ 来源许可标注（manifest source_tier）✓
 - **C7** 删除未登记 ID「R1」，全部改为已登记 RV 引用 ✓
 

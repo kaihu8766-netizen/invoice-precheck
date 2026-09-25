@@ -272,15 +272,17 @@ def _diff_changed_lines(diff: str) -> set[int]:
     return out
 
 
-def _classify(staged_diff: str) -> tuple[list[str], str]:
+def _classify(staged_diff: str, rules_path: Path | None = None) -> tuple[list[str], str]:
     """按 gate_rules.yaml 分类 staged diff：返回 (命中类别列表, diff_hash)。
 
     RV-77：统一判定引擎——check-rv 消费红线类（parser_core/pdf_pipeline/ocr_engine/
     rules_engine/data_redline/gate_self），check-scheme 消费需事前对齐类（demo_data）。
     判定分层：结构区间（主判据）> 变更行内容 > 路径+关键词（兜底）。
+    RV-110（#62 门禁）：rules_path 可指定自定义规则文件——project-trace 仓复用本引擎
+    时传其仓内规则（gate_rules.trace.yaml），否则默认本仓（invoice-precheck）规则。
     """
     import hashlib, re, yaml
-    rules_path = Path(__file__).parent / "gate_rules.yaml"
+    rules_path = rules_path or (Path(__file__).parent / "gate_rules.yaml")
     rules = yaml.safe_load(rules_path.read_text(encoding="utf-8"))["rules"]
     diff_hash = hashlib.sha256(staged_diff.encode("utf-8", "replace")).hexdigest()[:16]
     files = set()
@@ -291,8 +293,11 @@ def _classify(staged_diff: str) -> tuple[list[str], str]:
                 files.add(m.group(1))
     hits = []
     # RV-15 自指修复：核心保护集硬编码（不随 gate_rules.yaml 被删而失效）
+    # RV-110：移除跨仓死路径 agent-communication-demo/deepseek_gate.py（RV-107 同口径——
+    # 该目录属 project-trace 仓，本仓规则管不到；project-trace 侧由 #62 门禁 +
+    # gate_rules.trace.yaml gate_self 承接）
     HARD_GATE_SELF = ("scripts/trace_gate.py", ".githooks/commit-msg", "scripts/gate_rules.yaml",
-                      "agent-communication-demo/deepseek_gate.py", "AGENTS.md")
+                      "AGENTS.md")
     if any(f.startswith(h) for f in files for h in HARD_GATE_SELF):
         hits.append("gate_self")
     changed_lines = _diff_changed_lines(staged_diff) if staged_diff.strip() else set()
@@ -328,7 +333,7 @@ def _classify(staged_diff: str) -> tuple[list[str], str]:
     return sorted(set(hits)), diff_hash
 
 
-def cmd_classify(staged: bool) -> int:
+def cmd_classify(staged: bool, rules: str = "") -> int:
     """classify --staged：分类当前 staged diff，输出命中红线类别 + diff_hash。"""
     import subprocess
     diff = subprocess.run(["git", "diff", "--cached", "--binary", "--", ".", ":!agent-communication-demo/raw/"],
@@ -336,7 +341,11 @@ def cmd_classify(staged: bool) -> int:
     if not staged:
         print("缺少 --staged；仅支持对 staged 改动分类（commit 前使用）")
         return 2
-    hits, diff_hash = _classify(diff)
+    rp = Path(rules).resolve() if rules else None
+    if rp and not rp.is_file():
+        print(f"[classify] FAIL：--rules 文件不存在：{rp}", file=sys.stderr)
+        return 2
+    hits, diff_hash = _classify(diff, rp)
     if hits:
         print(f"[classify] 命中评审红线：{', '.join(hits)}")
     else:
@@ -345,11 +354,13 @@ def cmd_classify(staged: bool) -> int:
     return 0 if not hits else 1
 
 
-def cmd_check_rv(message: str) -> int:
+def cmd_check_rv(message: str, rules: str = "", hash_field: str = "diff_hash") -> int:
     """check-rv --message <msg>：命中红线时校验提交带已批准且 diff_hash 匹配的 RV-ID。
 
     commit-msg 钩子调用：1) 分类 staged diff；2) 命中红线→必须有 RV-ID 且
     其档案记录的 diff_hash == 当前 staged diff hash；3) 无 RV 或哈希不符→拒绝。
+    RV-110：--rules 自定义规则文件（project-trace 钩子用其仓内规则）；
+    --hash-field 指定档案中对比的哈希字段（project-trace 钩子传 project_trace_diff_hash）。
     """
     import subprocess, re, yaml
     diff = subprocess.run(["git", "diff", "--cached", "--binary", "--", ".", ":!agent-communication-demo/raw/"],
@@ -358,11 +369,15 @@ def cmd_check_rv(message: str) -> int:
         # 空 staged：diff_hash 是全局常量（e3b0c442...），任何 RV 都能"匹配"——冒用后门，直接拒绝
         print("[check-rv] FAIL：staged 为空，拒绝以空 diff 校验 RV（防全局常量冒用后门）", file=sys.stderr)
         return 1
-    hits, cur_hash = _classify(diff)
+    rp = Path(rules).resolve() if rules else None
+    if rp and not rp.is_file():
+        print(f"[check-rv] FAIL：--rules 文件不存在：{rp}", file=sys.stderr)
+        return 1
+    hits, cur_hash = _classify(diff, rp)
     if not hits:
         print("[check-rv] 未命中评审红线（常规 ID 校验由钩子继续）")
         return 0
-    m = re.search(r"\bRV-(\d{6,8}(?:-\d+)?)\b", message)
+    m = re.search(r"\bRV-([0-9]{6,8}(?:-[0-9]+)?)\b", message)  # RV-112：\d→[0-9]（RV-25 同口径，防 Unicode 数字）
     if not m:
         print(f"✗ 命中评审红线（{', '.join(hits)}），提交被拒：必须带已批准 RV-ID", file=sys.stderr)
         print("  流程：先跑 deepseek_gate.py 发起评审（自动记录 staged diff_hash），批准后重提交", file=sys.stderr)
@@ -387,9 +402,11 @@ def cmd_check_rv(message: str) -> int:
         print(f"✗ RV-{rv} 档案不存在（{arch}），提交被拒", file=sys.stderr)
         return 1
     atext = arch_path.read_text(encoding="utf-8")
-    dm = re.search(r"diff_hash:\s*([0-9a-f]{16})", atext)
+    # RV-112：正则加 ^ 行首锚定（re.M）——防 diff_hash 为空时 re.search 向后滑动匹配
+    # project_trace_diff_hash: 行的子串 diff_hash:（RV-111/112 双向误配缺陷修复）
+    dm = re.search(rf"^{re.escape(hash_field)}:\s*([0-9a-f]{{16}})", atext, re.M)
     if not dm:
-        print(f"✗ RV-{rv} 档案未记录 diff_hash（需用新版 deepseek_gate.py 生成），提交被拒", file=sys.stderr)
+        print(f"✗ RV-{rv} 档案未记录 {hash_field}（需用新版 deepseek_gate.py 生成），提交被拒", file=sys.stderr)
         return 1
     if dm.group(1) != cur_hash:
         print(f"✗ RV-{rv} 的 diff_hash({dm.group(1)}) ≠ 当前 staged({cur_hash})，提交被拒", file=sys.stderr)
@@ -595,8 +612,12 @@ def main() -> int:
     c = sub.add_parser("check"); c.add_argument("--message", required=True)
     i = sub.add_parser("ids"); i.add_argument("--grep", required=True)
     cl = sub.add_parser("classify"); cl.add_argument("--staged", action="store_true")
+    cl.add_argument("--rules", default="", help="自定义规则文件（默认本仓 gate_rules.yaml；project-trace 用其 gate_rules.trace.yaml）")
     cl.set_defaults(requires_trace=False)
     cr = sub.add_parser("check-rv"); cr.add_argument("--message", required=True)
+    cr.add_argument("--rules", default="", help="自定义规则文件（默认本仓 gate_rules.yaml）")
+    cr.add_argument("--hash-field", default="diff_hash",
+                    help="档案中对比的哈希字段（project-trace 钩子传 project_trace_diff_hash）")
     pf = sub.add_parser("preflight"); pf.add_argument("--desc", required=True)
     cs = sub.add_parser("check-scheme"); cs.add_argument("--message", required=True)
     au = sub.add_parser("audit-scheme")
@@ -614,9 +635,9 @@ def main() -> int:
     if args.cmd == "ids":
         return cmd_ids(args.grep)
     if args.cmd == "classify":
-        return cmd_classify(args.staged)
+        return cmd_classify(args.staged, args.rules)
     if args.cmd == "check-rv":
-        return cmd_check_rv(args.message)
+        return cmd_check_rv(args.message, args.rules, args.hash_field)
     if args.cmd == "preflight":
         return cmd_preflight(args.desc)
     if args.cmd == "check-scheme":
