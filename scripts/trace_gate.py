@@ -77,7 +77,20 @@ BIG_ACTIONS = [
 ]
 
 # commit message 合法 ID 引用
-EXCLUDE_PATHS = [":!agent-communication-demo/raw/", ":!agent-communication-demo/evidence-pack/", ":!03-会议与日志/"]
+EXCLUDE_PATHS = [
+    # 评审产物/流程状态文档：需 RV 引用（gate_self 门禁语义）但不算进 diff_hash——
+    # 否则"置 adopted/闭环流程文档→hash 必变→与评审时记录永失配"（RV-123 死锁同类）
+    ":!agent-communication-demo/raw/",
+    ":!agent-communication-demo/evidence-pack/",
+    ":!03-会议与日志/",
+    ":!OPEN_ISSUES.md",
+    ":!DECISIONS.md",
+    ":!project-state.md",
+    ":!SECRETS_GUIDE.md",
+    ":!CROSS_PROJECT_CONTRACT.md",
+    ":!CHANGELOG.md",
+    ":!00-START-HERE.md",
+]
 # RV-123：diff_hash 公共排除集——评审产物(raw/evidence-pack/档案)不属于被评审代码，
 # 与 deepseek_gate project_trace_diff_hash 同口径（否则置 adopted 改档案→hash 必变→死锁）
 
