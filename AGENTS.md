@@ -111,7 +111,7 @@ python3 scripts/trace_gate.py check --message "你的 commit message"
 
 ## 门禁边界（RV-14 诚实标注）
 - 门禁防"遗忘/误操作"，不防恶意绕过（git commit --no-verify、git -c core.hooksPath=/dev/null 等 git 原生逃逸通道存在，项目信任执行者）。
-- 门禁自改（scripts/trace_gate.py、.githooks/commit-msg、scripts/gate_rules.yaml、deepseek_gate.py）同样命中 gate_self 红线，必须评审。
+- 门禁自改（scripts/trace_gate.py、.githooks/commit-msg、scripts/gate_rules.yaml、AGENTS.md 等）同样命中 gate_self 红线，必须评审；project-trace 侧 gate 工具（agent-communication-demo/deepseek_gate.py、evtools.py、tests/）由 #62 门禁承接（RV-107）。
 - 事前对齐门禁（RV-22 诚实定位）：闸门 3 强制"功能提交必须有已批准方案评审"（防遗忘）；方案是否真的事前由 audit-scheme 事后审计（时间戳可查）；无法防止"用 fix 前缀包装功能提交"——该行为会绕过闸门 3，但会被用户监督/审计发现，属于恶意绕过范畴（不防）。
 
 ## 已知陷阱（RV-78 沉淀，可复用教训）
@@ -121,3 +121,52 @@ python3 scripts/trace_gate.py check --message "你的 commit message"
 ## 执行者纪律（RV-15 采纳，用户批准后生效）
 - 不得主动使用 `git commit --no-verify`、`git -c core.hooksPath=/dev/null`、修改 gate_self 文件来绕过门禁。
 - 确需变更门禁机制：先提 RV 评审 → 用户明确批准 → 变更时在 commit message 留痕（RV-ID）。
+
+## 数据安全红线（RV-96 事故沉淀 + RV-99/100 评审强化，2026-09-25 起企业级标准）
+**真实数据（发票/票号/税号/公司名/金额/姓名/邮箱/密钥等）绝不写入任何将入库的文件，尤其 public 仓。** 本条目由「latest.json 真实字段入库 → public 泄露 → 全历史重写 + 转 private」事故产生，为最高优先级约束。
+
+> 口径主从（RV-99 C3/C6）：密钥轮换与脱敏细节以 `trace/SECRETS_GUIDE.md` 与 `DECISIONS` 为唯一口径；本章节只写执行约束，不另起一套。本清单**防遗忘/误操作，不防恶意绕过**（`--no-verify`/手工改属诚实边界，与 §门禁边界 RV-14 一致）。
+
+### 入库前必查清单（提交前逐项核对，可执行命令）
+> **规则：本清单只写形态化规则，绝不写任何真实具体值**（票号/税号/公司名一律用形态/变量表达，防止"安全示例自身成为泄露源"——RV-100 摩擦2 教训）。
+1. 改动文件红线特征扫描 **0 命中**（判定：以下命令 exit code 均为 1 才算通过——grep 无匹配时返回 1）：
+   ```bash
+   # 形态化规则（不依赖具体值）：20位数电票号 / 18位统一社会信用代码 / 密钥前缀 / 本地路径
+   git diff --cached | grep -E '\b[0-9]{20}\b|[0-9A-Z]{18}\b|sk-[A-Za-z0-9]{16,}|ghp_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|/home/[a-z]+/invoice-private'
+   git ls-files | grep -E '^benchmark/private/|^data/config\.json$|\.env$|\.csv$'
+   # 公司名/税号等无法形态化的敏感词清单：存于本地私有文件（如 ~/invoice-private/sensitive-words.txt），不入仓库；
+   # 提交前用循环 grep：while read -r w; do git diff --cached | grep -q "$w" && echo "命中: $w"; done < ~/invoice-private/sensitive-words.txt
+   ```
+2. 敏感载体仅允许存在于本地私有区且被 `.gitignore` 排除、绝不在 tracked 列表：`benchmark/private/`、`data/config.json`（企业主体配置=真实公司名/税号，同类风险）、`*.csv`、`.env`；仓库外真实数据只放 `~/invoice-private/`（DECISIONS 既定路径），不得改道。
+3. 真实数据脱敏产物（`anonymize_real.py`/`redact.py` 输出）只含聚合/布尔/脱敏字段；**public 样例须有来源分层与许可标注**（`tests/corpus/manifest.json` 的 `source_tier` 逐核）。
+4. 提交前重生成结果文件确认无真实字段：`python3 scripts/benchmark.py --json` 后按第 1 条重扫。
+5. 脱敏/真实数据脚本改动（含 `scripts/redact.py`、`scripts/anonymize_real.py`、`scripts/anonymize_to_private.py`、`scripts/benchmark.py`）一律命中 `gate_rules.yaml` data_redline 红线，必须带已批准 RV + diff_hash 匹配（RV-13 双闸门）。`redact` 为保守加严关键词（RV-100 摩擦1），会连带命中 `test_redact.py` 等脱敏相关测试——属 fail-closed 方向，可接受误报，不必降级。
+
+### 泄露应急预案（已演练，RV-96 全流程；RV-99 C3/C4 强化）
+1. **立即**转 private 阻断新访问（GitHub API PATCH visibility）；
+2. 定位泄露载体清单：**仓库文件、git 历史、CI artifacts/Actions 日志、导出物（Excel/PDF 报告）、本地 `~/invoice-private/`、备份 bundle、录屏/截图/聊天/邮件**——逐载体排查，不止扫仓库；涉凭据 → 执行 `trace/SECRETS_GUIDE.md` 轮换流程（新 key → .env/Secrets 更新 → 全历史零命中 → revoke 旧 key → 记录指纹）；真实姓名/邮箱/税号 = 第三方个人数据，评估通知当事人与留档说明；
+3. 用户拍板后重写历史：`git-filter-repo --invert-paths --path <file>`（blob-callback 方式实测无效，必须用 invert-paths）+ force-push；
+4. 全历史 + 远程扫描 0 命中后，重生成干净版入库；**收官归档**：事故档案 + DEC/ISS + 索引同步，hash 映射表落盘（旧→新 SHA），校验 START-HERE/索引/档案 `commits` 字段引用一致性；
+5. **平台侧处置（正式步骤）**：提交 GitHub Support 工单请求强制 purge CDN 缓存 + 移除旧 commit 视图/代码搜索索引（公开期 fork/他人 clone/第三方 mirror 无法自行收回）；被动兜底：开启 secret scanning + push protection（新密钥/票号误提交时平台先拦）；
+6. 残余风险与验收口径：raw.githubusercontent CDN 缓存可能保留公开期旧内容 → 期间保持 private，转回 public 前**复测旧 SHA 全部 404**（Pages 重新发布后缓存失效为验收口径）。
+
+### 评审与档案敏感数据规则（RV-100 摩擦2/3 沉淀）
+- **评审 prompt 不得引用任何真实具体值**（票号/税号/公司名/金额），一律用形态化描述（如"某出行科技公司"、"20 位数电票号"）——raw 审计档案会长期留存，真实值一旦写入即成为新的敏感载体。
+- 测试/示例代码中的占位密钥必须显式标注（如 `sk-FAKE_...`），不得使用近似真实形态的可疑串。
+- 既有含真实值的 raw 档案保留原样（sha256 完整性绑定），不回改；本规则生效后**零新增**真实值。
+
+### RV-99 C1-C7 整改闭环声明（RV-103 有条件通过，2026-09-25）
+- **C1** 新 RV 档案：RV-99/100/101/102/103 五轮评审闭环，本章节随 RV-103 提交 ✓
+- **C2** gate_rules.yaml data_redline 补 scripts/redact.py、scripts/anonymize_real.py、keywords 补 redact ✓
+- **C3** 密钥轮换引用 trace/SECRETS_GUIDE.md（唯一口径）+ GitHub Support 工单正式步骤 + secret scanning/push protection + CDN 验收口径 ✓
+- **C4** 载体清单（CI artifacts/导出物/本地目录/备份 bundle）+ 影响面评估通报判定 + 收官归档（hash 映射落盘 + 引用一致性校验）✓
+- **C5a** 清单命令化（grep 形态正则 + exit code 判定）+ 防忘不防绕标注 ✓
+- **C5b** CI 红线扫描自动化：**○ 未完成 → OPEN_ISSUES #61**（RV-104 要求真实 ISSUE 编号；本地命令化已闭环，自动化承载待做）
+- **门禁覆盖缺口**：project-trace 仓（gate 工具本体）无提交门禁 → **OPEN_ISSUES #62**（RV-106 暴露；装钩子复用 trace_gate，agent-communication-demo/tests 纳入强制评审）
+- **C6** 敏感路径点名（benchmark/private、data/config.json、*.csv、.env、~/invoice-private）+ 来源许可标注（manifest source_tier）✓
+- **C7** 删除未登记 ID「R1」，全部改为已登记 RV 引用 ✓
+
+### 评审与档案敏感数据规则（RV-100 摩擦2/3 沉淀）
+- **评审 prompt 不得引用任何真实具体值**（票号/税号/公司名/金额），一律用形态化描述（如"某出行科技公司"、"20 位数电票号"）——raw 审计档案会长期留存，真实值一旦写入即成为新的敏感载体。**机器强制**：deepseek_gate.py 发起评审前对 prompt 做形态化红线扫描，命中即拒绝（RV-102 闸门）。
+- 测试/示例代码中的占位密钥必须显式标注（如 `sk-FAKE_...`），不得使用近似真实形态的可疑串。
+- 既有含真实值的 raw 档案保留原样（sha256 完整性绑定），不回改；本规则生效后**零新增**真实值。
