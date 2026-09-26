@@ -346,6 +346,8 @@
     .ops{ gap:10px; }
     .op{ min-height:44px; padding:9px 16px; font-size:13px; }
     .btn, .btn-ghost, .vs, .flt{ min-height:44px; }
+    .todo-chip{ min-height:36px; padding:4px 12px; }
+    .inv-jump{ min-width:36px; min-height:36px; display:inline-flex; align-items:center; justify-content:center; margin-left:2px; }
   }
   @media (max-width:480px){
     .tools{ gap:8px; }
@@ -531,7 +533,7 @@ code{ overflow-wrap:anywhere; word-break:break-word; }
   .kpis{ grid-template-columns:repeat(2,1fr); }
   .report-zone .view-risk-col .finding .body{ padding:6px 8px; }
   .view-switch{ display:none; }
-  .finding summary{ padding:6px 8px; }
+  .finding summary{ padding:12px 8px; }
   .vs{ font-size:12px; padding:5px 10px; }
   .rule-drawer{ width:100% !important; }
 }
@@ -1963,7 +1965,7 @@ function findingRow(f, metaMap, showOps) {
       <span class="bar ${sevCls}"></span>
       <span class="sev ${sevCls}">${sev === "高" ? "▲" : sev === "中" ? "●" : "·"} <span class="rule-link" data-rule="${esc(f.rule_id)}" title="点击跳转规则分析">${esc(f.rule_id)}</span> ${esc(sev)}</span>
       <span class="rname">${esc(resolveRuleMeta(f.rule_id, metaMap))}</span>
-      <span class="ticket">${esc(shortNo(f.invoice_no))} <button type="button" class="inv-jump" data-no="${esc(f.invoice_no)}" title="定位到发票明细">↗</button></span>
+      <span class="ticket" title="${esc(f.invoice_no)}">${esc(shortNo(f.invoice_no))} <button type="button" class="inv-jump" data-no="${esc(f.invoice_no)}" title="定位到发票明细">↗</button></span>
       ${badge}
       ${amt ? `<span class="amt">${amt}</span>` : ""}
       <span class="caret">▸</span>
