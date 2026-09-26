@@ -566,6 +566,15 @@ code{ overflow-wrap:anywhere; word-break:break-word; }
 @keyframes flashInv{ 0%,100%{ background:transparent; } 50%{ background:#fff3bf; } }
 .flash-inv{ animation:flashInv 1.1s ease 2; }
 @media (prefers-reduced-motion:reduce){ .flash-inv{ animation:none; } .rule-drawer{ transition:none; } }
+  /* T-008：本机存储预警条（RV-172：字节口径 + safe-area） */
+  #storageWarn{ display:none; align-items:flex-start; gap:8px; padding:9px 14px;
+    padding-top:calc(9px + env(safe-area-inset-top));
+    background:#fdf3e3; color:#7a4d12; border-bottom:1px solid #eccd92; font-size:13px; line-height:1.5; }
+  #storageWarn.show{ display:flex; }
+  #storageWarn .sw-ico{ flex-shrink:0; font-weight:700; }
+  #storageWarn .sw-act{ margin-left:auto; flex-shrink:0; background:none; border:none; color:inherit;
+    text-decoration:underline; cursor:pointer; font-size:12px; padding:2px 4px; }
+  #storageWarn .sw-act:active{ opacity:.7; }
 </style>
 <script>
 /* ES5 兼容探针（RV-39：独立于主脚本，主脚本解析失败也能点亮；默认隐藏，页面出错时亮出诊断信息） */
@@ -604,6 +613,11 @@ code{ overflow-wrap:anywhere; word-break:break-word; }
 
 </head>
 <body class="demo">
+<div id="storageWarn" role="alert" aria-live="polite">
+  <span class="sw-ico">⚠</span>
+  <span id="storageWarnMsg"></span>
+  <button class="sw-act" type="button" onclick="clearStorageWarn()">知道了</button>
+</div>
 <div class="app">
   <!-- 顶栏：品牌 + 模式切换 -->
   <header class="topbar">
@@ -1126,6 +1140,43 @@ function riskId(f) {
   }).join("|");
   return RID_SCHEMA + ":" + fnv1a64([f.rule_id, f.invoice_no || "", "0.3.1", path].join("|"));
 }
+// ===== T-008 本机存储容量检测（RV-172：字节口径，5MB 配额按 UTF-16 码元折算）=====
+function storageUsageBytes() {
+  // 估算 localStorage 已用字节（UTF-16 码元 * 2 ≈ 字节；多字节字符实际更大，取保守下限）
+  var used = 0;
+  try {
+    for (var i = 0; i < localStorage.length; i++) {
+      var k = localStorage.key(i);
+      var v = localStorage.getItem(k);
+      used += ((k ? k.length : 0) + (v ? v.length : 0)) * 2;
+    }
+  } catch (e) { return -1; }
+  return used;
+}
+var STORAGE_WARN_BYTES = 4 * 1024 * 1024; // 4MB 预警（配额约 5MB，留 1MB 余量）
+var __warnDismissed = false;
+function updateStorageWarn() {
+  var el = document.getElementById("storageWarn");
+  var msg = document.getElementById("storageWarnMsg");
+  if (!el || !msg) return;
+  var used = storageUsageBytes();
+  var text = "";
+  if (window.__dispStoreFail || window.__revStoreFail) {
+    text = "本机存储不可用：处置与复核记录可能无法保存（数据仅存本机浏览器，无云端）。请导出备份后清理旧发票。";
+  } else if (used > STORAGE_WARN_BYTES) {
+    text = "本机存储预警：已用约 " + (used / 1048576).toFixed(1) + " MB（浏览器配额各不同，约 5MB）。处置与复核记录仅保存在本机（无云端），接近上限后无法保存新记录，请导出备份并清理旧数据。";
+  }
+  if (text && !__warnDismissed) {
+    msg.textContent = text;
+    el.classList.add("show");
+  } else {
+    el.classList.remove("show");
+  }
+}
+function clearStorageWarn() {
+  __warnDismissed = true;
+  document.getElementById("storageWarn").classList.remove("show");
+}
 function loadDisp() {
   try {
     return JSON.parse(localStorage.getItem(DISP_KEY) || "{}");
@@ -1143,9 +1194,11 @@ function saveDisp(d) {
   }
   try {
     localStorage.setItem(DISP_KEY, JSON.stringify(d));
+    updateStorageWarn();
     return true;
   } catch (e) {
     window.__dispStoreFail = true;
+    updateStorageWarn();
     return false;
   }
 }
@@ -1184,9 +1237,11 @@ function loadRev() {
 function saveRev(d) {
   try {
     localStorage.setItem(REV_KEY, JSON.stringify(d));
+    updateStorageWarn();
     return true;
   } catch (e) {
     window.__revStoreFail = true;
+    updateStorageWarn();
     return false;
   }
 }
@@ -2746,6 +2801,7 @@ $("btnTest").onclick = healthCheck;
 $("btnReview").onclick = runReview;
 setMode(false);
 render(demoReport());
+updateStorageWarn(); // T-008：进入页面即检测本机存储容量
 
 </script>
 </body>
