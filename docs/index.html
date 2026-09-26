@@ -158,6 +158,8 @@
   .todo-bar{ display:flex; align-items:center; gap:8px; flex-wrap:wrap; padding:4px 16px 10px; font-size:12px; }
   .todo-bar .lb{ color:var(--sub); font-weight:600; }
   .todo-chip{ display:inline-flex; align-items:center; gap:4px; background:#fff; border:1px solid var(--line); border-radius:14px; padding:2px 10px; font-size:12px; cursor:pointer; color:var(--sub); }
+  .todo-chip:not(.mid){ border-color:#b4231833; color:var(--high); }
+  .todo-chip.mid{ border-color:#b4530933; color:var(--mid); }
   .todo-chip:hover{ border-color:var(--brand); color:var(--brand); }
   .todo-chip b{ color:var(--high); }
   .todo-chip.mid b{ color:var(--mid); }
