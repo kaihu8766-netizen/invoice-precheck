@@ -55,7 +55,25 @@ jobs:
           PY
 
       - name: Run unit tests (unittest discover)
+        # RV-125 硬门：app 启动需 INVOICE_API_KEY 或显式允许开发 key（仅测试环境）
+        env:
+          INVOICE_ALLOW_DEV_KEY: "1"
         run: python -m unittest discover -s tests -q
+
+      - name: Smoke RV-125 硬门负向（无 key 且非 dev 必须拒绝启动）
+        run: |
+          set -e
+          python - <<'PY'
+          import os, sys
+          sys.path.insert(0, ".")
+          os.environ.pop("INVOICE_API_KEY", None)
+          os.environ.pop("INVOICE_ALLOW_DEV_KEY", None)
+          try:
+              import app.main
+              raise SystemExit("✗ RV-125 硬门未生效：无 key 且未声明 dev 时不应启动")
+          except RuntimeError as e:
+              print("RV-125 硬门负向 OK:", str(e)[:40])
+          PY
 
       - name: Validate corpus manifest (P0-5)
         run: python scripts/validate_manifest.py
