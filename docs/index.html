@@ -234,7 +234,7 @@
     .kpi{ min-width:0; }
     .kpi .n{ font-size:17px; }
     .kpi.amt3 .n.net{ font-size:18px; }
-    .kpi.amt3 .n.sub{ font-size:10px; white-space:normal; line-height:1.4; }
+    .kpi.amt3 .n.sub{ font-size:10px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; line-height:1.4; max-width:100%; }
   }
   .kpi{ background:#fff; border:1px solid var(--line-soft); border-left:3px solid var(--line-soft); border-radius:var(--r-md); padding:10px 12px; }
   .kpi.total{ border-left-color:var(--brand); }
@@ -250,7 +250,7 @@
   .kpi.amt3{ padding-top:8px; padding-bottom:8px; display:flex; flex-direction:column; justify-content:center; }
   .kpi.amt3 .n{ font-size:16px; line-height:1.3; }
   .kpi.amt3 .n.net{ font-size:20px; }
-  .kpi.amt3 .n.sub{ font-size:11px; font-weight:600; color:var(--sub); margin-top:3px; font-variant-numeric:tabular-nums; }
+  .kpi.amt3 .n.sub{ font-size:11px; font-weight:600; color:var(--sub); margin-top:3px; font-variant-numeric:tabular-nums; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:100%; }
   .kpi .n{ font-size:20px; font-weight:800; line-height:1.2; font-variant-numeric:tabular-nums; text-align:right; }
   .kpi .n.ok{ color:var(--ok); } .kpi .n.mid{ color:var(--mid); } .kpi .n.high{ color:var(--high); }
   /* F-08 KPI 下钻：可点击 KPI 交互态（主动筛选） */
@@ -640,15 +640,15 @@ code{ overflow-wrap:anywhere; word-break:break-word; }
           <div class="sd-head"><span>设置</span><button id="btnSettingsClose" class="sd-close" type="button" aria-label="关闭设置">✕</button></div>
           <h4>连接后端</h4>
           <div class="fld">
-            <label for="backendUrl">后端地址</label>
+            <label for="backendUrl">服务地址</label>
             <input id="backendUrl" type="text" inputmode="url" placeholder="https://xxx.trycloudflare.com 或 http://localhost:8000" style="font-size:16px;">
           </div>
           <div class="fld">
-            <label for="apiKey">API Key（X-API-Key）</label>
+            <label for="apiKey">接口密钥</label>
             <input id="apiKey" type="password" autocomplete="off" placeholder="后端环境变量 INVOICE_API_KEY 的值" style="font-size:16px;">
           </div>
           <button id="btnTest" class="btn btn-ghost" style="margin-top:10px;">测试连接</button>
-          <div class="hint" id="connHint">地址与 Key 仅保存在本浏览器，不发送到第三方。</div>
+          <div class="hint" id="connHint">地址与密钥仅保存在本浏览器，不发送到第三方。</div>
           <h4 style="margin-top:16px;padding-top:12px;border-top:1px dashed var(--line);">企业主体设置（抬头 / 税号校验）</h4>
           <div class="fld">
             <label for="coName">企业名称</label>
@@ -2371,12 +2371,11 @@ function __origRender(d) {
     const kpis = `
   <div class="ctxbar">
     <div class="wb-head">
-      <span class="t">发票预审工作台</span>
       <span class="s">本批 ${esc((_c = s.file_count) != null ? _c : 0)} 个文件（发票 ${invs4.length} 张 + 识别失败 ${esc((_f = s.failed_count) != null ? _f : 0)} 个） · 批次 ${esc(d.batch_id || "—")} · ${esc((d.generated_at || "").slice(0, 16) || "")}</span>
     </div>
     <div class="kpis">
       <div class="kpi total main"><div class="n">${esc(invs4.length)}</div><div class="l">发票张数</div></div>
-      <div class="kpi total main amt3"><div class="n net">${totalAmt}</div><div class="l">价税合计净额</div><div class="n sub">蓝票 ${blueTotal} · 红冲 ${redTotal}</div></div>
+      <div class="kpi total main amt3"><div class="n net">${totalAmt}</div><div class="l">价税合计净额</div><div class="n sub" title="蓝票 ${blueTotal} · 红冲 ${redTotal}">蓝票 ${blueTotal} · 红冲 ${redTotal}</div></div>
       <div class="kpi total main"><div class="n">${taxAmt}</div><div class="l">税额（不含红冲）</div></div>
       <div class="kpi total main"><div class="n">${redAmt ? esc(redAmt) : "—"}</div><div class="l">红冲 / 作废</div></div>
     </div>
