@@ -1,0 +1,15 @@
+{
+  "company_entities": [
+    {
+      "id": "default",
+      "name": "示例科技有限公司",
+      "tax_id": "91330100XXXXXXXXXX",
+      "enabled": true
+    }
+  ],
+  "r2": {
+    "tax_id_mismatch_level": "high",
+    "name_mismatch_level": "low",
+    "missing_field_level": "low"
+  }
+}
