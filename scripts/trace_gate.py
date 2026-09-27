@@ -203,7 +203,10 @@ def cmd_check(message: str) -> int:
                         return 1
                     print(f"[check] FAIL：{rid} 未在评审索引中找到（伪造号或档案未入库）", file=sys.stderr)
                     return 1
-                if "| adopted |" not in rv_line:
+                # RV-20260928-04：adopted 判定改宽容正则（容忍历史行空格差异：| adopted| 缺尾空格）；
+                # \|\s*adopted\b 要求竖线分隔单元内文以 adopted 开头，| not adopted | 不匹配，
+                # pending/rejected/旧词表（✅/🔶/❌）不含 adopted 子串 → 不放宽状态语义，仅放宽格式
+                if not re.search(r"\|\s*adopted\b", rv_line):
                     print(f"[check] FAIL：{rid} 在索引中存在但未置 adopted（pending 号不可作为批准依据）", file=sys.stderr)
                     return 1
     print(f"[check] OK：引用 {ids}（存在性校验通过）")
