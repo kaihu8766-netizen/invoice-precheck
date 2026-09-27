@@ -9,7 +9,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <link rel="apple-touch-icon" href="assets/icon-192.png">
-<title>发票合规预审 · 演示</title>
+<title>发票合规预审</title>
 <style>
   :root{
     --brand:#3370ff; --brand-weak:#eef4ff;
@@ -87,6 +87,7 @@
   /* RV-93 移动端：设置抽屉全屏面板，避免与页面内容并排错乱 */
   @media (max-width:719px){
     body.settings-lock{ overflow:hidden; }
+    .settings-drawer details{ display:block; width:100%; }
     .settings-drawer{ position:fixed; left:0; right:0; top:0; bottom:0; width:100%; max-width:none; max-height:none; border:none; border-radius:0; padding:0 0 24px; z-index:120; display:none; flex-direction:column; }
     .settings-drawer.open{ display:flex; }
     .settings-drawer .sd-head{ display:flex; align-items:center; justify-content:space-between; padding:12px 16px; border-bottom:1px solid var(--line); background:#fafbfc; position:sticky; top:0; z-index:1; }
@@ -642,6 +643,9 @@ code{ overflow-wrap:anywhere; word-break:break-word; }
         <button id="btnSettings" class="btn-settings" type="button" aria-label="设置">⚙</button>
         <div id="settingsDrawer" class="settings-drawer">
           <div class="sd-head"><span>设置</span><button id="btnSettingsClose" class="sd-close" type="button" aria-label="关闭设置">✕</button></div>
+          <details class="adv" id="advCfg" style="margin-top:14px;">
+            <summary>连接与系统设置（高级）</summary>
+            <div class="inner">
           <h4>连接后端</h4>
           <div class="fld">
             <label for="backendUrl">服务地址</label>
@@ -653,6 +657,8 @@ code{ overflow-wrap:anywhere; word-break:break-word; }
           </div>
           <button id="btnTest" class="btn btn-ghost" style="margin-top:10px;">测试连接</button>
           <div class="hint" id="connHint">地址与密钥仅保存在本浏览器，不发送到第三方。</div>
+            </div>
+          </details>
           <h4 style="margin-top:16px;padding-top:12px;border-top:1px dashed var(--line);">企业主体设置（抬头 / 税号校验）</h4>
           <div class="fld">
             <label for="coName">企业名称</label>
@@ -699,13 +705,13 @@ code{ overflow-wrap:anywhere; word-break:break-word; }
         <div class="drop" id="dropZone" tabindex="0" role="button" aria-label="上传发票文件">
           <div class="ic">📄</div>
           <div class="t"><span class="desk">拖拽文件到此处，或点击选择</span><span class="mob">点击选择发票文件</span></div>
-          <div class="s">支持数电票 XML / OFD / PDF · 拍照识别（PNG/JPG）· 可多选</div>
+          <div class="s">支持数电票（XML / OFD / PDF）与拍照识别，可多选</div>
         </div>
         <input id="fileInput" type="file" multiple accept=".xml,.ofd,.zip,.pdf,.png,.jpg,.jpeg" capture="environment" style="display:none">
         <button id="btnCamera" class="btn btn-ghost camera-btn" type="button" style="margin-top:10px;width:100%;justify-content:center;align-items:center;gap:6px;">📷 拍照识别发票</button>
         <div class="filelist" id="fileList"></div>
         <button id="btnReview" class="btn btn-primary" style="margin-top:12px;">运行预审</button>
-        <div class="hint" id="runHint" style="margin-top:8px;line-height:1.6;">文件仅发往你配置的后端，不发送第三方 · 数电票归档需保留 XML 源文件（仅传 PDF / OFD 会提示补传）</div>
+        <div class="hint" id="runHint" style="margin-top:8px;line-height:1.6;">文件仅在本机处理，不发送第三方 · 数电票归档需保留 XML 源文件</div>
       </section>
 
       <section class="card card-pad demo-only">
@@ -741,7 +747,7 @@ code{ overflow-wrap:anywhere; word-break:break-word; }
             <div class="step"><div class="n">3</div><div><b>合规预审</b><span>发票状态 / 重复报销 / 金额勾稽 / 红冲关联等检查</span></div></div>
             <div class="step"><div class="n">4</div><div><b>处置与导出</b><span>复核确认后导出 Excel / CSV 记账表</span></div></div>
           </div>
-          <div class="guide-note">文件仅发往你配置的后端，不发送第三方；真实数据本地处理、验完可删</div>
+          <div class="guide-note">文件仅在本机处理，不发送第三方；真实数据本地处理、验完可删</div>
         </div>
       </div>
       <div id="result" role="status" aria-live="polite" tabindex="-1"></div>
