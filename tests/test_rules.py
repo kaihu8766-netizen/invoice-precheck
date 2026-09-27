@@ -490,6 +490,50 @@ class TestRules(unittest.TestCase):
                        RulesConfig(serial_tail_len=4, serial_max_gap=0, serial_min_count=3))
         r3b = [x for x in f2 if x.rule_id == "R3"]
         self.assertEqual(len(r3b), 0, "gap=0 下连续票（差1）不应命中连号")
+    def test_r7_carry_days_boundary(self):
+        """#32 边界：跨期恰 365 天不报（>365 才报），跨年口径。"""
+        # 2025-01-01 开票 → 2026-01-01 报销 = 365 天 → 不报
+        f = run_rules([inv("9001", "2025-01-01", Decimal("100"), Decimal("113"),
+                           tax=Decimal("13"), reimburse="2026-01-01")], CFG)
+        self.assertNotIn("R7", [x.rule_id for x in f])
+        # 2025-01-01 开票 → 2026-01-02 报销 = 366 天 → 报（跨年）
+        f2 = run_rules([inv("9002", "2025-01-01", Decimal("100"), Decimal("113"),
+                            tax=Decimal("13"), reimburse="2026-01-02")], CFG)
+        r7 = [x for x in f2 if x.rule_id == "R7"]
+        self.assertEqual(len(r7), 1)
+        self.assertIn("跨期报销", r7[0].message)
+
+    def test_r7_cross_month_and_leap(self):
+        """#32 边界：跨月短间隔不报；跨年超 365 报；闰年 2 月不误伤。"""
+        # 2026-01-31 → 2026-03-01 = 29 天（非闰年）→ 不报
+        f = run_rules([inv("9010", "2026-01-31", Decimal("100"), Decimal("113"),
+                           tax=Decimal("13"), reimburse="2026-03-01")], CFG)
+        self.assertNotIn("R7", [x.rule_id for x in f])
+        # 2024-01-31 → 2024-03-01 = 30 天（闰年 2 月 29 天）→ 不报
+        f_leap = run_rules([inv("9012", "2024-01-31", Decimal("100"), Decimal("113"),
+                                tax=Decimal("13"), reimburse="2024-03-01")], CFG)
+        self.assertNotIn("R7", [x.rule_id for x in f_leap])
+        # 2026-01-31 开票 → 2027-02-01 报销 > 365 → 报
+        f2 = run_rules([inv("9011", "2026-01-31", Decimal("100"), Decimal("113"),
+                            tax=Decimal("13"), reimburse="2027-02-01")], CFG)
+        self.assertTrue(any(x.rule_id == "R7" for x in f2))
+
+    def test_r10_tax_quantize_half_even(self):
+        """#32 边界：R10 行级税额 quantize('0.01') 默认 ROUND_HALF_EVEN——期望值显式写死。"""
+        # 0.25 × 6% = 0.015 → half-even 进位 0.02；票面 0.02 → 不报
+        it = ItemDetail(name="测试", amount=Decimal("0.25"), tax_rate="6%",
+                        tax_amount=Decimal("0.02"))
+        f = run_rules([inv("9101", "2026-08-01", Decimal("0.25"), Decimal("0.27"),
+                           tax=Decimal("0.02"), items=[it])], CFG)
+        self.assertNotIn("R10", [x.rule_id for x in f])
+        # 票面 0.00 vs 期望 0.02 → 差 0.02 报
+        it2 = ItemDetail(name="测试", amount=Decimal("0.25"), tax_rate="6%",
+                         tax_amount=Decimal("0.00"))
+        f2 = run_rules([inv("9102", "2026-08-01", Decimal("0.25"), Decimal("0.25"),
+                            tax=Decimal("0"), items=[it2])], CFG)
+        self.assertTrue(any(x.rule_id == "R10" for x in f2))
+
+
 
 
 if __name__ == "__main__":

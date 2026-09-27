@@ -161,7 +161,37 @@ class TestParser(unittest.TestCase):
         inv = parse_xml(with_sig.encode())
         self.assertEqual(inv.invoice_no, "26003300000000000001")
         self.assertEqual(inv.amount, Decimal("0"))  # 签名内的合计金额被剥离，不会误采
+    def test_reconcile_tolerance_closed_interval(self):
+        """#32 边界：勾稽容差 ±0.01 为闭区间——差额恰 0.01 不报，0.02 报（RV-131 口径）。"""
+        # 差 +0.01（1000+130=1130，价税合计 1130.01）
+        ok = parse_xml(SAMPLE_XML.replace("<价税合计>1130.00</价税合计>",
+                                          "<价税合计>1130.01</价税合计>").encode())
+        self.assertNotIn("勾稽异常", " ".join(ok.parse_warnings))
+        # 差 -0.01
+        ok2 = parse_xml(SAMPLE_XML.replace("<价税合计>1130.00</价税合计>",
+                                           "<价税合计>1129.99</价税合计>").encode())
+        self.assertNotIn("勾稽异常", " ".join(ok2.parse_warnings))
+        # 差 +0.02 → 报
+        bad = parse_xml(SAMPLE_XML.replace("<价税合计>1130.00</价税合计>",
+                                           "<价税合计>1130.02</价税合计>").encode())
+        self.assertTrue(any("勾稽异常" in w for w in bad.parse_warnings))
+        # 差 -0.02 → 报
+        bad2 = parse_xml(SAMPLE_XML.replace("<价税合计>1130.00</价税合计>",
+                                            "<价税合计>1129.98</价税合计>").encode())
+        self.assertTrue(any("勾稽异常" in w for w in bad2.parse_warnings))
+
+    def test_decimal_half_even_semantics(self):
+        """#32 边界：Decimal 默认 ROUND_HALF_EVEN（银行家舍入，非四舍五入）——期望值显式写死。"""
+        self.assertEqual(Decimal("0.005").quantize(Decimal("0.01")), Decimal("0.00"))
+        # 0.015 → 末位 1（奇数）→ 进位
+        self.assertEqual(Decimal("0.015").quantize(Decimal("0.01")), Decimal("0.02"))
+        # 0.025 → 末位 2（偶数）→ 舍去
+        self.assertEqual(Decimal("0.025").quantize(Decimal("0.01")), Decimal("0.02"))
+        # 0.035 → 末位 3（奇数）→ 进位
+        self.assertEqual(Decimal("0.035").quantize(Decimal("0.01")), Decimal("0.04"))
+
+
 
 
 if __name__ == "__main__":
-    unittest.main(verbosity=2)
+    unittest.main()
