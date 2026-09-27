@@ -1,0 +1,14 @@
+# redline-scan 显式豁免清单（RV-125 / DISC-01 #61）
+# 语义：形态化红线扫描（20位票号/18位税号/本地私有路径）命中以下路径前缀时豁免——
+#       这些文件是仓库功能必需的"合成/演示/测试样本"数据（非真实敏感数据）。
+# 硬边界：密钥形态（sk-* / ghp_* / github_pat_*）永不豁免，无论是否在此清单。
+# 纪律：新增真实数据（真实票号/税号/公司名）严禁加入本清单；若某文件将来放真实跑分结果，
+#       必须先移除对应行 + 走评审。删除本清单任何一行前须评审。
+# 净化仓声明（RV-20260927-189）：本仓为公开净化仓，实测零真实数据（corpus 全虚构、
+#       latest.json 仅 synthetic/public_official、匿名脚本移出本机）；豁免面仅供合成/官方样例。
+tests/                          # 单元测试用合成票号/税号（测试夹具）
+tests/corpus/                   # 语料样本：synthetic_* 合成 + official_public_sample 官方公开样例 + 结构仿真虚构样例（全虚构）
+benchmark/                      # 合成跑分输出（latest.json group=synthetic；历史泄露点已重写，禁止放真实跑分）
+scripts/                        # 合成生成器与 eval 用例（generate_synthetic/generate_ofd_sample/explain_eval_cases 等）
+docs/index.html                 # 前端演示模式内嵌 demo 数据（2644… 系列演示票号）
+config.example.json             # 示例配置占位税号（9133…XXXX 形态，带 XXXX 占位后缀）

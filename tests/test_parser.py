@@ -1,0 +1,167 @@
+"""parser 自测：构造数电票 XML（含命名空间、专票结构、'*' 税额、勾稽异常）验证解析。"""
+import sys
+import unittest
+from decimal import Decimal
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from app.parser import detect_type, parse_xml
+
+NS = "urn:cn:gov:etax:2021:invoice"
+
+SAMPLE_XML = f"""<?xml version="1.0" encoding="UTF-8"?>
+<发票 xmlns="{NS}">
+  <发票号码>04300260031112345678</发票号码>
+  <开票日期>20260815</开票日期>
+  <发票类型>增值税专用发票</发票类型>
+  <购买方>
+    <购买方名称>示例科技有限公司</购买方名称>
+    <购买方纳税人识别号>91310000MA1FL1XXXX</购买方纳税人识别号>
+  </购买方>
+  <销售方>
+    <销售方名称>北京华信办公用品有限公司</销售方名称>
+    <销售方纳税人识别号>91110108XXXXXXXXXX</销售方纳税人识别号>
+  </销售方>
+  <合计金额>1000.00</合计金额>
+  <合计税额>130.00</合计税额>
+  <价税合计>1130.00</价税合计>
+</发票>
+"""
+
+STAR_TAX_XML = SAMPLE_XML.replace("<合计税额>130.00</合计税额>", "<合计税额>*</合计税额>")
+
+BAD_TOTAL_XML = SAMPLE_XML.replace("<价税合计>1130.00</价税合计>", "<价税合计>1135.00</价税合计>")
+
+# 国标拼音缩写版（传统电子发票 XML：GB/T 电子发票业务数据规范）
+GB_XML = """<?xml version="1.0" encoding="UTF-8"?>
+<EInvoice xmlns="http://example.com/gb">
+  <FPHM>04300260031112345678</FPHM>
+  <KPRQ>2026-08-15</KPRQ>
+  <FPZL>增值税专用发票</FPZL>
+  <GMFMC>示例科技有限公司</GMFMC>
+  <GMFNSRSBH>91310000MA1FL1XXXX</GMFNSRSBH>
+  <XSFMC>北京华信办公用品有限公司</XSFMC>
+  <XSFNSRSBH>91110108XXXXXXXXXX</XSFNSRSBH>
+  <HJJE>1000.00</HJJE>
+  <HJSE>130.00</HJSE>
+  <JSHJXX>1130.00</JSHJXX>
+</EInvoice>
+"""
+
+
+class TestParser(unittest.TestCase):
+    def test_detect_type(self):
+        self.assertEqual(detect_type(b'<?xml version="1.0"?><a/>'), "xml")
+        # UTF-8 BOM + 无 prolog 的合法 XML 都要识别（代码审查 H5）
+        self.assertEqual(detect_type(b"\xef\xbb\xbf<?xml version=\"1.0\"?><a/>"), "xml")
+        self.assertEqual(detect_type("<发票/>".encode()), "xml")
+        self.assertEqual(detect_type(b"PK\x03\x04rest"), "ofd")
+        self.assertEqual(detect_type(b"%PDF-1.7"), "pdf")
+        self.assertEqual(detect_type(b"\x89PNG"), "unknown")
+
+    def test_parse_rejects_non_xml(self):
+        with self.assertRaises(ValueError):
+            parse_xml(b"%PDF-1.7 data")
+        with self.assertRaises(ValueError):
+            parse_xml(b"PK\x03\x04rest")
+
+    def test_parse_rejects_oversize(self):
+        with self.assertRaises(ValueError):
+            parse_xml(b"<?xml?>" + b"a" * (10 * 1024 * 1024))
+
+    def test_parse_normal(self):
+        inv = parse_xml(SAMPLE_XML.encode())
+        self.assertEqual(inv.invoice_no, "04300260031112345678")
+        self.assertEqual(inv.issue_date, "2026-08-15")
+        self.assertEqual(inv.buyer_name, "示例科技有限公司")
+        self.assertEqual(inv.seller_taxid, "91110108XXXXXXXXXX")
+        self.assertEqual(inv.amount, Decimal("1000.00"))
+        self.assertEqual(inv.tax, Decimal("130.00"))
+        self.assertEqual(inv.total, Decimal("1130.00"))
+        self.assertNotIn("勾稽异常", " ".join(inv.parse_warnings))
+        self.assertTrue(inv.source_hash)
+        # 税号脱敏（H6）
+        self.assertIn("****", inv.raw_fields["购买方纳税人识别号"])
+
+    def test_star_tax(self):
+        inv = parse_xml(STAR_TAX_XML.encode())
+        self.assertEqual(inv.tax, Decimal("0"))
+        self.assertTrue(any("'*'" in w for w in inv.parse_warnings))
+
+    def test_bad_total_flagged(self):
+        inv = parse_xml(BAD_TOTAL_XML.encode())
+        self.assertTrue(any("勾稽异常" in w for w in inv.parse_warnings))
+
+
+    def test_gb_abbrev_xml(self):
+        # 国标拼音缩写 XML（GB/T 规范）兼容
+        inv = parse_xml(GB_XML.encode())
+        self.assertEqual(inv.invoice_no, "04300260031112345678")
+        self.assertEqual(inv.issue_date, "2026-08-15")
+        self.assertEqual(inv.buyer_name, "示例科技有限公司")
+        self.assertEqual(inv.seller_name, "北京华信办公用品有限公司")
+        self.assertEqual(inv.amount, Decimal("1000.00"))
+        self.assertEqual(inv.total, Decimal("1130.00"))
+
+    def test_invoice_no_length_warning(self):
+        # 数电票号码应为 20 位：位数异常记告警（不致命）
+        bad = SAMPLE_XML.replace("04300260031112345678", "123")
+        inv = parse_xml(bad.encode())
+        self.assertTrue(any("20 位" in w for w in inv.parse_warnings))
+
+    def test_xxe_external_entity_rejected(self):
+        # 里程碑评审安全项：外部实体（XXE）必须被拒绝
+        xxe = """<?xml version="1.0"?>
+<!DOCTYPE foo [<!ENTITY xxe SYSTEM "file:///etc/passwd">]>
+<发票><发票号码>&xxe;</发票号码></发票>"""
+        with self.assertRaises(ValueError) as ctx:
+            parse_xml(xxe.encode())
+        self.assertIn("实体", str(ctx.exception))
+
+    def test_billion_laughs_rejected(self):
+        # 里程碑评审安全项：内部实体膨胀（Billion Laughs）必须被拒绝
+        bomb = """<?xml version="1.0"?>
+<!DOCTYPE lolz [
+ <!ENTITY lol "lol">
+ <!ENTITY lol2 "&lol;&lol;&lol;&lol;&lol;">
+ <!ENTITY lol3 "&lol2;&lol2;&lol2;&lol2;&lol2;">
+ <!ENTITY lol4 "&lol3;&lol3;&lol3;&lol3;&lol3;">
+]>
+<lolz>&lol4;</lolz>"""
+        with self.assertRaises(ValueError) as ctx:
+            parse_xml(bomb.encode())
+        self.assertIn("实体", str(ctx.exception))
+
+    def test_multi_invoice_node_warns(self):
+        # 里程碑评审正确性项：单 XML 多个发票节点 → 显式告警，禁止静默丢票
+        multi = """<?xml version="1.0"?>
+<发票列表>
+  <发票><发票号码>26003300000000000001</发票号码></发票>
+  <发票><发票号码>26003300000000000002</发票号码></发票>
+</发票列表>"""
+        inv = parse_xml(multi.encode())
+        self.assertTrue(any("发票节点" in w for w in inv.parse_warnings))
+
+    def test_signature_subtree_stripped(self):
+        # 里程碑评审正确性项：XMLDSig 签名子树内同名节点不得污染票面字段
+        with_sig = """<?xml version="1.0" encoding="UTF-8"?>
+<发票 xmlns:ds="http://www.w3.org/2000/09/xmldsig#">
+  <发票号码>26003300000000000001</发票号码>
+  <开票日期>2026-08-15</开票日期>
+  <ds:Signature>
+    <ds:X509Data>
+      <ds:X509SubjectName>
+        <发票号码>99999999999999999999</发票号码>
+        <合计金额>88888888</合计金额>
+      </ds:X509SubjectName>
+    </ds:X509Data>
+  </ds:Signature>
+</发票>"""
+        inv = parse_xml(with_sig.encode())
+        self.assertEqual(inv.invoice_no, "26003300000000000001")
+        self.assertEqual(inv.amount, Decimal("0"))  # 签名内的合计金额被剥离，不会误采
+
+
+if __name__ == "__main__":
+    unittest.main(verbosity=2)

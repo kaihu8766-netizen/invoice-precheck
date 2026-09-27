@@ -1,0 +1,103 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+<!--
+  语料库票样：bj-platform-it.xml
+  来源：结构仿真虚构样例（金额/日期/税号/名称/税务机关全虚构，不保留原始来源身份）
+  省份：北京（EInvoiceTag=SWEI1100）｜ 开票系统：电子发票服务平台·网页开票 ｜ 场景：蓝字·增值税专用发票·一般纳税人·信息技术服务·6%·大额票（25万）
+  虚构：EIid/票号/税号/名称/地址/电话/银行/账号/开票人/备注/金额/日期/税务机关代码全部为虚构值；
+        签名结构保留（SignatureValue 清空）
+  结构：EInvoice 英文标签树（Version=0.33，SellerAuthentication=01，含完整签名子树）
+-->
+<EInvoice>
+  <Header>
+    <EIid>24110000000000100003</EIid>
+    <EInvoiceTag>SWEI1100</EInvoiceTag>
+    <Version>0.33</Version>
+    <InherentLabel>
+      <InIssuType>
+        <LabelCode>Y</LabelCode>
+        <LabelName>是否蓝字发票标志</LabelName>
+      </InIssuType>
+      <EInvoiceType>
+        <LabelCode>01</LabelCode>
+        <LabelName>电子发票</LabelName>
+      </EInvoiceType>
+      <GeneralOrSpecialVAT>
+        <LabelCode>01</LabelCode>
+        <LabelName>增值税专用发票</LabelName>
+      </GeneralOrSpecialVAT>
+      <TaxpayerType>
+        <LabelCode>1</LabelCode>
+        <LabelName>一般纳税人</LabelName>
+      </TaxpayerType>
+    </InherentLabel>
+    <UndefinedLabel>
+      <Label>
+        <LabelType>企业行业性质类标签</LabelType>
+        <LabelCode>02</LabelCode>
+        <LabelName>示例行业</LabelName>
+      </Label>
+      <Label>
+        <LabelType>发票开具方式标签</LabelType>
+        <LabelCode>1</LabelCode>
+        <LabelName>网页开票</LabelName>
+      </Label>
+    </UndefinedLabel>
+  </Header>
+  <EInvoiceData>
+    <SellerInformation>
+      <SellerIdNum>91110000000000000X</SellerIdNum>
+      <SellerName>示例科技有限公司</SellerName>
+      <SellerAddr>示例市示例区示例路100号</SellerAddr>
+      <SellerTelNum>13800000000</SellerTelNum>
+      <SellerBankName>示例银行股份有限公司示例支行</SellerBankName>
+      <SellerBankAccNum>0000000000000000000</SellerBankAccNum>
+    </SellerInformation>
+    <BuyerInformation>
+      <BuyerIdNum>91440000000000001Y</BuyerIdNum>
+      <BuyerName>示例商贸有限公司</BuyerName>
+      <BuyerTelNum>13800000000</BuyerTelNum>
+      <BuyerAddr>示例市示例区示例路200号</BuyerAddr>
+      <BuyerBankName>示例银行股份有限公司示例支行</BuyerBankName>
+      <BuyerBankAccNum>0000000000000000000</BuyerBankAccNum>
+    </BuyerInformation>
+    <BasicInformation>
+      <TotalAmWithoutTax>123456.78</TotalAmWithoutTax>
+      <TotalTaxAm>7407.41</TotalTaxAm>
+      <TotalTax-includedAmount>130864.19</TotalTax-includedAmount>
+      <TotalTax-includedAmountInChinese>壹拾叁万零捌佰陆拾肆圆壹角玖分</TotalTax-includedAmountInChinese>
+      <Drawer>示例</Drawer>
+      <RequestTime>2025-03-12 09:30:00</RequestTime>
+    </BasicInformation>
+    <IssuItemInformation>
+      <ItemName>*信息技术服务*技术服务费</ItemName>
+      <Quantity>1</Quantity>
+      <UnPrice>123456.7841509434</UnPrice>
+      <Amount>123456.78</Amount>
+      <TaxRate>0.06</TaxRate>
+      <ComTaxAm>7407.41</ComTaxAm>
+      <TotaltaxIncludedAmount>130864.19</TotaltaxIncludedAmount>
+      <TaxClassificationCode>3040xxxxxxxxxxxxxxx</TaxClassificationCode>
+    </IssuItemInformation>
+    <SpecificInformation />
+    <AdditionalInformation>
+      <Remark>示例平台服务费 2024.08</Remark>
+    </AdditionalInformation>
+  </EInvoiceData>
+  <SellerAuthentication>
+    <AuthenticationMethods>01</AuthenticationMethods>
+  </SellerAuthentication>
+  <TaxSupervisionInfo>
+    <InvoiceNumber>24110000000000100003</InvoiceNumber>
+    <IssueTime>2025-03-12</IssueTime>
+    <TaxBureauCode>19900000000</TaxBureauCode>
+    <TaxBureauName>国家税务总局示例省税务局</TaxBureauName>
+  </TaxSupervisionInfo>
+  <TaxBureauSignature>
+    <Reference URI="/Einvoice/Header|/Einvoice/EInvoiceData|/Einvoice/SellerAuthentication|/Einvoice/TaxSupervisionInfo|/Einvoice/TaxBureauSignature/SignatureTime" />
+    <SignatureAlgorithm>1.2.156.10197.1.501</SignatureAlgorithm>
+    <SignatureFormat>DETACH</SignatureFormat>
+    <SignatureTime>2025-03-12 09:40:00</SignatureTime>
+    <SignatureValue></SignatureValue>
+    <KeyInfo />
+  </TaxBureauSignature>
+</EInvoice>

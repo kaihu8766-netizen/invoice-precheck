@@ -1,0 +1,2811 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#3370ff">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="apple-touch-icon" href="assets/icon-192.png">
+<title>发票合规预审 · 演示</title>
+<style>
+  :root{
+    --brand:#3370ff; --brand-weak:#eef4ff;
+    --ok:#2f7d4f; --ok-bg:#f2f8f4;
+    --mid:#b45309; --mid-bg:#fbf4ea;
+    --high:#b42318; --high-bg:#fcf1ef;
+    --ink:#1a1f26; --sub:#5c6470; --weak:#8b929e;
+    --line:#e4e7ec; --line-soft:#f0f2f5;
+    --bg:#f7f8fa; --card:#fff;
+    --r-lg:12px; --r-md:10px; --r-sm:8px;
+    --shadow:0 1px 2px rgba(15,23,42,.03);
+    /* RV-88 清爽化：去渐变、纯白卡片、极淡阴影 */
+    --r-xl:14px;
+    --line-soft2:#f5f6f8;
+  }
+  *{ box-sizing:border-box; margin:0; padding:0; }
+  html,body{ height:100%; }
+  body{ font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif; background:var(--bg); color:var(--ink); font-size:14px; line-height:1.6; }
+  .app{ max-width:1180px; margin:0 auto; padding:0 20px 48px; }
+
+  /* UI-2 溢出修复（RV-74 D）：按字段类型，禁止从中间折断关键字段 */
+  .num{ white-space:nowrap; font-variant-numeric:tabular-nums; text-overflow:ellipsis; overflow:hidden; max-width:100%; }
+  .wrap-any{ overflow-wrap:anywhere; word-break:break-word; }
+  table{ table-layout:fixed; }
+  th, td{ overflow-wrap:break-word; }
+  th.num-col, td.num{ white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+
+  /* ---------- 顶栏 ---------- */
+  .topbar{ display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px; padding:16px 0; border-bottom:1px solid var(--line); margin-bottom:16px; }
+  .brand{ display:flex; align-items:center; gap:10px; }
+  .logo{ width:34px; height:34px; border-radius:9px; background:linear-gradient(135deg,var(--brand),#5b8bff); display:flex; align-items:center; justify-content:center; color:#fff; font-weight:800; font-size:15px; box-shadow:var(--shadow); }
+  .brand-name{ font-size:17px; font-weight:700; letter-spacing:.2px; }
+  .brand-sub{ font-size:12px; color:var(--sub); }
+  .top-right{ display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
+  /* RV-93 移动端顶栏收敛：模式切换与设置不挤压品牌区 */
+  @media (max-width:719px){
+    .topbar{ flex-wrap:wrap; gap:8px 12px; }
+    .brand-sub{ font-size:11px; }
+    .seg button{ padding:5px 10px; font-size:12px; }
+    .top-right{ gap:8px; }
+  }
+  @media (max-width:420px){
+    .brand-name{ font-size:15.5px; }
+    .brand-sub{ display:none; }
+    .seg button{ padding:4px 9px; font-size:11.5px; }
+  }
+
+  /* 分段模式切换（segmented control） */
+  .seg{ display:flex; background:var(--line-soft); border:1px solid var(--line); border-radius:var(--r-md); padding:3px; gap:2px; }
+  .seg button{ border:none; background:transparent; padding:5px 14px; border-radius:6px; font-size:13px; color:var(--sub); cursor:pointer; }
+  .seg button.active{ background:#fff; color:var(--ink); font-weight:600; box-shadow:var(--shadow); }
+  .badge{ font-size:11px; padding:2px 10px; border-radius:10px; border:1px solid; font-weight:600; }
+  .badge.demo{ background:var(--mid-bg); color:var(--mid); border-color:#fcd34d; }
+  .badge.live{ background:var(--ok-bg); color:var(--ok); border-color:var(--ok); }
+  .badge.review{ background:var(--high-bg); color:var(--high); border-color:var(--high); margin-left:6px; cursor:help; }
+
+  /* ---------- 工作台：左右分栏 ---------- */
+  .layout{ display:grid; grid-template-columns:340px 1fr; gap:16px; align-items:start; }
+  @media (min-width:1600px){ .layout{ grid-template-columns:300px 1fr; } }
+  @media (max-width:900px){ .layout{ grid-template-columns:1fr; } }
+  .input-panel{ display:flex; flex-direction:column; gap:14px; position:sticky; top:16px; }
+  @media (max-width:900px){ .input-panel{ position:static; } }
+  .output-panel{ min-width:0; }
+
+  .card{ background:var(--card); border:1px solid var(--line); border-radius:var(--r-xl); box-shadow:0 1px 2px rgba(15,23,42,.03), 0 2px 8px rgba(15,23,42,.05); }
+
+  /* UI-2 顶栏设置抽屉按钮（RV-74 A：配置收抽屉，仅后端连接+规则阈值） */
+  .btn-settings{ border:1px solid var(--line); background:#fff; border-radius:10px; padding:6px 12px; font:inherit; font-size:12.5px; font-weight:600; color:var(--sub); cursor:pointer; display:flex; align-items:center; gap:5px; transition:all .15s; }
+  .btn-settings:hover{ border-color:var(--brand); color:var(--brand); background:var(--brand-weak); }
+  .settings-drawer{ display:none; position:absolute; right:0; top:52px; width:380px; max-width:calc(100vw - 24px); background:#fff; border:1px solid var(--line); border-radius:var(--r-lg); box-shadow:0 12px 40px rgba(15,23,42,.14); padding:14px 16px 16px; z-index:50; max-height:calc(100vh - 70px); overflow:auto; }
+  .settings-drawer.open{ display:block; }
+  .settings-drawer .sd-head{ display:none; }
+  .settings-drawer h4{ font-size:13px; font-weight:700; margin-bottom:8px; }
+  .settings-drawer .hint{ font-size:11.5px; }
+  /* RV-93 移动端：设置抽屉全屏面板，避免与页面内容并排错乱 */
+  @media (max-width:719px){
+    body.settings-lock{ overflow:hidden; }
+    .settings-drawer{ position:fixed; left:0; right:0; top:0; bottom:0; width:100%; max-width:none; max-height:none; border:none; border-radius:0; padding:0 0 24px; z-index:120; display:none; flex-direction:column; }
+    .settings-drawer.open{ display:flex; }
+    .settings-drawer .sd-head{ display:flex; align-items:center; justify-content:space-between; padding:12px 16px; border-bottom:1px solid var(--line); background:#fafbfc; position:sticky; top:0; z-index:1; }
+    .settings-drawer .sd-head span{ font-size:15px; font-weight:700; color:var(--ink); }
+    .settings-drawer .sd-close{ border:none; background:var(--line-soft); border-radius:8px; padding:2px 12px; font:inherit; font-size:14px; color:var(--sub); cursor:pointer; }
+    .settings-drawer h4{ padding:0 16px; }
+    .settings-drawer > .fld{ padding:0 16px; }
+    .settings-drawer > button{ margin-left:16px; margin-right:16px; }
+    .settings-drawer .hint{ padding:0 16px; }
+    .settings-drawer > details{ margin-left:16px; margin-right:16px; }
+    .settings-drawer > .fld input{ font-size:16px; }
+  }
+  /* UI-2 主体常驻（RV-74 A：企业主体=每次运行前置上下文，必须可见可改） */
+  .subject-chip{ display:inline-flex; align-items:center; gap:6px; font-size:12px; font-weight:600; color:var(--brand); background:var(--brand-weak); border:1px solid #d6e2ff; border-radius:8px; padding:3px 10px; max-width:280px; }
+  .subject-chip .nm{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .subject-chip .btn-edit{ border:none; background:transparent; color:var(--brand); font:inherit; font-size:11px; cursor:pointer; padding:0 2px; text-decoration:underline dotted; }
+  .card-pad{ padding:16px; }
+  .card h3{ font-size:13px; font-weight:700; color:var(--sub); text-transform:none; margin-bottom:10px; letter-spacing:.3px; }
+  .card h3 .n{ color:var(--ink); }
+
+  /* 上传区 */
+  .drop{ border:1.5px dashed var(--line); border-radius:var(--r-md); padding:22px 14px; text-align:center; cursor:pointer; transition:border-color .15s, background .15s; background:#fafbfc; }
+  .drop:hover, .drop.over{ border-color:var(--brand); background:var(--brand-weak); }
+  .drop .ic{ font-size:26px; line-height:1; margin-bottom:8px; }
+  .drop .t{ font-size:13.5px; font-weight:600; }
+  .drop .s{ font-size:12px; color:var(--sub); margin-top:2px; }
+  .filelist{ font-size:12.5px; color:var(--sub); margin-top:10px; }
+  .filelist .f{ display:flex; align-items:center; gap:6px; background:var(--line-soft); border-radius:6px; padding:4px 8px; margin-top:4px; font-size:12px; overflow:hidden; }
+  .filelist .f .nm{ flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+
+  /* 按钮 */
+  .btn{ font:inherit; border:none; cursor:pointer; border-radius:var(--r-md); padding:9px 14px; font-size:14px; font-weight:600; transition:filter .12s; }
+  .btn-primary{ background:var(--brand); color:#fff; width:100%; box-shadow:0 1px 2px rgba(51,112,255,.3); }
+  .btn-primary:hover{ filter:brightness(1.05); }
+  .btn-primary:disabled{ opacity:.55; cursor:not-allowed; }
+  .btn-ghost{ background:#fff; color:var(--brand); border:1px solid var(--brand); padding:5px 12px; font-size:13px; font-weight:500; }
+  .btn-ghost:hover{ background:var(--brand-weak); }
+
+  /* 折叠（渐进披露） */
+  details.adv{ border:1px solid var(--line); border-radius:var(--r-md); background:#fafbfc; }
+  details.adv summary{ cursor:pointer; padding:9px 12px; font-size:13px; font-weight:600; color:var(--sub); list-style:none; display:flex; align-items:center; justify-content:space-between; }
+  details.adv summary::-webkit-details-marker{ display:none; }
+  details.adv summary::after{ content:"展开 ▾"; font-size:12px; font-weight:400; color:var(--weak); }
+  details.adv[open] summary::after{ content:"收起 ▴"; }
+  details.adv .inner{ padding:4px 12px 12px; overflow-x:auto; }
+  .inv-card{ }
+  .inv-card summary{ list-style:none; cursor:pointer; }
+  .inv-card summary::-webkit-details-marker{ display:none; }
+  .inv-card[open] summary{ border-bottom:1px solid var(--line-soft); padding-bottom:8px; }
+  .inv-body{ margin-top:8px; }
+  .inv-card.partial{ background:#fdfbf7; border-color:#e5d5a8; }
+  .stb.q{ background:#fdf6e3; color:#9a6700; }
+  .btn-ghost:disabled{ opacity:.45; cursor:not-allowed; }
+  /* ---------- 财务预审工作台（RV-83/84）：汇总卡 + 预审结论分层 + 逐票清单 ---------- */
+  .wb-head{ display:flex; align-items:baseline; gap:10px; padding:12px 16px 0; flex-wrap:wrap; }
+  .wb-head .t{ font-size:15px; font-weight:800; letter-spacing:.2px; }
+  .wb-head .s{ font-size:12px; color:var(--sub); }
+  .precheck-row{ display:grid; grid-template-columns:repeat(4,1fr); gap:10px; padding:10px 16px 4px; }
+  @media (max-width:720px){ .precheck-row{ grid-template-columns:repeat(2,1fr); } }
+  .precheck{ cursor:pointer; border-left:3px solid var(--line); transition:box-shadow .12s; }
+  .precheck.ok{ border-left-color:var(--ok); }
+  .precheck.mid{ border-left-color:var(--mid); }
+  .precheck.high{ border-left-color:var(--high); }
+  .precheck.weak{ border-left-color:var(--weak); }
+  .precheck .n{ font-size:17px; font-weight:800; line-height:1.25; font-variant-numeric:tabular-nums; }
+  .precheck .l{ font-size:11.5px; color:var(--sub); margin-top:2px; line-height:1.4; }
+  .precheck .n.ok{ color:var(--ok); } .precheck .n.mid{ color:var(--mid); } .precheck .n.high{ color:var(--high); }
+  .precheck.active{ box-shadow:0 0 0 2px var(--brand); }
+  .todo-bar{ display:flex; align-items:center; gap:8px; flex-wrap:wrap; padding:4px 16px 10px; font-size:12px; }
+  .todo-bar .lb{ color:var(--sub); font-weight:600; }
+  .todo-chip{ display:inline-flex; align-items:center; gap:4px; background:#fff; border:1px solid var(--line); border-radius:14px; padding:2px 10px; font-size:12px; cursor:pointer; color:var(--sub); }
+  .todo-chip:not(.mid){ border-color:#b4231833; color:var(--high); }
+  .todo-chip.mid{ border-color:#b4530933; color:var(--mid); }
+  .todo-chip:hover{ border-color:var(--brand); color:var(--brand); }
+  .todo-chip b{ color:var(--high); }
+  .todo-chip.mid b{ color:var(--mid); }
+  /* 逐票清单：发票状态 / 预审结论 / 风险标签 */
+  .inv-status{ font-size:11px; font-weight:700; white-space:nowrap; display:inline-flex; align-items:center; gap:4px; }
+  .inv-status::before{ content:""; width:7px; height:7px; border-radius:50%; flex-shrink:0; }
+  .inv-status.normal{ color:var(--ok); } .inv-status.normal::before{ background:var(--ok); }
+  .inv-status.red_flush{ color:var(--mid); } .inv-status.red_flush::before{ background:var(--mid); }
+  .inv-status.void{ color:var(--sub); } .inv-status.void::before{ background:var(--weak); }
+  .inv-status.abnormal{ color:var(--high); } .inv-status.abnormal::before{ background:var(--high); }
+  .precheck-tag{ font-size:11px; font-weight:600; white-space:nowrap; display:inline-flex; align-items:center; padding:1px 8px; border:1px solid var(--line); border-radius:10px; background:#fff; }
+  .precheck-tag.pass{ color:var(--ok); border-color:#cfe6d8; }
+  .precheck-tag.review{ color:var(--mid); border-color:#ecdcc0; }
+  .precheck-tag.block{ color:var(--high); border-color:#f0c4c0; font-weight:800; }
+  .precheck-tag.block::before{ content:"!"; font-weight:800; margin-right:3px; }
+  .precheck-tag.unknown{ color:var(--sub); border-color:var(--line); }
+  .tag{ display:inline-flex; align-items:center; font-size:11px; padding:0 8px; border-radius:10px; border:1px solid var(--line); color:var(--sub); background:#fff; }
+  .tag.warn{ color:var(--mid); border-color:#e8dcc2; background:#fdfaf5; }
+  .tag.block{ color:var(--high); border-color:#ecd0cd; background:#fdf6f5; }
+  .risk-tags{ position:relative; font-size:11px; }
+  .risk-tags summary{ list-style:none; cursor:pointer; color:var(--sub); font-weight:600; user-select:none; }
+  .risk-tags summary::-webkit-details-marker{ display:none; }
+  .risk-tags[open] summary{ color:var(--ink); }
+  .rt-inner{ position:absolute; right:0; top:calc(100% + 4px); z-index:20; display:flex; flex-wrap:wrap; gap:4px; background:#fff; border:1px solid var(--line); border-radius:8px; box-shadow:0 8px 24px rgba(15,23,42,.12); padding:8px; min-width:140px; }
+  .check-summary{ font-size:12px; color:var(--sub); margin-top:6px; line-height:1.7; }
+  .check-summary .ck{ display:inline-block; margin-right:10px; }
+  .check-summary .ck.warn{ color:var(--mid); }
+  .check-summary .ck.block{ color:var(--high); }
+  .check-summary .ck.pass{ color:var(--ok); }
+  .ck-note{ font-size:12px; margin-top:2px; line-height:1.6; }
+  .ck-note.ckw{ color:var(--mid); }
+  .ck-note.ckb{ color:var(--high); }
+
+  .print-head{ display:none; }
+  @media print{ .view-switch{ display:none !important; } }
+
+  .fld{ display:flex; flex-direction:column; gap:6px; margin-top:8px; }
+  .fld label{ font-size:12px; color:var(--sub); font-weight:600; }
+  input[type=text], input[type=password]{ font:inherit; padding:8px 10px; border:1px solid var(--line); border-radius:var(--r-md); background:#fff; width:100%; }
+  input:focus{ outline:none; border-color:var(--brand); box-shadow:0 0 0 2px var(--brand-weak); }
+  .hint{ color:var(--sub); font-size:12px; margin-top:6px; line-height:1.5; }
+  .hint.err{ color:var(--high); }
+  .hint.okc{ color:var(--ok); }
+
+  /* 输出区 */
+  #empty{ text-align:left; padding:40px 24px; color:var(--sub); }
+  .guide{ max-width:640px; margin:0 auto; background:#fff; border:1px solid var(--line); border-radius:var(--r-lg); padding:28px 26px; }
+  .guide-head{ display:flex; gap:14px; align-items:flex-start; }
+  .guide-head .g-ic{ font-size:30px; line-height:1; }
+  .guide-head .t{ font-size:17px; font-weight:700; color:var(--ink); }
+  .guide-head .s{ font-size:13px; margin-top:4px; line-height:1.6; }
+  .guide-steps{ display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:20px; }
+  @media (max-width:560px){ .guide-steps{ grid-template-columns:1fr; } }
+  .guide-steps .step{ display:flex; gap:10px; background:#fafbfc; border:1px solid var(--line-soft); border-radius:var(--r-md); padding:10px 12px; }
+  .step .n{ width:22px; height:22px; border-radius:50%; background:var(--brand); color:#fff; font-size:12px; font-weight:700; display:flex; align-items:center; justify-content:center; flex-shrink:0; margin-top:1px; }
+  .step b{ display:block; font-size:13px; color:var(--ink); }
+  .step span{ font-size:12px; line-height:1.5; display:block; margin-top:2px; }
+  .guide-note{ font-size:12px; color:var(--weak); margin-top:18px; padding-top:14px; border-top:1px dashed var(--line); line-height:1.6; }
+
+  /* 骨架屏（自动渲染前，避免初始空白） */
+  .skeleton{ padding:16px; }
+  .sk-line{ height:14px; border-radius:4px; background:linear-gradient(90deg,#eef0f3 25%,#f6f7f9 50%,#eef0f3 75%); background-size:200% 100%; animation:sk 1.2s infinite; margin:8px 0; }
+  .sk-line.w40{ width:40%; } .sk-line.w60{ width:60%; } .sk-line.w70{ width:70%; } .sk-line.w80{ width:80%; }
+  .sk-grid{ display:grid; grid-template-columns:repeat(5,1fr); gap:10px; margin:12px 0; }
+  @media (max-width:720px){ .sk-grid{ grid-template-columns:repeat(3,1fr); } }
+  .sk-card{ border:1px solid var(--line-soft); border-radius:var(--r-md); padding:12px; }
+  @keyframes sk{ 0%{background-position:200% 0} 100%{background-position:-200% 0} }
+  @media (prefers-reduced-motion:reduce){ .sk-line{ animation:none; } }
+
+  /* KPI 摘要 */
+  .kpis{ display:grid; grid-template-columns:repeat(4,1fr); gap:10px; padding:14px 16px 4px; }
+  @media (max-width:720px){
+    .kpis{ grid-template-columns:repeat(2,1fr); }
+    .kpi{ min-width:0; }
+    .kpi .n{ font-size:17px; }
+    .kpi.amt3 .n.net{ font-size:18px; }
+    .kpi.amt3 .n.sub{ font-size:10px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; line-height:1.4; max-width:100%; }
+  }
+  .kpi{ background:#fff; border:1px solid var(--line-soft); border-left:3px solid var(--line-soft); border-radius:var(--r-md); padding:10px 12px; }
+  .kpi.total{ border-left-color:var(--brand); }
+  .kpi.total .l{ color:var(--sub); font-weight:600; }
+  .kpi .l{ color:var(--sub); }
+  .ctxbar{ border-bottom:1px solid var(--line-soft); }
+  .ctxmeta{ font-size:11.5px; color:var(--weak); padding:6px 16px 12px; overflow-wrap:anywhere; }
+  .cm-line{ display:block; line-height:1.5; }
+  .cm-detail{ margin-top:3px; }
+  .cm-detail summary{ cursor:pointer; color:var(--sub); }
+  .cm-inner{ margin-top:4px; padding-left:10px; border-left:2px solid var(--line); line-height:1.6; }
+  .kpi .mini{ display:block; font-size:10.5px; font-weight:500; color:var(--sub); margin-top:1px; }
+  .kpi.amt3{ padding-top:8px; padding-bottom:8px; display:flex; flex-direction:column; justify-content:center; }
+  .kpi.amt3 .n{ font-size:16px; line-height:1.3; }
+  .kpi.amt3 .n.net{ font-size:20px; }
+  .kpi.amt3 .n.sub{ font-size:11px; font-weight:600; color:var(--sub); margin-top:3px; font-variant-numeric:tabular-nums; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:100%; }
+  .kpi .n{ font-size:20px; font-weight:800; line-height:1.2; font-variant-numeric:tabular-nums; text-align:right; }
+  .kpi .n.ok{ color:var(--ok); } .kpi .n.mid{ color:var(--mid); } .kpi .n.high{ color:var(--high); }
+  /* F-08 KPI 下钻：可点击 KPI 交互态（主动筛选） */
+  .kpi[data-drill]{ cursor:pointer; transition:border-color .12s ease, box-shadow .12s ease; }
+  .kpi[data-drill]:hover{ border-color:var(--brand); box-shadow:0 1px 4px rgba(79,107,154,.14); }
+  .kpi[data-drill].active{ border-color:var(--brand); box-shadow:0 0 0 1px var(--brand) inset; }
+  .kpi[data-drill].active .n{ color:var(--brand); }
+  .kpi .drill-hint{ display:block; font-size:10px; color:var(--weak); margin-top:2px; text-align:right; }
+  .drill-note{ display:flex; align-items:center; gap:8px; font-size:12px; color:#3d5bb3; background:#eef3fb; border:1px solid #d6e2ff; border-radius:8px; padding:6px 10px; margin-bottom:10px; flex-wrap:wrap; }
+  .drill-note .clear{ margin-left:auto; font-size:12px; }
+  .rule-link{ cursor:pointer; text-decoration:underline dotted; color:var(--brand); }
+  .drift-warn{ font-size:12.5px; color:#9a6a2f; background:#fff7e8; border:1px solid #f0d9a8; border-radius:8px; padding:8px 12px; margin-bottom:12px; }
+  /* F-08b 解析失败清单（RV-64）：文件级失败原因，与发票列表分离 */
+  .fail-list{ margin-top:8px; display:flex; flex-direction:column; gap:8px; }
+  .fail-row{ border:1px solid var(--line-soft); border-radius:8px; padding:10px 12px; background:#fff; }
+  .fail-file{ font-weight:700; font-size:13px; word-break:break-all; }
+  .fail-err{ font-size:12.5px; color:var(--high); margin-top:4px; line-height:1.5; word-break:break-all; }
+  .fail-act{ font-size:12px; color:var(--sub); margin-top:4px; }
+  .fail-missing{ color:var(--mid); font-style:italic; }
+  .rule-card.flash{ animation:flashRule .9s ease 2; }
+  @keyframes flashRule{ 0%,100%{ background:transparent; } 50%{ background:#fff3bf; } }
+  /* 触摸反馈：可点元素按压微缩放（DeepSeek Week1 痛点） */
+  button:active, .vs:active, summary:active, .drop:active, [role="button"]:active{ transform:scale(0.98); }
+  @media (hover:none){ button, .vs, summary, .drop{ -webkit-tap-highlight-color:transparent; transition:transform .08s ease; } }
+  .kpi.main .l{ color:#3d5bb3; }
+
+  /* 风险清单：密集行式列表（财务批量复核场景，DeepSeek 评审 P0） */
+  .section{ margin-top:14px; }
+  .section-head{ display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; flex-wrap:wrap; gap:8px; }
+  .section-head h2{ font-size:15px; font-weight:700; }
+  .section-head .sub{ font-size:12px; color:var(--sub); }
+  .tools{ display:flex; gap:6px; flex-wrap:wrap; min-width:0; align-items:center; }
+  .tools .btn-ghost{ padding:4px 10px; font-size:12px; }
+  .flt-seg{ display:flex; gap:2px; background:var(--line-soft); border:1px solid var(--line); border-radius:var(--r-md); padding:2px; }
+  .flt-seg .btn-ghost{ border:none; background:transparent; color:var(--sub); padding:4px 12px; font-size:12px; font-weight:500; border-radius:calc(var(--r-md) - 2px); }
+  .flt-seg .btn-ghost.active{ background:#fff; color:var(--ink); font-weight:600; box-shadow:var(--shadow); }
+  .dl-menu{ position:relative; }
+  .dl-list{ display:none; position:absolute; right:0; top:calc(100% + 4px); background:#fff; border:1px solid var(--line); border-radius:var(--r-md); box-shadow:0 8px 24px rgba(15,23,42,.12); padding:4px; z-index:30; min-width:120px; }
+  .dl-list.open{ display:block; }
+  .dl-list .btn-ghost{ display:block; width:100%; text-align:left; border:none; padding:6px 10px; font-size:12.5px; border-radius:6px; }
+  .dl-list .btn-ghost:hover{ background:var(--brand-weak); }
+  .dl-list .dl-sep{ height:1px; background:var(--line-soft); margin:4px 2px; }
+  .finding{ border:1px solid var(--line); border-radius:var(--r-md); background:#fff; margin-bottom:5px; }
+  .finding summary{ list-style:none; display:flex; align-items:center; gap:8px; padding:7px 10px; cursor:pointer; border-radius:var(--r-md); flex-wrap:wrap; }
+  .finding summary::-webkit-details-marker{ display:none; }
+  .finding summary:hover{ background:#fafbfc; }
+  /* 输出区视图切换（P1③，DeepSeek 评审：三视图+无命中票可验证） */
+  .view-switch{ display:flex; gap:6px; margin:12px 0 0; background:#fff; border:1px solid var(--line); border-radius:var(--r-md); padding:4px; width:max-content; max-width:100%; flex-wrap:wrap; }
+  .vs{ border:0; background:transparent; padding:7px 16px; font-size:13px; color:var(--sub); border-radius:8px; cursor:pointer; font-weight:500; }
+  .vs.active{ background:var(--brand); color:#fff; }
+  .report-view{ margin-top:10px; }
+  .inv-group, .rule-group{ display:flex; flex-direction:column; gap:10px; }
+  .inv-card, .rule-card{ background:#fff; border:1px solid var(--line-soft); border-radius:var(--r-md); padding:10px; }
+  .inv-card.clean{ background:#fbfdfc; }
+  .inv-head, .rule-head{ display:flex; align-items:center; gap:8px; flex-wrap:wrap; font-size:13px; }
+  .inv-no{ font-weight:700; }
+  .inv-full{ color:var(--weak); font-size:11.5px; font-family:ui-monospace,Menlo,Consolas,monospace; }
+  .inv-meta{ color:var(--sub); font-size:12px; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .inv-list{ margin-top:8px; display:flex; flex-direction:column; gap:8px; }
+  .inv-clean-note{ margin-top:8px; font-size:12px; color:var(--ok); background:var(--ok-bg); padding:8px 10px; border-radius:8px; }
+  .stb.warn{ background:var(--mid-bg); color:var(--mid); }
+  .view-note{ font-size:12px; color:#9a6700; background:#fdf6e3; padding:8px 12px; border-radius:8px; margin-bottom:10px; line-height:1.6; }
+  .rule-cnt{ margin-left:auto; font-size:12px; color:var(--sub); }
+  .rule-cnt b{ color:var(--ink); }
+  .rule-hits{ margin-top:8px; border:1px solid var(--line-soft); border-radius:8px; }
+  .rule-hits summary{ cursor:pointer; padding:8px 10px; font-size:12.5px; font-weight:600; color:var(--sub); list-style:none; }
+  .rule-hits summary::-webkit-details-marker{ display:none; }
+  .rule-hits summary::after{ content:"展开 ▾"; font-size:12px; font-weight:400; color:var(--weak); margin-left:6px; }
+  .rule-hits[open] summary::after{ content:"收起 ▴"; }
+  .rule-hits .inner{ padding:8px; display:flex; flex-direction:column; gap:8px; }
+  .rule-note{ margin-top:8px; font-size:12px; color:var(--high); background:var(--high-bg); padding:8px 10px; border-radius:8px; line-height:1.6; }
+  .finding[open] summary{ background:#fafbfc; border-bottom:1px solid var(--line-soft); }
+  .finding .bar{ width:3px; align-self:stretch; border-radius:2px; flex-shrink:0; }
+  .bar.high{ background:var(--high); } .bar.mid{ background:var(--mid); } .bar.low{ background:var(--weak); }
+  .finding .sev{ font-size:11px; font-weight:800; padding:1px 8px; border-radius:10px; letter-spacing:.2px; white-space:nowrap; }
+  .sev.high{ background:var(--high-bg); color:var(--high); } .sev.mid{ background:var(--mid-bg); color:var(--mid); } .sev.low{ background:var(--line-soft); color:var(--sub); }
+  .finding .rname{ font-size:13px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0; flex:0 1 auto; }
+  .finding .ticket{ font-size:12px; color:var(--sub); font-family:ui-monospace,Menlo,Consolas,monospace; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0; flex:0 1 auto; }
+  @media (max-width:480px){ .finding .ticket{ flex-basis:100%; padding-left:11px; } }
+  /* ===== 双端响应式打磨（2026-09-23）===== */
+  .drop .t .desk{ display:inline; } .drop .t .mob{ display:none; }
+  .drop .s .kbd{ display:inline; }
+  .camera-btn{ display:none; }
+  @media (max-width:768px){
+    .drop .t .desk{ display:none; } .drop .t .mob{ display:inline; }
+    .drop .s .kbd{ display:none; }
+    .camera-btn{ display:flex; }
+  }
+  /* 触摸设备判定（DeepSeek 评审修正：宽度改 pointer:coarse，覆盖 iPad/触屏本） */
+  @media (pointer:coarse){
+    .ops{ gap:10px; }
+    .op{ min-height:44px; padding:9px 16px; font-size:13px; }
+    .btn, .btn-ghost, .vs, .flt{ min-height:44px; }
+    .todo-chip{ min-height:36px; padding:4px 12px; }
+    .inv-jump{ min-width:36px; min-height:36px; display:inline-flex; align-items:center; justify-content:center; margin-left:2px; }
+  }
+  @media (max-width:480px){
+    .tools{ gap:8px; }
+    .tools .btn-ghost{ white-space:nowrap; }
+    .view-switch .vs{ padding:7px 12px; }
+    .kpi{ padding:8px 10px; min-width:0; }
+    .kpi .n{ font-size:15px; max-width:100%; overflow:hidden; }
+    .kpi .l{ word-break:keep-all; line-height:1.4; }
+  }
+  .finding .amt{ font-size:12.5px; font-weight:600; margin-left:auto; white-space:nowrap; font-variant-numeric:tabular-nums; }
+  .finding .caret{ color:var(--weak); font-size:11px; flex-shrink:0; }
+  .finding[open] .caret{ transform:rotate(90deg); }
+  .finding .body{ padding:10px 12px 12px; }
+  .finding .msg{ font-size:13.5px; font-weight:600; line-height:1.5; overflow-wrap:anywhere; }
+  .finding .meta{ font-size:12px; color:var(--sub); line-height:1.7; } .meta div{ overflow-wrap:anywhere; }
+  .finding .meta code{ background:var(--line-soft); border-radius:4px; padding:0 5px; font-family:ui-monospace,Menlo,Consolas,monospace; font-size:11.5px; }
+  .finding .sug{ font-size:13px; margin-top:8px; }
+  .finding .sug b{ color:var(--sub); font-weight:600; font-size:12px; }
+  .chain{ font-size:12.5px; color:var(--sub); margin-top:8px; }
+  .chain li{ margin:2px 0 2px 18px; }
+  .chain code{ background:var(--line-soft); border-radius:4px; padding:0 5px; font-family:ui-monospace,Menlo,Consolas,monospace; font-size:11.5px; }
+
+  /* 通俗解释 */
+  .explain{ margin-top:10px; background:var(--brand-weak); border-left:3px solid var(--brand); border-radius:0 var(--r-md) var(--r-md) 0; padding:10px 12px; font-size:13px; line-height:1.75; }
+  .explain .tag{ display:inline-block; font-size:11px; font-weight:700; color:var(--brand); background:#fff; border:1px solid #c9d8ff; border-radius:10px; padding:1px 8px; margin-bottom:6px; }
+  .explain b{ color:var(--ink); }
+  .explain.tpl{ background:var(--line-soft); border-left-color:var(--weak); }
+  .explain.tpl .tag{ color:var(--sub); border-color:var(--line); }
+
+  /* 表格（折叠区） */
+  table{ width:100%; border-collapse:collapse; font-size:13px; font-variant-numeric:tabular-nums; }
+  th, td{ text-align:left; padding:7px 8px; border-bottom:1px solid var(--line-soft); vertical-align:top; }
+  th{ color:var(--sub); font-weight:600; font-size:12px; background:#fafbfc; }
+  tr:last-child td{ border-bottom:none; }
+  .pill{ display:inline-block; font-size:11.5px; padding:1px 8px; border-radius:10px; font-weight:600; }
+  .pill.hit{ background:var(--high-bg); color:var(--high); }
+  .pill.nohit{ background:var(--ok-bg); color:var(--ok); }
+  .pill.skip{ background:var(--line-soft); color:var(--sub); }
+  .ok{ color:var(--ok); } .mid{ color:var(--mid); } .high{ color:var(--high); }
+  .fail{ color:var(--high); }
+
+  /* 页脚元信息 */
+  .meta{ color:var(--weak); font-size:11.5px; margin-top:12px; line-height:1.7; word-break:break-all; }
+  .disc{ margin-top:8px; padding:8px 12px; background:#fafbfc; border-left:3px solid var(--line); font-size:12px; color:var(--sub); border-radius:0 var(--r-md) var(--r-md) 0; }
+
+  .live-only{ display:none; }
+  body.live .live-only{ display:block; }
+  body.live .demo-only{ display:none; }
+
+  /* 处置状态（P1①） */
+  .finding.dim{ opacity:.55; }
+  .stb{ font-size:11px; font-weight:700; padding:1px 8px; border-radius:10px; white-space:nowrap; }
+  .stb.resolved{ background:var(--ok-bg); color:var(--ok); }
+  .stb.ignored{ background:var(--line-soft); color:var(--sub); }
+  .disps{ display:flex; align-items:center; gap:12px; flex-wrap:wrap; padding:6px 2px 10px; }
+  .dp{ font-size:12px; }
+  .dp b{ font-size:15px; }
+  .dp.pending b{ color:var(--mid); }
+  .dp.resolved b{ color:var(--ok); }
+  .dp.ignored b{ color:var(--sub); }
+  .alldone{ font-size:12px; font-weight:700; color:var(--ok); background:var(--ok-bg); padding:2px 10px; border-radius:10px; }
+  .ops{ display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-top:10px; }
+  .op{ font:inherit; font-size:12px; padding:4px 10px; border-radius:6px; cursor:pointer; border:1px solid var(--line); background:#fff; }
+  .op.resolved{ color:var(--ok); border-color:var(--ok); }
+  .op.resolved:hover{ background:var(--ok-bg); }
+  .op.ignored{ color:var(--sub); border-color:var(--line); }
+  .op.ignored:hover{ background:var(--line-soft); }
+  .op.undo{ color:var(--brand); border-color:var(--brand); }
+  .op.undo:hover{ background:var(--brand-weak); }
+  .flt.active{ background:var(--brand-weak); color:var(--brand); border-color:var(--brand); font-weight:600; }
+
+  /* 报告 DOM（RV-91/94）：基础样式屏幕+打印共用（预览模态与打印同源），打印时精简列 */
+  #report-print-root{ display:none; }
+  .rp{ -webkit-print-color-adjust:exact; print-color-adjust:exact; font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif; color:#1a1f26; font-size:12px; line-height:1.65; }
+  .rp .rp-head{ border-bottom:2px solid #1a1f26; padding-bottom:8px; margin-bottom:12px; }
+  .rp .rp-title{ font-size:18px; font-weight:800; }
+  .rp .rp-meta{ font-size:11px; color:#5c6470; margin-top:4px; }
+  .rp h2{ font-size:13px; font-weight:700; margin:14px 0 6px; }
+  .rp table{ width:100%; border-collapse:collapse; table-layout:fixed; }
+  .rp th, .rp td{ border:1px solid #d9dce1; padding:4px 6px; font-size:11px; text-align:left; word-break:break-word; }
+  .rp th{ background:#f0f2f5; font-weight:700; }
+  .rp .rp-summary{ display:flex; flex-wrap:wrap; gap:16px; }
+  .rp .rp-summary .sm{ min-width:130px; }
+  .rp .rp-summary .sm b{ display:block; font-size:11px; color:#5c6470; font-weight:600; }
+  .rp .rp-summary .sm span{ font-size:16px; font-weight:800; font-variant-numeric:tabular-nums; }
+  .rp .rp-pc{ display:flex; gap:12px; flex-wrap:wrap; }
+  .rp .pc{ border-left:3px solid #d9dce1; padding:2px 10px; }
+  .rp .pc.ok{ border-left-color:#2f7d4f; } .rp .pc.review{ border-left-color:#b45309; } .rp .pc.block{ border-left-color:#b42318; } .rp .pc.unknown{ border-left-color:#8b929e; }
+  .rp .pc b{ font-size:15px; }
+  .rp .pc span{ font-size:11px; color:#5c6470; }
+  .rp .risk-hi{ color:#b42318; font-weight:700; } .rp .risk-mid{ color:#b45309; } .rp .risk-lo{ color:#5c6470; }
+  .rp .rp-disc{ margin-top:16px; padding-top:8px; border-top:1px solid #d9dce1; font-size:10.5px; color:#5c6470; }
+  .rp .rp-foot{ margin-top:20px; border-top:1px solid #d9dce1; padding-top:6px; font-size:10px; color:#8b929e; }
+  /* RV-94 双表：屏幕完整 12 列 / 打印专用 9 列精简表（display 切换，避免隐藏列+colgroup 错位） */
+  .rp .rp-tbl-print{ display:none; }
+  .rp table col.p-no{ width:7mm; } .rp table col.p-invno{ width:32mm; } .rp table col.p-date{ width:18mm; }
+  .rp table col.p-kind{ width:8mm; } .rp table col.p-seller{ width:30mm; } .rp table col.p-total{ width:20mm; }
+  .rp table col.p-pc{ width:21mm; } .rp table col.p-risk{ width:31mm; } .rp table col.p-cnt{ width:7mm; }
+  @media print{
+    body > *:not(#report-print-root){ display:none !important; }
+    .rev-overlay, .rpPreviewOv, #rpPreviewOv{ display:none !important; }
+    #report-print-root{ display:block !important; }
+    body{ background:#fff; }
+    @page{ margin:12mm 10mm; }
+    .rp h2{ page-break-after:avoid; }
+    .rp tr{ break-inside:avoid; }
+    .rp thead{ display:table-header-group; }
+    .rp .rp-tbl-screen{ display:none; }
+    .rp .rp-headbar, .rp .rp-actions{ display:none !important; }
+    .rp .rp-tbl-print{ display:table; }
+    /* 风险清单 7 列打印列宽 */
+    .rp table col.r-no{ width:7mm; } .rp table col.r-id{ width:11mm; } .rp table col.r-name{ width:26mm; }
+    .rp table col.r-sev{ width:9mm; } .rp table col.r-invno{ width:32mm; } .rp table col.r-msg{ width:68mm; } .rp table col.r-disp{ width:14mm; }
+  }
+
+/* 复核工作台（RV-17）：modal 弹窗 */
+.rev-overlay{position:fixed;inset:0;background:rgba(15,23,42,.45);z-index:99;display:flex;align-items:center;justify-content:center;padding:16px;}
+.rev-modal{background:#fff;border-radius:14px;max-width:520px;width:100%;max-height:86vh;overflow:auto;padding:18px 20px;box-shadow:0 18px 50px rgba(0,0,0,.25);}
+/* RV-94 报告预览模态（P0-2）：移动端全屏 + 内容横向滚动 + 底部操作栏固定 */
+.rev-modal.rp-modal{ max-width:900px; display:flex; flex-direction:column; overflow:hidden; align-items:stretch; }
+#rpPreviewOv{ padding:16px; }
+.rp-scroll{ max-height:72vh; -webkit-overflow-scrolling:touch; }
+@media (max-width:719px){
+  #rpPreviewOv{ padding:0; }
+  #rpPreviewOv .rp-modal{ max-width:100%; max-height:100%; height:100dvh; border-radius:0; padding:12px 14px; }
+  #rpPreviewOv .rp-scroll{ max-height:none; border-radius:6px; }
+  #rpPreviewOv .rp-actions{ flex-shrink:0; margin:10px 0 0; padding-bottom:env(safe-area-inset-bottom); }
+  #rpPreviewOv .rp-actions .btn-ghost{ font-size:13px; white-space:nowrap; flex-shrink:0; }
+}
+.rev-head{font-size:15px;font-weight:700;margin-bottom:10px;}
+.rev-todo-note{font-size:12.5px;color:#b45309;background:#fef3e2;border-radius:8px;padding:8px 10px;margin-bottom:10px;}
+.rev-done-note{font-size:12.5px;color:#2f7d4f;background:#e8f6ee;border-radius:8px;padding:8px 10px;margin-bottom:10px;}
+.rev-fields{display:flex;flex-direction:column;gap:7px;margin-bottom:12px;}
+.rev-row{display:flex;align-items:center;gap:10px;}
+.rev-row label{width:104px;font-size:12.5px;color:#4b5563;flex-shrink:0;}
+.rev-in{flex:1;border:1px solid #d1d5db;border-radius:7px;padding:6px 8px;font-size:13px;font-family:inherit;}
+.rev-in:focus{outline:none;border-color:#2563eb;box-shadow:0 0 0 2px rgba(37,99,235,.15);}
+.rev-audit{font-size:12px;color:#6b7280;background:#f6f7f9;border-radius:8px;padding:8px 10px;margin-bottom:12px;max-height:120px;overflow:auto;}
+.rev-audit-title{font-weight:600;color:#4b5563;margin-bottom:4px;}
+.rev-audit-row{font-size:11.5px;line-height:1.5;word-break:break-all;}
+.rev-actions{display:flex;gap:8px;flex-wrap:wrap;}
+.rev-btn{margin-left:8px;padding:2px 9px;font-size:12px;}
+.badge.review.done{background:#e8f6ee;color:#2f7d4f;border:1px solid #b6e0c6;}
+
+/* UI-2 溢出根治（RV-74 D）：长字段按类型处理，关键字段禁止中间折断 */
+.inv-head{ display:flex; align-items:center; gap:8px; flex-wrap:wrap; min-width:0; }
+.inv-left{ display:flex; align-items:center; gap:8px; flex-wrap:wrap; min-width:0; flex:1 1 auto; }
+.inv-right{ display:flex; align-items:center; gap:6px; flex-wrap:wrap; justify-content:flex-end; flex-shrink:0; }
+.inv-no{ font-weight:700; font-size:13px; flex-shrink:0; }
+.inv-full{ font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:12px; color:var(--sub); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:180px; flex-shrink:1; }
+.inv-meta{ font-size:12px; color:var(--sub); overflow-wrap:anywhere; word-break:break-word; min-width:0; flex:1 1 auto; }
+.ticket{ font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-weight:600; }
+.meta{ overflow-wrap:anywhere; word-break:break-word; }
+.ctxmeta{ overflow-wrap:anywhere; word-break:break-word; }
+code{ overflow-wrap:anywhere; word-break:break-word; }
+.kpi .n{ font-size:20px; font-weight:800; line-height:1.2; font-variant-numeric:tabular-nums; }
+.kpi .l{ word-break:keep-all; }
+@media (max-width:560px){
+  .inv-full{ max-width:120px; }
+  .inv-meta{ flex-basis:100%; }
+}
+
+/* ========== UI-3 第二批（RV-75）：同屏不互斥 + 规则抽屉 + 移动端 ========== */
+/* 布局双形态：≥1280px 左右分栏（risk|invoice 各自独立滚动） */
+@media (min-width:1280px){
+  .report-zone{ display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:14px; align-items:start; }
+  .report-zone .view-risk-col{ min-width:0; }
+  .report-zone .view-invoice-col{ min-width:0; max-height:calc(100vh - 260px); overflow:auto; padding-right:4px; }
+  .view-switch{ display:none; }
+  .rule-open-btn{ display:inline-flex; }
+}
+/* 720–1280px：纵向双段，发票明细默认折叠（RV-76：统一断点，<1280 全用新切换栏，旧互斥 tab 隐藏） */
+@media (max-width:1279px){
+  .report-zone{ display:block; }
+  .view-invoice-col{ margin-top:10px; }
+  .rule-open-btn{ display:inline-flex; }
+  .view-switch{ display:none; }
+  .mob-view-bar{ display:flex; gap:8px; margin:10px 0; }
+}
+/* <720px 移动端：三段纵向同屏展开，采集默认 */
+@media (max-width:719px){
+  .view-invoice-col .inv-group{ max-height:60vh; overflow:auto; }
+  .kpis{ grid-template-columns:repeat(2,1fr); }
+  .report-zone .view-risk-col .finding .body{ padding:6px 8px; }
+  .view-switch{ display:none; }
+  .finding summary{ padding:12px 8px; }
+  .vs{ font-size:12px; padding:5px 10px; }
+  .rule-drawer{ width:100% !important; }
+}
+
+/* 规则分析 overlay 抽屉（低频解释视图，保留下层可见） */
+.rule-drawer{ position:fixed; top:0; right:0; bottom:0; width:40%; min-width:420px; max-width:560px; background:#fff; border-left:1px solid var(--line); box-shadow:-8px 0 30px rgba(15,23,42,.12); z-index:80; transform:translateX(100%); transition:transform .22s ease; display:flex; flex-direction:column; }
+.rule-drawer.open{ transform:translateX(0); }
+.rule-drawer .rd-head{ display:flex; align-items:center; gap:8px; padding:12px 16px; border-bottom:1px solid var(--line); }
+.rule-drawer .rd-head h3{ font-size:14px; font-weight:700; margin:0; }
+.rule-drawer .rd-close{ margin-left:auto; border:none; background:var(--line-soft); border-radius:8px; padding:4px 10px; font:inherit; font-size:12.5px; cursor:pointer; }
+.rule-drawer .rd-body{ padding:12px 16px; overflow:auto; flex:1; }
+.rule-drawer .rd-body .rule-card{ margin-bottom:10px; }
+.rule-open-btn{ align-items:center; gap:4px; border:1px solid var(--line); background:#fff; border-radius:8px; padding:4px 10px; font:inherit; font-size:12.5px; color:var(--sub); cursor:pointer; }
+.rule-open-btn:hover{ border-color:var(--brand); color:var(--brand); }
+/* 排序指示器（异常不强制置顶：保留自然序 + 可切换） */
+.sort-bar{ display:flex; align-items:center; gap:8px; margin:10px 0 6px; font-size:12px; color:var(--sub); flex-wrap:wrap; }
+.sort-bar .sg{ display:flex; border:1px solid var(--line); border-radius:8px; overflow:hidden; }
+.sort-bar .sg button{ border:none; background:#fff; padding:4px 12px; font:inherit; font-size:12px; color:var(--sub); cursor:pointer; }
+.sort-bar .sg button.active{ background:var(--brand); color:#fff; font-weight:600; }
+/* 窄屏切换栏（RV-76：默认 none，<1280 显示新栏；基础 none 不再覆盖 max-width:1279 的 flex） */
+@media (min-width:1280px){
+  .mob-view-bar{ display:none; }
+}
+@media (max-width:719px){
+  .mob-view-bar{ display:flex; gap:8px; margin:10px 0; }
+  .mob-view-bar .mv{ flex:1; border:1px solid var(--line); background:#fff; border-radius:8px; padding:7px 0; font:inherit; font-size:12.5px; color:var(--sub); cursor:pointer; text-align:center; }
+  .mob-view-bar .mv.active{ background:var(--brand); color:#fff; border-color:var(--brand); font-weight:600; }
+}
+.op.disabled{ opacity:.45; cursor:not-allowed; }
+/* 锚点定位：sticky KPI 遮挡补偿 */
+.inv-anchor{ scroll-margin-top:96px; }
+.inv-jump{ border:none; background:transparent; color:var(--brand); cursor:pointer; font-size:12px; padding:0 2px; }
+.inv-jump:hover{ text-decoration:underline; }
+@keyframes flashInv{ 0%,100%{ background:transparent; } 50%{ background:#fff3bf; } }
+.flash-inv{ animation:flashInv 1.1s ease 2; }
+@media (prefers-reduced-motion:reduce){ .flash-inv{ animation:none; } .rule-drawer{ transition:none; } }
+  /* T-008：本机存储预警条（RV-172：字节口径 + safe-area） */
+  #storageWarn{ display:none; align-items:flex-start; gap:8px; padding:9px 14px;
+    padding-top:calc(9px + env(safe-area-inset-top));
+    background:#fdf3e3; color:#7a4d12; border-bottom:1px solid #eccd92; font-size:13px; line-height:1.5; }
+  #storageWarn.show{ display:flex; }
+  #storageWarn .sw-ico{ flex-shrink:0; font-weight:700; }
+  #storageWarn .sw-act{ margin-left:auto; flex-shrink:0; background:none; border:none; color:inherit;
+    text-decoration:underline; cursor:pointer; font-size:12px; padding:2px 4px; }
+  #storageWarn .sw-act:active{ opacity:.7; }
+</style>
+<script>
+/* ES5 兼容探针（RV-39：独立于主脚本，主脚本解析失败也能点亮；默认隐藏，页面出错时亮出诊断信息） */
+(function () {
+  function ensureProbe() {
+    var p = document.getElementById("probe");
+    if (p) return p;
+    p = document.createElement("div");
+    p.id = "probe";
+    p.style.cssText = "position:fixed;left:8px;bottom:8px;z-index:99999;background:#111827;color:#e5e7eb;font:10px/1.5 monospace;padding:4px 8px;border-radius:6px;opacity:.92;max-width:70vw;white-space:pre-wrap;word-break:break-all;display:none;";
+    p.textContent = "v=fa78051\u00b7UA=" + String(navigator.userAgent || "").slice(0, 90);
+    (document.body || document.documentElement).appendChild(p);
+    return p;
+  }
+  function addErr(ev) {
+    try {
+      var bar = document.getElementById("errbar");
+      if (!bar) {
+        bar = document.createElement("div"); bar.id = "errbar";
+        bar.style.cssText = "position:fixed;top:0;left:0;right:0;z-index:9999;background:#7f1d1d;color:#fff;font:12px/1.5 monospace;padding:6px 10px;white-space:pre-wrap;max-height:90px;overflow:auto;";
+        document.body.appendChild(bar);
+      }
+      bar.textContent = "[页面错误] " + (ev.message || ev.type || "未知") + (ev.filename ? " @ " + String(ev.filename).split("/").pop() + ":" + ev.lineno : "");
+      ensureProbe().style.display = "block";
+    } catch (_) {}
+  }
+  if (window.addEventListener) window.addEventListener("error", addErr, false);
+  try {
+    var p = ensureProbe();
+    window.__probeOK = true;
+  } catch (e) {
+    try { document.title = "probe-fail:" + (e && e.message); } catch (_) {}
+  }
+})();
+</script>
+
+</head>
+<body class="demo">
+<div id="storageWarn" role="alert" aria-live="polite">
+  <span class="sw-ico">⚠</span>
+  <span id="storageWarnMsg"></span>
+  <button class="sw-act" type="button" onclick="clearStorageWarn()">知道了</button>
+</div>
+<div class="app">
+  <!-- 顶栏：品牌 + 模式切换 -->
+  <header class="topbar">
+    <div class="brand">
+      <div class="logo">票</div>
+      <div>
+        <div class="brand-name">发票预审工作台</div>
+        <div class="brand-sub">财务合规预审 · 检查方案 v<span id="ver">0.3.1</span></div>
+      </div>
+    </div>
+    <div class="top-right">
+      <span id="subjectChip" class="subject-chip" style="display:none;" title="当前校验主体（R2 抬头/税号）"><span class="nm" id="subjectChipName">示例科技有限公司</span><button class="btn-edit" id="btnEditSubject" type="button">修改</button></span>
+      <div class="seg" role="group" aria-label="运行模式">
+        <button id="btnDemo" class="active">演示模式</button>
+        <button id="btnLive">真实模式</button>
+      </div>
+      <div style="position:relative;">
+        <button id="btnSettings" class="btn-settings" type="button" aria-label="设置">⚙</button>
+        <div id="settingsDrawer" class="settings-drawer">
+          <div class="sd-head"><span>设置</span><button id="btnSettingsClose" class="sd-close" type="button" aria-label="关闭设置">✕</button></div>
+          <h4>连接后端</h4>
+          <div class="fld">
+            <label for="backendUrl">服务地址</label>
+            <input id="backendUrl" type="text" inputmode="url" placeholder="https://xxx.trycloudflare.com 或 http://localhost:8000" style="font-size:16px;">
+          </div>
+          <div class="fld">
+            <label for="apiKey">接口密钥</label>
+            <input id="apiKey" type="password" autocomplete="off" placeholder="后端环境变量 INVOICE_API_KEY 的值" style="font-size:16px;">
+          </div>
+          <button id="btnTest" class="btn btn-ghost" style="margin-top:10px;">测试连接</button>
+          <div class="hint" id="connHint">地址与密钥仅保存在本浏览器，不发送到第三方。</div>
+          <h4 style="margin-top:16px;padding-top:12px;border-top:1px dashed var(--line);">企业主体设置（抬头 / 税号校验）</h4>
+          <div class="fld">
+            <label for="coName">企业名称</label>
+            <input id="coName" type="text" placeholder="本公司全称（例：示例科技有限公司）" style="font-size:16px;">
+          </div>
+          <div class="fld">
+            <label for="coTaxId">统一社会信用代码</label>
+            <input id="coTaxId" type="text" placeholder="18 位税号" style="font-size:16px;">
+          </div>
+          <button id="btnSaveCfg" class="btn btn-ghost" style="margin-top:10px;">保存企业主体</button>
+          <div class="hint" id="cfgHint">保存后 R2 将校验每张票购买方税号是否本公司：不一致 → 高风险；税号一致但名称差异 → 低风险提示。首版仅支持单主体（集团多法人/代开场景暂不覆盖）。</div>
+          <details id="rulesCfg" style="margin-top:14px;border:1px dashed var(--line);border-radius:8px;padding:10px 12px;">
+            <summary style="cursor:pointer;font-size:12.5px;font-weight:600;color:var(--sub);">检查方案预警标准校准（默认值见各输入框占位符）</summary>
+            <div style="margin-top:8px;font-size:12.5px;font-weight:600;color:var(--brand);">R3 连号</div>
+            <div class="fld"><label for="rcSerialTail">连号取票号末 N 位（2-8）</label><input id="rcSerialTail" type="number" min="2" max="8" placeholder="4" style="font-size:16px;"></div>
+            <div class="fld"><label for="rcSerialGap">窗口内相邻最大差值（0-10）</label><input id="rcSerialGap" type="number" min="0" max="10" placeholder="2" style="font-size:16px;"></div>
+            <div class="fld"><label for="rcSerialMin">窗口内最少票数（2-100）</label><input id="rcSerialMin" type="number" min="2" max="100" placeholder="3" style="font-size:16px;"></div>
+            <div style="margin-top:8px;font-size:12.5px;font-weight:600;color:var(--brand);">R4 类别限额（元，100-1 亿）</div>
+            <div class="fld"><label for="rcLimitTravel">差旅</label><input id="rcLimitTravel" type="number" min="100" placeholder="5000" style="font-size:16px;"></div>
+            <div class="fld"><label for="rcLimitEntertain">招待</label><input id="rcLimitEntertain" type="number" min="100" placeholder="3000" style="font-size:16px;"></div>
+            <div class="fld"><label for="rcLimitOffice">办公</label><input id="rcLimitOffice" type="number" min="100" placeholder="2000" style="font-size:16px;"></div>
+            <div class="fld"><label for="rcLimitTransport">交通</label><input id="rcLimitTransport" type="number" min="100" placeholder="1000" style="font-size:16px;"></div>
+            <div class="fld"><label for="rcLimitOther">其他</label><input id="rcLimitOther" type="number" min="100" placeholder="5000" style="font-size:16px;"></div>
+            <div class="fld"><label for="rcDefaultLimit">类别不在表内时的默认限额（元）</label><input id="rcDefaultLimit" type="number" min="100" placeholder="5000" style="font-size:16px;"></div>
+            <div style="margin-top:8px;font-size:12.5px;font-weight:600;color:var(--brand);">R6 / R8</div>
+            <div class="fld"><label for="rcConcentrate">同供应商同日票数预警标准（2-100）</label><input id="rcConcentrate" type="number" min="2" max="100" placeholder="6" style="font-size:16px;"></div>
+            <div class="fld"><label for="rcMaxTotal">单票金额上限（元，1 万-10 亿）</label><input id="rcMaxTotal" type="number" min="10000" placeholder="30000000" style="font-size:16px;"></div>
+            <div style="display:flex;gap:8px;margin-top:10px;">
+              <button id="btnSaveRules" class="btn btn-ghost" style="flex:1;">保存预警标准</button>
+              <button id="btnResetRules" class="btn btn-ghost" style="flex:1;">恢复默认</button>
+            </div>
+            <div class="hint" id="rulesHint">预警标准保存到本地后端 data/config.json（不入 Git）。变更会记录生效时间与配置标识，报告中标注"预警标准来自自定义配置"。</div>
+          </details>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <main class="layout">
+    <!-- 左栏：输入区 -->
+    <aside class="input-panel">
+      <section class="card card-pad">
+        <h3>上传发票</h3>
+        <div class="drop" id="dropZone" tabindex="0" role="button" aria-label="上传发票文件">
+          <div class="ic">📄</div>
+          <div class="t"><span class="desk">拖拽文件到此处，或点击选择</span><span class="mob">点击选择发票文件</span></div>
+          <div class="s">支持数电票 XML / OFD / PDF · 拍照识别（PNG/JPG）· 可多选</div>
+        </div>
+        <input id="fileInput" type="file" multiple accept=".xml,.ofd,.zip,.pdf,.png,.jpg,.jpeg" capture="environment" style="display:none">
+        <button id="btnCamera" class="btn btn-ghost camera-btn" type="button" style="margin-top:10px;width:100%;justify-content:center;align-items:center;gap:6px;">📷 拍照识别发票</button>
+        <div class="filelist" id="fileList"></div>
+        <button id="btnReview" class="btn btn-primary" style="margin-top:12px;">运行预审</button>
+        <div class="hint" id="runHint" style="margin-top:8px;line-height:1.6;">文件仅发往你配置的后端，不发送第三方 · 数电票归档需保留 XML 源文件（仅传 PDF / OFD 会提示补传）</div>
+      </section>
+
+      <section class="card card-pad demo-only">
+        <h3>演示样例</h3>
+        <div class="hint">4 张样例发票（含 1 张图片版本地识别、不上传）+ 1 个识别失败文件，覆盖重复报销、金额勾稽、差额征税、红冲关联、缺 XML、需人工复核场景。</div>
+        <button id="btnRun" class="btn btn-ghost" style="margin-top:10px;">重新运行演示</button>
+        <details class="card" style="margin-top:10px;border:1px dashed var(--line);background:#fafbfc;">
+          <summary style="cursor:pointer;padding:8px 12px;font-size:12.5px;font-weight:600;color:var(--sub);">数据限制说明（演示数据口径）</summary>
+          <div style="padding:8px 12px 10px;font-size:12px;color:#57606a;line-height:1.75;">
+            <div>· <b>本演示全部使用合成/脱敏数据</b>：不含任何真实发票；样例覆盖重复报销/差额征税/金额勾稽/红冲关联/识别低置信度复核等检查场景。</div>
+            <div>· 真实数据验证结果（文本型 14 张、图片版 38 张、机动车免税 31 张）已归档为基准集记录，源文件按数据红线验后删除，演示环境<b>不可重跑真实样本</b>。</div>
+            <div>· 预警标准已用 31 张真实样本校准（金额上限 100 万→3000 万），类别限额仍为财政部默认口径（待补样本）。</div>
+            <div>· "需人工复核"= 识别低置信度/勾稽不符/字段缺失的兜底标记，<b>不自动放行</b>；处置状态仅保存在本机浏览器，刷新可重置。</div>
+          </div>
+        </details>
+      </section>
+    </aside>
+
+    <!-- 右栏：输出区 -->
+    <section class="output-panel">
+      <div id="empty">
+        <div class="guide">
+          <div class="guide-head">
+            <div class="g-ic">🔍</div>
+            <div>
+              <div class="t">上传发票，开始预审</div>
+              <div class="s">自动识别票面信息 + 财务合规预审，四步完成发票入账前核查</div>
+            </div>
+          </div>
+          <div class="guide-steps">
+            <div class="step"><div class="n">1</div><div><b>上传发票</b><span>数电票 XML / OFD / PDF，或拍照识别，可多选</span></div></div>
+            <div class="step"><div class="n">2</div><div><b>自动识别</b><span>读取票面字段与金额税额，图片版发票本地识别</span></div></div>
+            <div class="step"><div class="n">3</div><div><b>合规预审</b><span>发票状态 / 重复报销 / 金额勾稽 / 红冲关联等检查</span></div></div>
+            <div class="step"><div class="n">4</div><div><b>处置与导出</b><span>复核确认后导出 Excel / CSV 记账表</span></div></div>
+          </div>
+          <div class="guide-note">文件仅发往你配置的后端，不发送第三方；真实数据本地处理、验完可删</div>
+        </div>
+      </div>
+      <div id="result" role="status" aria-live="polite" tabindex="-1"></div>
+    </section>
+  </main>
+</div>
+
+<script>
+"use strict";
+// F-06 PWA：放脚本最前（不依赖后续代码执行；secure context 才注册，HTTP 局域网自动跳过）
+if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost" || location.hostname === "127.0.0.1")) {
+  navigator.serviceWorker.register("service-worker.js").catch(function () {});
+}
+var __defProp = Object.defineProperty;
+var __defProps = Object.defineProperties;
+var __getOwnPropDescs = Object.getOwnPropertyDescriptors;
+var __getOwnPropSymbols = Object.getOwnPropertySymbols;
+var __hasOwnProp = Object.prototype.hasOwnProperty;
+var __propIsEnum = Object.prototype.propertyIsEnumerable;
+var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
+var __spreadValues = (a, b) => {
+  for (var prop in b || (b = {}))
+    if (__hasOwnProp.call(b, prop))
+      __defNormalProp(a, prop, b[prop]);
+  if (__getOwnPropSymbols)
+    for (var prop of __getOwnPropSymbols(b)) {
+      if (__propIsEnum.call(b, prop))
+        __defNormalProp(a, prop, b[prop]);
+    }
+  return a;
+};
+var __spreadProps = (a, b) => __defProps(a, __getOwnPropDescs(b));
+window.addEventListener("error", function(ev) {
+  try {
+    var bar = document.getElementById("errbar");
+    if (!bar) {
+      bar = document.createElement("div");
+      bar.id = "errbar";
+      bar.style.cssText = "position:fixed;top:0;left:0;right:0;z-index:9999;background:#7f1d1d;color:#fff;font:12px/1.5 monospace;padding:6px 10px;white-space:pre-wrap;max-height:90px;overflow:auto;";
+      document.body.appendChild(bar);
+    }
+    bar.textContent = "[页面错误] " + (ev.message || ev.type || "未知") + (ev.filename ? " @ " + ev.filename.split("/").pop() + ":" + ev.lineno : "");
+  } catch (_) {
+  }
+});
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s != null ? s : "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+const SEV_CLS = { "高": "high", "中": "mid", "低": "low" };
+const CONF_ALLOW = /* @__PURE__ */ new Set(["确定", "疑似"]);
+const DISCLAIMER = "本工作台基于发票文件结构化数据进行入账前检查辅助，不替代人工复核与税务判断；发现问题需核原始凭证，未发现异常不代表不存在异常；未检查、未执行的检查项不代表该项无风险；本结果不构成税务合规结论、审计意见或专业鉴证意见，最终以电子税务局查验结果及主管税务机关认定为准；检查方案版本与覆盖范围已列明。";
+const SCOPE_NOTE = "本报告基于数电票 XML 结构化数据的确定性规则生成；公开+合成集验证通过，真实分布未验证。";
+// ===== 预审报告数据模型（RV-91：Excel/PDF 共用单一来源；RV-92：处置状态快照注入，保持纯函数）=====
+function buildReportModel(d, opts) {
+  opts = opts || {};
+  const dispMap = opts.dispMap || {};
+  const s = d.summary || {};
+  const invs = d.invoices || [];
+  const findings = d.findings || [];
+  const rs = d.ruleset || {};
+  const now = new Date();
+  const pad = (n) => String(n).padStart(2, "0");
+  const nowStr = now.getFullYear() + "-" + pad(now.getMonth() + 1) + "-" + pad(now.getDate()) + " " + pad(now.getHours()) + ":" + pad(now.getMinutes()) + ":" + pad(now.getSeconds());
+  const nowCompact = now.getFullYear() + pad(now.getMonth() + 1) + pad(now.getDate()) + "-" + pad(now.getHours()) + pad(now.getMinutes()) + pad(now.getSeconds());
+  // 预审结论计数（与工作台 precheck 派生口径一致）
+  const pc = { "建议入账": 0, "建议核对": 0, "阻断入账": 0, "无法预审": 0 };
+  let pcAmt = { "建议入账": 0, "建议核对": 0, "阻断入账": 0, "无法预审": 0 };
+  invs.forEach((i) => { const p = i.precheck || "建议核对"; pc[p] = (pc[p] || 0) + 1; pcAmt[p] = (pcAmt[p] || 0) + Math.round(Number(i.total || 0) * 100); });  // RV-125: 整数分累加
+  // 蓝票/红冲分列
+  const blue = invs.filter((i) => (i.invoice_status || "normal") !== "red_flush" && (i.invoice_status || "normal") !== "void");
+  const red = invs.filter((i) => (i.invoice_status || "normal") === "red_flush");
+  const blueCnt = blue.length, redCnt = red.length;
+  const blueAmt = blue.reduce((a, i) => a + Math.round(Number(i.total || 0) * 100), 0);  // RV-125: 整数分
+  const redAmt = red.reduce((a, i) => a + Math.round(Number(i.total || 0) * 100), 0);  // RV-125: 整数分
+  // 开票日期区间
+  const dates = invs.map((i) => i.issue_date || "").filter(Boolean).sort();
+  const dateRange = dates.length ? dates[0] + " ~ " + dates[dates.length - 1] : "—";
+  // 优先处理项：按严重级别+涉及金额降序
+  const sevRank = { 高: 0, 中: 1, 低: 2 };
+  const prioByName = {};
+  findings.forEach((f) => { const n = f.rule_id; if (!prioByName[n]) prioByName[n] = { rule_id: n, count: 0, maxSev: 9, amt: 0 }; prioByName[n].count++; prioByName[n].maxSev = Math.min(prioByName[n].maxSev, sevRank[f.severity] != null ? sevRank[f.severity] : 9); });
+  const prio = Object.values(prioByName).sort((a, b) => (a.maxSev - b.maxSev) || (b.amt - a.amt)).slice(0, 5);
+  // 逐票结论：一行一票
+  const ticketRows = invs.map((i) => {
+    const fs = findings.filter((f) => f.invoice_no === i.invoice_no);
+    const sev = fs.length ? (fs.some((f) => f.severity === "高") ? "高" : fs.some((f) => f.severity === "中") ? "中" : "低") : "—";
+    return {
+      invoice_no: i.invoice_no, invoice_type: i.invoice_type || "", issue_date: i.issue_date || "",
+      kind: (i.invoice_status || "normal") === "red_flush" ? "红冲" : "蓝票",
+      seller_name: i.seller_name || "", amount: i.amount || "", tax: i.tax || "", total: i.total || "",
+      precheck: i.precheck || "建议核对", risk: sev, risk_tags: (i.risk_tags || []).join("、"),
+      problem_count: fs.length,
+      problems: fs.length ? fs.slice(0, 2).map((f) => f.message).join("；") + (fs.length > 2 ? "；等 " + fs.length + " 项" : "") : "未发现问题",
+      rule_ids: fs.map((f) => f.rule_id).join("、"),
+      status: "—"
+    };
+  });
+  const riskRows = findings.map((f) => {
+    const disp = dispMap[riskId(f)];
+    return {
+      rule_id: f.rule_id, rule_name: f.rule_name || f.rule_id, severity: f.severity || "中",
+      invoice_no: f.invoice_no || "", message: f.message || "", suggestion: f.suggestion || "",
+      status: disp && disp.status ? disp.status : "待处理"
+    };
+  });
+  return {
+    header: {
+      batchId: d.batch_id || "—", generatedAt: d.generated_at || nowStr, exportedAt: nowStr,
+      ruleset: (rs.name || "发票合规检查方案") + " v" + (rs.version || d.ruleset_version || ""),
+      effective: rs.effective_date || "", scope: rs.scope_note || d.scope_note || "",
+      source: opts.liveMode ? "真实模式（连接后端）" : "演示模式（内置样例）",
+      fileCount: s.file_count != null ? s.file_count : invs.length,
+      invoiceCount: invs.length,
+      failedCount: s.failed_count != null ? s.failed_count : 0,
+      totalCount: s.total_count != null ? s.total_count : invs.length
+    },
+    summary: {
+      invoiceCount: invs.length, dateRange, blueCnt, blueAmt: blueAmt / 100, redCnt, redAmt: redAmt / 100,  // RV-125: summary 存元
+      netAmt: (blueAmt + redAmt) / 100,  // RV-125: 分→元
+      amountSum: invs.reduce((a, i) => a + Math.round(Number(i.amount || 0) * 100), 0) / 100,  // RV-125: 分→元
+      // 税额口径与工作台 KPI 一致：不含红冲（红冲已单列负数展示）
+      taxSum: blue.reduce((a, i) => a + Math.round(Number(i.tax || 0) * 100), 0) / 100,  // RV-125: 分→元
+      precheck: pc, precheckAmt: Object.fromEntries(Object.entries(pcAmt).map(([k, v]) => [k, v / 100])),  // RV-125: summary 存元
+      prio, rulesEnabled: (d.rules_summary || {}).enabled_count != null ? d.rules_summary.enabled_count : 0,
+      findingsCount: findings.length
+    },
+    tickets: ticketRows,
+    risks: riskRows,
+    disclaimer: d.disclaimer || DISCLAIMER,
+    scopeNote: SCOPE_NOTE,
+    fileName: "预审报告_" + (d.batch_id || "batch").replace(/[^\w\u4e00-\u9fa5-]/g, "_") + "_" + nowCompact + ".xlsx"
+  };
+}
+// RV-92 B2：报告模型单一实例（memo 化）。数据指纹 + 处置快照指纹均不变时复用同一 m，
+// 保证 Excel 导出、PDF 预览、打印三处生成时间/处置状态/排序完全一致（导出即快照）。
+let __reportModelCache = null;
+function reportDataFp(d) {
+  const invs = d.invoices || [];
+  const nos = invs.map((i) => i.invoice_no + ":" + (i.precheck || "") + ":" + (i.total || "")).join("|");
+  const s = d.summary || {};
+  return fnv1a64([d.batch_id || "", nos, s.file_count, s.failed_count, s.total_count].join("|")).toString();
+}
+function getReportModel() {
+  const d = __lastReport;
+  if (!d) return null;
+  const dataFp = reportDataFp(d);
+  const dispFp = fnv1a64(JSON.stringify(loadDisp())).toString();
+  if (!__reportModelCache || __reportModelCache.dataFp !== dataFp || __reportModelCache.dispFp !== dispFp) {
+    __reportModelCache = { dataFp, dispFp, m: buildReportModel(d, { dispMap: loadDisp(), liveMode: !!(document.body && document.body.classList.contains("live")) }) };
+  }
+  return __reportModelCache.m;
+}
+// ===== 财务视角术语表（RV-83/84：去IT化，保留财务/税务行话）=====
+// 界面展示文案一律走本表映射；新增术语先在此登记再使用。
+const FIN_TERMS = {
+  // IT 词 → 财务词
+  "风险清单": "风险待办",
+  "发票明细": "逐票清单",
+  "规则分析": "检查项",
+  "规则命中": "发现问题",
+  "命中": "发现",
+  "未命中": "未发现异常",
+  "未执行": "未检查",
+  "解析失败": "识别失败",
+  "待处理": "待处理",
+  "已处理": "已处理",
+  "已忽略": "已忽略",
+  "自动通过": "未发现异常",
+  "待复核": "待复核",
+  "文件数": "文件数",
+  "价税合计": "价税合计",
+  "阈值": "预警标准",
+  "规则包": "检查方案",
+  "勾稽": "勾稽",
+  "口径": "统计口径",
+  // 财务/税务行话（保留，不翻译）
+  "红冲": "红冲",
+  "作废": "作废",
+  "进项税": "进项税",
+  "销项税": "销项税",
+  "抵扣": "抵扣",
+  "进项转出": "进项转出",
+  "异常凭证": "异常凭证",
+  "专票": "专票",
+  "普票": "普票",
+  "数电票": "数电票",
+  "失控发票": "失控发票",
+  "走逃失联": "走逃失联"
+};
+// ===== 证据链字段财务化映射（RV-86 追加：数据契约字段名保留，展示层翻译）=====
+// 数据层 evidence_chain[].field 保持接口契约（审计留痕），UI 用本表映射为财务语言
+const FIELD_TERMS = {
+  "source_hash": "文件一致性标识",
+  "sha256": "文件内容比对（结果：一致）",
+  "KCE": "识别置信度",
+  "TaxRate": "税率",
+  "Amount": "金额",
+  "ComTaxAm": "税额",
+  "备注": "备注",
+  "items": "明细行",
+  "红字发票对应的蓝字发票号码": "关联蓝字发票号码",
+  "file_hash": "文件一致性标识",
+  "serial_no": "发票号码",
+  "invoice_no": "发票号码",
+  "seller_taxid": "销售方税号",
+  "buyer_taxid": "购买方税号",
+  "tax_rate": "税率",
+  "amount": "金额",
+  "tax": "税额",
+  "total": "价税合计"
+};
+function fieldTerm(f) {
+  if (!f) return "";
+  // 精确匹配；若为路径式（items[2].ComTaxAm）拆分取末段映射
+  if (FIELD_TERMS[f] != null) return FIELD_TERMS[f];
+  const m = f.match(/(\w+)(?:\[\d+\])?\.(\w+)$/);
+  if (m && FIELD_TERMS[m[2]] != null) return m[1] === "items" ? `明细行·${FIELD_TERMS[m[2]]}` : FIELD_TERMS[m[2]];
+  return f;
+}
+// ===== P0 数据契约（RV-84/85）：每张发票的预审字段 =====
+// invoice_status: normal|red_flush|void|abnormal （发票状态查验 A）
+// file_format: xml|ofd|pdf|image （数电票归档 C）
+// precheck: 建议入账|建议核对|阻断入账|无法预审 （预审结论，第一层状态）
+// check_results: { code: {status:"pass|warn|block", message:"..."} }
+//   A=发票状态查验 B=金额税额勾稽 C=XML归档 D=异常凭证/进项转出 E=重复报销查重 F=红冲关联
+// risk_tags: string[] （供逐票清单展示的短标签）
+const CHECK_META = {
+  A: { name: "发票状态查验", short: "状态", step: "①票面基础" },
+  B: { name: "金额税额勾稽", short: "金额勾稽", step: "④金额勾稽" },
+  C: { name: "数电票归档", short: "归档", step: "⑤审批附件" },
+  D: { name: "异常凭证/进项转出", short: "异常", step: "①票面基础" },
+  E: { name: "重复报销查重", short: "查重", step: "②业务真实性" },
+  F: { name: "红冲关联", short: "红冲", step: "②业务真实性" }
+};
+const RULES_META = [
+  { rule_id: "R1", name: "重复报销 / 整文件重复", severity: "高" },
+  { rule_id: "R2", name: "抬头 / 税号校验", severity: "高" },
+  { rule_id: "R3", name: "连号异常", severity: "中" },
+  { rule_id: "R4", name: "超标准（类别限额）", severity: "中" },
+  { rule_id: "R6", name: "供应商集中度异常", severity: "中" },
+  { rule_id: "R7", name: "日期异常", severity: "中" },
+  { rule_id: "R8", name: "金额异常", severity: "高" },
+  { rule_id: "R9", name: "差额征税专项", severity: "中" },
+  { rule_id: "R10", name: "金额税额勾稽（行级）", severity: "高" },
+  { rule_id: "R11", name: "红冲关联", severity: "中" }
+];
+function buildRuleMetaMap(rules) {
+  const m = {};
+  (rules || []).forEach((r) => {
+    if (r && r.rule_id) m[r.rule_id] = r;
+  });
+  return m;
+}
+function resolveRuleMeta(ruleId, map) {
+  const m = map[ruleId];
+  if (m && m.name) return m.name;
+  console.warn("未知规则（响应 rules 未覆盖）:", ruleId);
+  return ruleId;
+}
+function demoRuleName(id) {
+  return (RULES_META.find((r) => r.rule_id === id) || {}).name || id;
+}
+// @demo-data:begin（RV-78：哨兵锚点，删改此行=命中 demo_data 需事前对齐）
+function demoReport() {
+  const now = /* @__PURE__ */ new Date();
+  const ts = now.getFullYear() + "-" + String(now.getMonth() + 1).padStart(2, "0") + "-" + String(now.getDate()).padStart(2, "0") + " " + String(now.getHours()).padStart(2, "0") + ":" + String(now.getMinutes()).padStart(2, "0") + ":" + String(now.getSeconds()).padStart(2, "0");
+  const rules = RULES_META.map((m) => __spreadProps(__spreadValues({}, m), { basis: "政策依据按主题引用（见 ruleset scope_note）", scope_note: "", state: "未命中" }));
+  const byId = (id) => rules.find((r) => r.rule_id === id);
+  byId("R1").state = "命中";
+  byId("R9").state = "命中";
+  byId("R10").state = "命中";
+  byId("R11").state = "命中";
+  byId("R2").state = "未执行（未配置企业主体）";
+  byId("R4").state = "未执行（未提供报销类别）";
+  return {
+    "summary": {
+      "file_count": 6,
+      "total_count": 5,
+      "total_amount": "2656.57",
+      "red_flush_amount": "-530.00",
+      "no_finding_count": 1,
+      "review_count": 4,
+      "failed_count": 1,
+      "human_review_count": 1
+    },
+    "findings": [
+      {
+        "rule_id": "R10",
+        "rule_name": "金额税额勾稽（行级）",
+        "severity": "高",
+        "confidence": "确定",
+        "invoice_no": "26440000000000100002",
+        "field": "items[2].ComTaxAm",
+        "message": "明细行税额与 金额×税率 不一致：行 3 金额 300.00×税率 0.06=18.00，票面税额 25.50，差 7.50",
+        "evidence": "0.09 与票面税率 0.06 冲突",
+        "suggestion": "核对原始凭证行 3 的金额/税率/税额录入，确认是否手工改数",
+        "evidence_chain": [
+          { "field": "items[2].Amount", "raw": "300.00", "value": "300.00", "row": 3, "note": "行金额" },
+          { "field": "items[2].TaxRate", "raw": "0.09", "value": "0.09", "row": 3, "note": "行税率（票面 0.06）" },
+          { "field": "items[2].ComTaxAm", "raw": "25.50", "value": "25.50", "row": 3, "note": "行税额 ≠ 300.00×0.06=18.00" }
+        ],
+        "explanation": { "what": "这张发票第三行明细对不上账：按行金额 300.00 元乘票面税率 6% 应为 18.00 元税额，但票面行税额写了 25.50 元，且行内税率标的是 9%，三个数互相矛盾。", "impact": "明细与合计勾稽断裂，直接影响进项税抵扣金额与入账金额；直接入账可能被税务比对异常，导致进项转出或报销被退回重开。", "action": "1）确认该行业务适用税率到底是 6% 还是 9%；2）核对是否录错金额/税率/税额；3）属开票方错误则请销方作废或红冲重开；4）修正后重新做勾稽校验并核对合计税额。", "who": "先由经办人核对业务实际税率，销方财务更正开票，本企业财务复核岗入账前复核。", "source": "llm:demo:synthetic", "prompt_version": "explain-v1" }
+      },
+      {
+        "rule_id": "R1",
+        "rule_name": "重复报销 / 整文件重复",
+        "severity": "高",
+        "confidence": "确定",
+        "invoice_no": "26440000000000100001",
+        "field": "source_hash",
+        "message": "整文件重复：文件内容与本批次 26440000000000100001（第 2 份）完全一致，疑似重复报销",
+        "evidence": "文件内容比对：一致",
+        "suggestion": "核对两笔是否为同一次报销误传；重复报销入账前需剔除",
+        "evidence_chain": [
+          { "field": "source_hash", "raw": "a3f2…c9d1", "value": "a3f2…c9d1", "row": null, "note": "文件内容比对：一致" }
+        ],
+        "explanation": { "what": "这张发票和本批次另一份文件内容完全相同（文件内容比对：一致），系统怀疑是同一张票被重复提交了两次。", "impact": "若两笔都入账，会造成同一笔费用重复报销、进项税重复抵扣，审计和税务检查时属于典型问题。", "action": "核对两笔是否为同一次报销误传；确认重复后只保留一笔，另一笔作废处理。", "who": "报销经办人核对来源，财务复核岗剔除重复后入账。", "source": "llm:demo:synthetic", "prompt_version": "explain-v1" }
+      },
+      {
+        "rule_id": "R9",
+        "rule_name": "差额征税专项",
+        "severity": "中",
+        "confidence": "疑似",
+        "invoice_no": "26440000000000100003",
+        "field": "备注",
+        "message": "差额征税票（识别到差额征税标识）但备注未含『差额征税：』声明，征收方式存疑",
+        "evidence": "差额征税标识置信度 0.07 / 备注=票务代理服务费",
+        "suggestion": "补充差额征税声明或核对征收方式",
+        "evidence_chain": [
+          { "field": "KCE", "raw": "0.07", "value": "0.07", "row": null, "note": "差额征税标识存在" },
+          { "field": "备注", "raw": "票务代理服务费", "value": "票务代理服务费", "row": null, "note": "未匹配『差额征税：』" }
+        ],
+        "explanation": { "what": "这张票按差额征税方式开具（票面有差额征税标识），但备注栏没有写『差额征税：』的固定声明文字，征收方式在票面上不完整。", "impact": "差额征税票的征收方式声明是开票规范要求；声明缺失可能导致税务系统比对不通过或报销时被质疑计税方式。", "action": "向开票方确认征收方式并补开发票或补充备注；核对差额扣除金额是否在票面完整反映。", "who": "开票方财务核对征收方式，本企业财务复核岗确认计税口径。", "source": "llm:demo:synthetic", "prompt_version": "explain-v1" }
+      },
+      {
+        "rule_id": "R11",
+        "rule_name": "红冲关联",
+        "severity": "中",
+        "confidence": "疑似",
+        "invoice_no": "26440000000000100004",
+        "field": "红字发票对应的蓝字发票号码",
+        "message": "红字发票关联的蓝字票号 26440000000000009999 不在本批次（历史库未接入，暂作提示）",
+        "evidence": "红字票：对应蓝票号存在但不可查",
+        "suggestion": "接入历史票库后核验红冲合法性；当前仅提示",
+        "evidence_chain": [
+          { "field": "红字发票对应的蓝字发票号码", "raw": "26440000000000009999", "value": "26440000000000009999", "row": null, "note": "历史库未接入，存在性未验证" }
+        ],
+        "explanation": { "what": "这是一张红字（负数）发票，它声明冲销一张蓝字发票，但那张被冲的蓝字发票不在本次上传的批次里，系统暂时无法验证红冲关系是否真实成立。", "impact": "红冲关系不成立可能导致负数发票入账后无对应蓝票，影响进项转出与申报数据的一致性。", "action": "从历史票库中找到对应蓝字发票核对红冲金额是否一致；当前版本未接入历史库，需人工确认。", "who": "财务复核岗核对红冲对应蓝票与金额。", "source": "llm:demo:synthetic", "prompt_version": "explain-v1" }
+      }
+    ],
+    "invoices": [
+      { "invoice_no": "26440000000000100001", "invoice_type": "增值税电子普通发票", "issue_date": "2026-08-01", "amount": "800.00", "tax": "48.00", "total": "848.00", "seller_name": "示例服务有限公司", "status": "待复核", "warning_count": 0, "item_count": 2, "invoice_status": "normal", "file_format": "pdf", "precheck": "阻断入账", "risk_tags": ["重复报销", "缺XML"], "check_results": { "A": { "status": "pass", "message": "发票状态：正常" }, "B": { "status": "pass", "message": "金额 800.00 + 税额 48.00 = 价税合计 848.00，勾稽一致" }, "C": { "status": "warn", "message": "仅上传 PDF，未检测到 XML 源文件。按入账归档要求需补传 XML" }, "D": { "status": "pass", "message": "未见异常凭证/进项转出提示" }, "E": { "status": "block", "message": "与另一份文件比对一致，疑似重复报销" }, "F": { "status": "pass", "message": "非红字发票" } } },
+      { "invoice_no": "26440000000000100002", "invoice_type": "增值税电子普通发票", "issue_date": "2026-08-02", "amount": "1500.00", "tax": "90.00", "total": "1590.00", "seller_name": "示例制造集团有限公司", "status": "待复核", "warning_count": 0, "item_count": 3, "invoice_status": "normal", "file_format": "xml", "precheck": "阻断入账", "risk_tags": ["金额勾稽"], "check_results": { "A": { "status": "pass", "message": "发票状态：正常" }, "B": { "status": "block", "message": "明细行税额与 金额×税率 不一致：行 3 金额 300.00×税率 0.06=18.00，票面税额 25.50，差 7.50" }, "C": { "status": "pass", "message": "已检测到 XML 源文件，满足数电票入账归档要求" }, "D": { "status": "pass", "message": "未见异常凭证/进项转出提示" }, "E": { "status": "pass", "message": "未发现重复报销" }, "F": { "status": "pass", "message": "非红字发票" } } },
+      { "invoice_no": "26440000000000100003", "invoice_type": "增值税电子普通发票（差额征税）", "issue_date": "2026-08-03", "amount": "86.20", "tax": "5.17", "total": "91.37", "seller_name": "示例票务代理有限公司", "status": "待复核", "warning_count": 0, "item_count": 1, "invoice_status": "normal", "file_format": "pdf", "precheck": "建议核对", "risk_tags": ["征收方式存疑", "缺XML"], "check_results": { "A": { "status": "pass", "message": "发票状态：正常" }, "B": { "status": "pass", "message": "金额 86.20 + 税额 5.17 = 价税合计 91.37，勾稽一致" }, "C": { "status": "warn", "message": "仅上传 PDF，未检测到 XML 源文件。按入账归档要求需补传 XML" }, "D": { "status": "pass", "message": "未见异常凭证/进项转出提示" }, "E": { "status": "pass", "message": "未发现重复报销" }, "F": { "status": "pass", "message": "非红字发票" } } },
+      { "invoice_no": "26440000000000100004", "invoice_type": "增值税电子普通发票（红字）", "issue_date": "2026-08-04", "amount": "-500.00", "tax": "-30.00", "total": "-530.00", "seller_name": "示例物流有限公司", "status": "待复核", "warning_count": 0, "item_count": 2, "invoice_status": "red_flush", "file_format": "pdf", "precheck": "建议核对", "risk_tags": ["红冲关联", "进项转出", "缺XML"], "check_results": { "A": { "status": "warn", "message": "发票状态：红字（负数）发票，需核验对应蓝字发票" }, "B": { "status": "pass", "message": "金额 -500.00 + 税额 -30.00 = 价税合计 -530.00，勾稽一致" }, "C": { "status": "warn", "message": "仅上传 PDF，未检测到 XML 源文件。按入账归档要求需补传 XML" }, "D": { "status": "warn", "message": "红冲票需确认原蓝票是否已认证抵扣；如已抵扣，涉及进项税额转出" }, "E": { "status": "pass", "message": "未发现重复报销" }, "F": { "status": "warn", "message": "关联蓝字发票 26440000000000009999 不在本批次（历史库未接入），需人工核验红冲金额与合法性" } }, "review_needed": true, "review_reason": "红字发票需人工核验对应蓝票与进项转出处理；识别关键字段置信度偏低（最低 0.62）" },
+      { "invoice_no": "26440000000000100005", "invoice_type": "增值税电子普通发票", "issue_date": "2026-08-05", "amount": "120.00", "tax": "7.20", "total": "127.20", "seller_name": "示例咨询有限公司", "status": "未见异常", "warning_count": 0, "item_count": 1, "invoice_status": "normal", "file_format": "xml", "precheck": "建议入账", "risk_tags": [], "check_results": { "A": { "status": "pass", "message": "发票状态：正常" }, "B": { "status": "pass", "message": "金额 120.00 + 税额 7.20 = 价税合计 127.20，勾稽一致" }, "C": { "status": "pass", "message": "已检测到 XML 源文件，满足数电票入账归档要求" }, "D": { "status": "pass", "message": "未见异常凭证/进项转出提示" }, "E": { "status": "pass", "message": "未发现重复报销" }, "F": { "status": "pass", "message": "非红字发票" } } }
+    ],
+    "failed": [{ "file": "扫描件-无文本层.pdf", "error": "PDF 无可提取文字且本地识别不可用，疑似扫描件" }],
+    "ruleset_version": "0.3.1",
+    "ruleset": { "version": "0.3.1", "name": "发票合规检查方案", "effective_date": "2026-09-23", "scope_note": "政策依据按主题引用；预警标准（限额/连号窗口/大额上限）为占位口径，待真实业务数据校准" },
+    "rules": rules,
+    "rules_summary": { "enabled_count": 10, "命中": 4, "未命中": 4, "未执行": 2, "note": "未检查的检查项因数据不足或未配置未判定，不计入发现问题" },
+    "generated_at": ts,
+    "batch_id": "demo-20260923-0001",
+    "scope_note": SCOPE_NOTE,
+    "disclaimer": DISCLAIMER
+  };
+}
+// @demo-data:end（RV-78：哨兵锚点，删改此行=命中 demo_data 需事前对齐）
+function explainBlock(f) {
+  const e = f.explanation;
+  if (!e) return "";
+  const isLLM = String(e.source || "").startsWith("llm:");
+  const tag = isLLM ? "通俗解释 · AI 生成（仅供参考，不替代人工复核）" : "通俗解释 · 模板（AI 服务未启用或不可用）";
+  const cls = isLLM ? "" : " tpl";
+  return `<div class="explain${cls}"><span class="tag">${esc(tag)}</span>
+    <b>是什么：</b>${esc(e.what)}<br/>
+    <b>影响：</b>${esc(e.impact)}<br/>
+    <b>怎么处理：</b>${esc(e.action)}<br/>
+    <b>该谁处理：</b>${esc(e.who)}</div>`;
+}
+const DISP_LABEL = { pending: "待处理", resolved: "已处理", ignored: "已忽略" };
+const DISP_KEY = "fap:dispositions:v1";
+const RID_SCHEMA = "v1";
+function fnv1a64(s) {
+  let h1 = 2166136261, h2 = 16777619 >>> 0;
+  let a = 2166136261, b = 16777619;
+  for (let i = 0; i < s.length; i++) {
+    const c = s.charCodeAt(i);
+    a ^= c;
+    a = Math.imul(a, 16777619) >>> 0;
+    b = b + c | 0;
+    b = Math.imul(b, 2246822507) >>> 0;
+  }
+  return a.toString(16).padStart(8, "0") + b.toString(16).padStart(8, "0");
+}
+function riskId(f) {
+  const path = (f.evidence_chain || []).map((e) => {
+    var _a;
+    return e.field + ":" + ((_a = e.raw) != null ? _a : "");
+  }).join("|");
+  return RID_SCHEMA + ":" + fnv1a64([f.rule_id, f.invoice_no || "", "0.3.1", path].join("|"));
+}
+// ===== T-008 本机存储容量检测（RV-172：字节口径，5MB 配额按 UTF-16 码元折算）=====
+function storageUsageBytes() {
+  // 估算 localStorage 已用字节（UTF-16 码元 * 2 ≈ 字节；多字节字符实际更大，取保守下限）
+  var used = 0;
+  try {
+    for (var i = 0; i < localStorage.length; i++) {
+      var k = localStorage.key(i);
+      var v = localStorage.getItem(k);
+      used += ((k ? k.length : 0) + (v ? v.length : 0)) * 2;
+    }
+  } catch (e) { return -1; }
+  return used;
+}
+var STORAGE_WARN_BYTES = 4 * 1024 * 1024; // 4MB 预警（配额约 5MB，留 1MB 余量）
+var __warnDismissed = false;
+function updateStorageWarn() {
+  var el = document.getElementById("storageWarn");
+  var msg = document.getElementById("storageWarnMsg");
+  if (!el || !msg) return;
+  var used = storageUsageBytes();
+  var text = "";
+  if (window.__dispStoreFail || window.__revStoreFail) {
+    text = "本机存储不可用：处置与复核记录可能无法保存（数据仅存本机浏览器，无云端）。请导出备份后清理旧发票。";
+  } else if (used > STORAGE_WARN_BYTES) {
+    text = "本机存储预警：已用约 " + (used / 1048576).toFixed(1) + " MB（浏览器配额各不同，约 5MB）。处置与复核记录仅保存在本机（无云端），接近上限后无法保存新记录，请导出备份并清理旧数据。";
+  }
+  if (text && !__warnDismissed) {
+    msg.textContent = text;
+    el.classList.add("show");
+  } else {
+    el.classList.remove("show");
+  }
+}
+function clearStorageWarn() {
+  __warnDismissed = true;
+  document.getElementById("storageWarn").classList.remove("show");
+}
+function loadDisp() {
+  try {
+    return JSON.parse(localStorage.getItem(DISP_KEY) || "{}");
+  } catch (e) {
+    return {};
+  }
+}
+const DISP_MAX = 500;
+function saveDisp(d) {
+  const keys = Object.keys(d);
+  if (keys.length > DISP_MAX) {
+    const sorted = keys.filter((k) => d[k] && d[k].updatedAt).sort((a, b) => d[a].updatedAt < d[b].updatedAt ? -1 : 1);
+    const drop = keys.length - DISP_MAX;
+    sorted.slice(0, drop).forEach((k) => delete d[k]);
+  }
+  try {
+    localStorage.setItem(DISP_KEY, JSON.stringify(d));
+    updateStorageWarn();
+    return true;
+  } catch (e) {
+    window.__dispStoreFail = true;
+    updateStorageWarn();
+    return false;
+  }
+}
+function getDisp(id) {
+  return loadDisp()[id] || null;
+}
+function setDisp(id, status) {
+  const d = loadDisp();
+  if (status === "pending") delete d[id];
+  else d[id] = { status, updatedAt: (/* @__PURE__ */ new Date()).toISOString() };
+  if (!saveDisp(d)) window.__dispStoreFail = true;
+}
+window.addEventListener("storage", (e) => {
+  if (e.key === DISP_KEY && __lastReport) renderReport();
+});
+const REV_KEY = "fap:review:v1";
+const REV_FIELDS = [
+  { k: "invoice_no", label: "发票号码" },
+  { k: "invoice_type", label: "票种" },
+  { k: "issue_date", label: "开票日期" },
+  { k: "amount", label: "金额（不含税）" },
+  { k: "tax", label: "税额" },
+  { k: "total", label: "价税合计" },
+  { k: "seller_name", label: "销售方名称" },
+  { k: "seller_taxid", label: "销售方税号" },
+  { k: "buyer_name", label: "购买方名称" },
+  { k: "buyer_taxid", label: "购买方税号" }
+];
+function loadRev() {
+  try {
+    return JSON.parse(localStorage.getItem(REV_KEY) || "{}");
+  } catch (e) {
+    return {};
+  }
+}
+function saveRev(d) {
+  try {
+    localStorage.setItem(REV_KEY, JSON.stringify(d));
+    updateStorageWarn();
+    return true;
+  } catch (e) {
+    window.__revStoreFail = true;
+    updateStorageWarn();
+    return false;
+  }
+}
+function getRev(invNo) {
+  return loadRev()[invNo] || null;
+}
+function setRev(invNo, rec) {
+  const d = loadRev();
+  if (rec === null) delete d[invNo];
+  else d[invNo] = rec;
+  if (!saveRev(d)) window.__revStoreFail = true;
+  closeRevModal();
+  if (__lastReport) renderReport();
+}
+function _findInv(invNo) {
+  return __lastReport && (__lastReport.invoices || []).find((x) => x.invoice_no === invNo) || null;
+}
+function openReviewModal(invNo) {
+  const i = _findInv(invNo);
+  if (!i) return;
+  const rec = getRev(invNo);
+  const reason = esc(i.review_reason || "识别低置信度 / 勾稽不一致 / 字段缺失");
+  const fields = REV_FIELDS.map((f) => {
+    var _a, _b, _c;
+    const val = rec ? (_b = (_a = rec.current[f.k]) != null ? _a : i[f.k]) != null ? _b : "" : (_c = i[f.k]) != null ? _c : "";
+    return `<div class="rev-row"><label>${f.label}</label><input class="rev-in" data-f="${f.k}" value="${esc(val)}"></div>`;
+  }).join("");
+  const statusNote = rec ? `<div class="rev-done-note">${rec.corrected ? "已修正 " + Object.keys(rec.corrected_fields || {}).length + " 项" : "已确认无误"} · ${esc((rec.reviewedAt || "").slice(0, 16))}</div>` : `<div class="rev-todo-note">待人工复核：${reason}</div>`;
+  const ov = document.createElement("div");
+  ov.className = "rev-overlay";
+  ov.id = "revOverlay";
+  ov.innerHTML = `<div class="rev-modal">
+    <div class="rev-head">复核工作台 · 票 ${esc(shortNo(invNo))}</div>
+    ${statusNote}
+    <div class="rev-fields">${fields}</div>
+    <div class="rev-audit">${rec ? auditHtml(rec) : `<span class="hint">留痕：确认/修正将记录原始快照与操作流水（仅保存在本机浏览器，审计以导出为准）。修正值不参与检查判定与处置（处置基于识别原始值）</span>`}</div>
+    <div class="rev-actions">
+      <button class="btn-ghost" onclick="closeRevModal()">取消</button>
+      <button class="btn-ghost" onclick="reviewAction('${esc(invNo)}','confirm')">确认无误</button>
+      <button class="btn" onclick="reviewAction('${esc(invNo)}','save')">保存修正</button>
+      ${rec ? `<button class="btn-ghost" onclick="reviewAction('${esc(invNo)}','clear')">重置复核</button>` : ""}
+    </div>
+  </div>`;
+  document.body.appendChild(ov);
+}
+function closeRevModal() {
+  const o = document.getElementById("revOverlay");
+  if (o) o.remove();
+}
+function auditHtml(rec) {
+  const rows = (rec.auditLog || []).map((a) => {
+    var _a, _b;
+    const fname = (REV_FIELDS.find((f) => f.k === a.field) || {}).label || fieldTerm(a.field) || a.field;
+    return `<div class="rev-audit-row"><b>${esc(a.t || "")}</b> ${esc(a.op || "")}：${esc(fname)} "${esc((_a = a.from) != null ? _a : "")}" → "${esc((_b = a.to) != null ? _b : "")}"</div>`;
+  }).join("");
+  return `<div class="rev-audit-title">操作流水</div>${rows || `<div class="hint">（无流水）</div>`}`;
+}
+function reviewAction(invNo, action) {
+  const ov = document.getElementById("revOverlay");
+  if (!ov) return;
+  const i = _findInv(invNo);
+  if (!i) return;
+  const oldRec = getRev(invNo);
+  const original = oldRec && oldRec.original || (() => {
+    const o = {};
+    REV_FIELDS.forEach((f) => {
+      var _a;
+      return o[f.k] = (_a = i[f.k]) != null ? _a : "";
+    });
+    return o;
+  })();
+  const current = {}, corrected_fields = {}, auditLog = (oldRec && oldRec.auditLog || []).slice();
+  let changed = false;
+  ov.querySelectorAll(".rev-in").forEach((inp) => {
+    var _a, _b;
+    const k = inp.dataset.f;
+    const v = inp.value.trim();
+    current[k] = v;
+    const from = oldRec && oldRec.current ? (_a = oldRec.current[k]) != null ? _a : "" : (_b = original[k]) != null ? _b : "";
+    if (String(from != null ? from : "") !== v) {
+      corrected_fields[k] = { from, to: v };
+      auditLog.push({ t: (/* @__PURE__ */ new Date()).toISOString(), op: action === "confirm" ? "自动对齐" : "人工修正", field: k, from, to: v });
+      changed = true;
+    }
+  });
+  if (action === "clear") {
+    if (!window.confirm("重置将删除本票复核记录（含修正与流水），回滚到待人工复核；底层识别结果不受影响。继续？")) return;
+    setRev(invNo, null);
+    return;
+  }
+  const reviewed = true;
+  let corrected = Boolean(changed) || !!(oldRec && oldRec.corrected);
+  if (!changed && oldRec) {
+    Object.assign(corrected_fields, oldRec.corrected_fields || {});
+    corrected = corrected || Boolean(oldRec.corrected);
+  }
+  if (action === "confirm" && oldRec && oldRec.corrected) {
+    auditLog.push({ t: (/* @__PURE__ */ new Date()).toISOString(), op: "复核确认（保留修正）", field: "—", from: "corrected", to: "corrected" });
+  }
+  setRev(invNo, { invoice_no: invNo, original, current, corrected_fields, reviewed, corrected, reviewedAt: (/* @__PURE__ */ new Date()).toISOString(), auditLog });
+}
+function fmtMoney(v) {
+  if (v === null || v === void 0 || v === "") return "—";
+  const s = String(v).trim();
+  if (!/^-?\d+(\.\d+)?$/.test(s)) return esc(v);
+  const neg = s.startsWith("-");
+  const [i, d] = (neg ? s.slice(1) : s).split(".");
+  const g = i.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  return (neg ? "-" : "") + "¥" + g + (d !== void 0 ? "." + d : "");
+}
+const EXPORT_COLUMNS = [
+  { k: "invoice_no", h: "发票号码", t: "text" },
+  { k: "invoice_type", h: "票种", t: "text" },
+  { k: "issue_date", h: "开票日期", t: "text" },
+  { k: "amount", h: "金额", t: "number" },
+  { k: "tax", h: "税额", t: "number" },
+  { k: "total", h: "价税合计", t: "number" },
+  { k: "seller_name", h: "销售方", t: "text" },
+  { k: "seller_taxid", h: "销售方税号", t: "text" },
+  { k: "buyer_name", h: "购买方", t: "text" },
+  { k: "review_state", h: "数据可信度", t: "text" },
+  { k: "corrected", h: "修正字段", t: "text" },
+  { k: "audit_log", h: "修正流水", t: "text" },
+  { k: "reviewed_at", h: "复核时间", t: "text" }
+];
+function buildExportRows() {
+  const d = __lastReport;
+  if (!d || !(d.invoices || []).length) return null;
+  const rows = [];
+  (d.invoices || []).forEach((i) => {
+    const rec = getRev(i.invoice_no);
+    const st = rec ? rec.corrected ? "数据已修正" : "数据已确认" : i.review_needed ? "待人工复核" : "自动通过";
+    const cf = rec ? Object.keys(rec.corrected_fields || {}).map((k) => (REV_FIELDS.find((f) => f.k === k) || {}).label || fieldTerm(k) || k).join(";") : "";
+    const log = rec ? (rec.auditLog || []).map((a) => `${(REV_FIELDS.find((f) => f.k === a.field) || {}).label || fieldTerm(a.field) || a.field}:${a.from}→${a.to}`).join(" | ") : "";
+    const cur = rec ? rec.current : i;
+    rows.push({
+      invoice_no: i.invoice_no,
+      invoice_type: i.invoice_type,
+      issue_date: i.issue_date,
+      amount: cur.amount,
+      tax: cur.tax,
+      total: cur.total,
+      seller_name: cur.seller_name,
+      seller_taxid: cur.seller_taxid || "",
+      buyer_name: cur.buyer_name || "",
+      review_state: st,
+      corrected: cf,
+      audit_log: log,
+      reviewed_at: rec ? (rec.reviewedAt || "").slice(0, 16) : ""
+    });
+  });
+  return rows;
+}
+const XL_CRC_TABLE = (() => {
+  const tt = new Uint32Array(256);
+  for (let n = 0; n < 256; n++) {
+    let c = n;
+    for (let k = 0; k < 8; k++) c = c & 1 ? 3988292384 ^ c >>> 1 : c >>> 1;
+    tt[n] = c >>> 0;
+  }
+  return tt;
+})();
+function xlCrc32(bytes) {
+  let c = 4294967295;
+  for (let i = 0; i < bytes.length; i++) c = XL_CRC_TABLE[(c ^ bytes[i]) & 255] ^ c >>> 8;
+  return (c ^ 4294967295) >>> 0;
+}
+function xlXmlSan(v) {
+  let s = String(v != null ? v : "");
+  if (/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F-\x9F]/.test(s)) s = s.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F-\x9F]/g, "");
+  let out = "", first = true;
+  for (const ch of s) {
+    const c = ch.codePointAt(0);
+    if (c >= 55296 && c <= 57343) {
+      out += "�";
+      continue;
+    }
+    if (first) first = false;
+    if (out.length >= 32767) break;
+    out += ch;
+  }
+  return { text: out.replace(/[<>&'"]/g, (m) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", "'": "&apos;", '"': "&quot;" })[m]), hasSpace: /^\s|\s$/.test(s) };
+}
+function xlColName(idx) {
+  let s = "";
+  idx++;
+  while (idx > 0) {
+    const m = (idx - 1) % 26;
+    s = String.fromCharCode(65 + m) + s;
+    idx = Math.floor((idx - 1) / 26);
+  }
+  return s;
+}
+function xlZip(files) {
+  const enc = new TextEncoder();
+  const parts = [];
+  let offset = 0;
+  const central = [];
+  for (const name in files) {
+    const nb = enc.encode(name), db = files[name], crc = xlCrc32(db);
+    const lh = new DataView(new ArrayBuffer(30 + nb.length));
+    lh.setUint32(0, 67324752, true);
+    lh.setUint16(4, 20, true);
+    lh.setUint16(6, 2048, true);
+    lh.setUint16(8, 0, true);
+    lh.setUint16(10, 0, true);
+    lh.setUint16(12, 0, true);
+    lh.setUint32(14, crc, true);
+    lh.setUint32(18, db.length, true);
+    lh.setUint32(22, db.length, true);
+    lh.setUint16(26, nb.length, true);
+    lh.setUint16(28, 0, true);
+    nb.forEach((b, i) => lh.setUint8(30 + i, b));
+    const lhB = new Uint8Array(lh.buffer);
+    parts.push(lhB, db);
+    central.push({ nb, crc, size: db.length, offset });
+    offset += lhB.length + db.length;
+  }
+  const cdStart = offset;
+  let cdSize = 0;
+  for (const c of central) {
+    const ch = new DataView(new ArrayBuffer(46 + c.nb.length));
+    ch.setUint32(0, 33639248, true);
+    ch.setUint16(4, 20, true);
+    ch.setUint16(6, 20, true);
+    ch.setUint16(8, 2048, true);
+    ch.setUint16(10, 0, true);
+    ch.setUint16(12, 0, true);
+    ch.setUint16(14, 0, true);
+    ch.setUint32(16, c.crc, true);
+    ch.setUint32(20, c.size, true);
+    ch.setUint32(24, c.size, true);
+    ch.setUint16(28, c.nb.length, true);
+    ch.setUint16(30, 0, true);
+    ch.setUint16(32, 0, true);
+    ch.setUint16(34, 0, true);
+    ch.setUint16(36, 0, true);
+    ch.setUint32(38, 0, true);
+    ch.setUint32(42, c.offset, true);
+    c.nb.forEach((b, i) => ch.setUint8(46 + i, b));
+    parts.push(new Uint8Array(ch.buffer));
+    cdSize += 46 + c.nb.length;
+  }
+  const eocd = new DataView(new ArrayBuffer(22));
+  eocd.setUint32(0, 101010256, true);
+  eocd.setUint16(4, 0, true);
+  eocd.setUint16(6, 0, true);
+  eocd.setUint16(8, central.length, true);
+  eocd.setUint16(10, central.length, true);
+  eocd.setUint32(12, cdSize, true);
+  eocd.setUint32(16, cdStart, true);
+  eocd.setUint16(20, 0, true);
+  parts.push(new Uint8Array(eocd.buffer));
+  const total = parts.reduce((s, u) => s + u.length, 0), out = new Uint8Array(total);
+  let o = 0;
+  for (const u of parts) {
+    out.set(u, o);
+    o += u.length;
+  }
+  return out;
+}
+function exportInvoicesXLSX() {
+  const rows = buildExportRows();
+  if (!rows) {
+    alert("无发票数据可导出");
+    return;
+  }
+  const enc = (s) => new TextEncoder().encode(s);
+  let sheetXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>';
+  const cell = (ref, col, v) => {
+    if (v === null || v === void 0 || v === "") return `<c r="${ref}"/>`;
+    let s = String(v);
+    if (col.t === "number") {
+      const tr = s.trim();
+      if (/^-?\d+(\.\d+)?$/.test(tr) && tr.replace(/[^0-9]/g, "").length <= 15)
+        return `<c r="${ref}" s="1"><v>${tr}</v></c>`;
+      const t1 = xlXmlSan(s);
+      return `<c r="${ref}" t="inlineStr"><is><t${t1.hasSpace ? ' xml:space="preserve"' : ""}>${t1.text}</t></is></c>`;
+    }
+    const t2 = xlXmlSan(s);
+    return `<c r="${ref}" t="inlineStr"><is><t${t2.hasSpace ? ' xml:space="preserve"' : ""}>${t2.text}</t></is></c>`;
+  };
+  let rowXml = '<row r="1">';
+  EXPORT_COLUMNS.forEach((c, i) => {
+    const th = xlXmlSan(c.h);
+    rowXml += `<c r="${xlColName(i)}1" t="inlineStr"><is><t${th.hasSpace ? ' xml:space="preserve"' : ""}>${th.text}</t></is></c>`;
+  });
+  sheetXml += rowXml + "</row>";
+  rows.forEach((r, ri) => {
+    let rx = `<row r="${ri + 2}">`;
+    EXPORT_COLUMNS.forEach((c, ci) => {
+      rx += cell(xlColName(ci) + (ri + 2), c, r[c.k]);
+    });
+    sheetXml += rx + "</row>";
+  });
+  sheetXml += "</sheetData></worksheet>";
+  const files = {
+    "[Content_Types].xml": enc('<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>'),
+    "_rels/.rels": enc('<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>'),
+    "xl/workbook.xml": enc('<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="发票清单" sheetId="1" r:id="rId1"/></sheets></workbook>'),
+    "xl/_rels/workbook.xml.rels": enc('<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>'),
+    "xl/worksheets/sheet1.xml": enc(sheetXml),
+    "xl/styles.xml": enc('<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><numFmts count="1"><numFmt numFmtId="164" formatCode="&quot;¥&quot;#,##0.00;[Red]-&quot;¥&quot;#,##0.00"/></numFmts><fonts count="1"><font><sz val="11"/><name val="Calibri"/></font></fonts><fills count="1"><fill><patternFill patternType="none"/></fill></fills><borders count="1"><border/></borders><cellStyleXfs count="1"><xf/></cellStyleXfs><cellXfs count="2"><xf xfId="0"/><xf xfId="0" numFmtId="164" applyNumberFormat="1"/></cellXfs></styleSheet>')
+  };
+  const zip = xlZip(files);
+  const blob = new Blob([zip], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "invoice-precheck-ledger-" + (/* @__PURE__ */ new Date()).toISOString().slice(0, 10) + ".xlsx";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 5e3);
+}
+function exportInvoicesCSV() {
+  const data = buildExportRows();
+  if (!data) {
+    alert("无发票数据可导出");
+    return;
+  }
+  const lines = [["# 发票清单（" + data.length + " 张） · 生成 " + (/* @__PURE__ */ new Date()).toISOString() + " · 复核记录来源=本浏览器localStorage(可清空,审计以本导出为准)"]];
+  lines.push(EXPORT_COLUMNS.map((c) => c.h));
+  data.forEach((r) => {
+    lines.push(EXPORT_COLUMNS.map((c) => c.t === "number" ? csvNumberCell(r[c.k]) : csvCell(r[c.k], true)));
+  });
+  const csv = "\uFEFF" + lines.map((r) => r.join(",")).join("\n");
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "invoice-precheck-list-" + (/* @__PURE__ */ new Date()).toISOString().slice(0, 10) + ".csv";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+}
+function exportReportXLSX() {
+  if (!__lastReport) { alert("无报告数据可导出"); return; }
+  const m = getReportModel();
+  const enc = (s) => new TextEncoder().encode(s);
+  const numCell = (ref, v) => {
+    const tr = String(v != null ? v : "").trim();
+    return /^-?\d+(\.\d+)?$/.test(tr) ? `<c r="${ref}" s="2"><v>${tr}</v></c>` : `<c r="${ref}"/>`;
+  };
+  const txtCell = (ref, v) => {
+    const t = xlXmlSan(v);
+    return `<c r="${ref}" t="inlineStr"><is><t${t.hasSpace ? ' xml:space="preserve"' : ""}>${t.text}</t></is></c>`;
+  };
+  const headCell = (ref, v) => {
+    const t = xlXmlSan(v);
+    return `<c r="${ref}" s="1" t="inlineStr"><is><t${t.hasSpace ? ' xml:space="preserve"' : ""}>${t.text}</t></is></c>`;
+  };
+  // Sheet1 预审摘要：垂直布局 批次头→统计→结论分布→优先处理→方案与免责
+  const s1 = [];
+  let r1 = 1;
+  const row = (cells) => { s1.push(`<row r="${r1}">${cells}</row>`); r1++; };
+  row(headCell("A" + r1, m.header.batchId + " · 发票预审报告"));
+  row(txtCell("A" + r1, "生成时间：" + m.header.exportedAt + " · 批次生成：" + (m.header.generatedAt || "—")));
+  row(txtCell("A" + r1, "检查方案：" + m.header.ruleset + "（生效 " + m.header.effective + "） · 数据来源：" + m.header.source));
+  row(txtCell("A" + r1, "统计范围：本批 " + m.header.fileCount + " 个文件（发票 " + m.header.invoiceCount + " 张 + 识别失败 " + m.header.failedCount + " 个）"));
+  row(txtCell("A" + r1, ""));
+  row(headCell("A" + r1, "一、统计摘要"));
+  row(txtCell("A" + r1, "发票张数"), numCell("C" + r1, m.summary.invoiceCount));
+  row(txtCell("A" + r1, "开票日期区间"), txtCell("C" + r1, m.summary.dateRange));
+  row(txtCell("A" + r1, "价税合计净额"), numCell("C" + r1, m.summary.netAmt.toFixed(2)));
+  row(txtCell("A" + r1, "其中：蓝票（" + m.summary.blueCnt + " 张）"), numCell("C" + r1, m.summary.blueAmt.toFixed(2)));
+  row(txtCell("A" + r1, "其中：红字冲减（" + m.summary.redCnt + " 张，负数）"), numCell("C" + r1, m.summary.redAmt.toFixed(2)));
+  row(txtCell("A" + r1, "金额（不含税）合计"), numCell("C" + r1, m.summary.amountSum.toFixed(2)));
+  row(txtCell("A" + r1, "税额（不含红冲）"), numCell("C" + r1, m.summary.taxSum.toFixed(2)));
+  row(txtCell("A" + r1, ""));
+  row(headCell("A" + r1, "二、预审结论分布（张数 / 占比 / 涉及金额）"));
+  const pcTotal = m.summary.invoiceCount || 1;
+  [["建议入账", "pass"], ["建议核对", "review"], ["阻断入账", "block"], ["无法预审", "unknown"]].forEach(([name]) => {
+    const cnt = m.summary.precheck[name] || 0;
+    const amt = m.summary.precheckAmt[name] || 0;
+    row(txtCell("A" + r1, name), numCell("C" + r1, cnt), txtCell("D" + r1, (cnt / pcTotal * 100).toFixed(1) + "%"), numCell("E" + r1, amt.toFixed(2)));
+  });
+  row(txtCell("A" + r1, ""));
+  row(headCell("A" + r1, "三、优先处理项"));
+  if (!m.summary.prio.length) { row(txtCell("A" + r1, "本批无命中问题")); }
+  m.summary.prio.forEach((p) => { row(txtCell("A" + r1, p.rule_id + "（命中 " + p.count + " 条）")); });
+  row(txtCell("A" + r1, ""));
+  row(headCell("A" + r1, "四、检查方案与口径"));
+  row(txtCell("A" + r1, "启用检查项：" + m.summary.rulesEnabled + " 条 · 触发问题：" + m.summary.findingsCount + " 条"));
+  row(txtCell("A" + r1, "范围说明：" + m.header.scope));
+  row(txtCell("A" + r1, ""));
+  row(headCell("A" + r1, "五、免责声明"));
+  row(txtCell("A" + r1, m.disclaimer));
+  row(txtCell("A" + r1, "生成方式：浏览器本地生成，数据未上传第三方。"));
+  const sheet1Xml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><cols><col min="1" max="1" width="34" customWidth="1"/><col min="2" max="2" width="3" customWidth="1"/><col min="3" max="3" width="18" customWidth="1"/><col min="4" max="4" width="10" customWidth="1"/><col min="5" max="5" width="14" customWidth="1"/></cols><sheetData>' + s1.join("") + '</sheetData></worksheet>';
+  // Sheet2 逐票结论
+  const tCols = ["发票号码", "票种", "开票日期", "蓝/红", "销售方", "金额", "税额", "价税合计", "预审结论", "风险等级", "风险标签", "问题数", "问题摘要", "涉及检查项"];
+  let s2 = '<sheetData>';
+  s2 += `<row r="1">${tCols.map((c, i) => headCell(xlColName(i) + "1", c)).join("")}</row>`;
+  m.tickets.forEach((t, ti) => {
+    const r = ti + 2;
+    s2 += `<row r="${r}">` + txtCell("A" + r, t.invoice_no) + txtCell("B" + r, t.invoice_type) + txtCell("C" + r, t.issue_date) + txtCell("D" + r, t.kind) + txtCell("E" + r, t.seller_name) + numCell("F" + r, t.amount) + numCell("G" + r, t.tax) + numCell("H" + r, t.total) + txtCell("I" + r, t.precheck) + txtCell("J" + r, t.risk) + txtCell("K" + r, t.risk_tags) + numCell("L" + r, t.problem_count) + txtCell("M" + r, t.problems) + txtCell("N" + r, t.rule_ids) + "</row>";
+  });
+  s2 += '</sheetData>';
+  const sheet2Xml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><cols><col min="1" max="1" width="20" customWidth="1"/><col min="2" max="2" width="20" customWidth="1"/><col min="3" max="3" width="12" customWidth="1"/><col min="4" max="4" width="6" customWidth="1"/><col min="5" max="5" width="24" customWidth="1"/><col min="6" max="8" width="12" customWidth="1"/><col min="9" max="9" width="10" customWidth="1"/><col min="10" max="10" width="8" customWidth="1"/><col min="11" max="11" width="22" customWidth="1"/><col min="12" max="12" width="6" customWidth="1"/><col min="13" max="13" width="50" customWidth="1"/><col min="14" max="14" width="14" customWidth="1"/></cols><sheetData>' + s2 + '</sheetData><autoFilter ref="A1:N' + (m.tickets.length + 1) + '"/><sheetViews><sheetView><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews></worksheet>';
+  // Sheet3 风险清单
+  const rCols = ["检查项", "检查项名称", "严重级别", "发票号码", "问题描述", "建议", "处置状态"];
+  let s3 = '<sheetData>';
+  s3 += `<row r="1">${rCols.map((c, i) => headCell(xlColName(i) + "1", c)).join("")}</row>`;
+  m.risks.forEach((f, fi) => {
+    const r = fi + 2;
+    s3 += `<row r="${r}">` + txtCell("A" + r, f.rule_id) + txtCell("B" + r, f.rule_name) + txtCell("C" + r, f.severity) + txtCell("D" + r, f.invoice_no) + txtCell("E" + r, f.message) + txtCell("F" + r, f.suggestion) + txtCell("G" + r, f.status) + "</row>";
+  });
+  s3 += '</sheetData>';
+  const sheet3Xml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><cols><col min="1" max="1" width="10" customWidth="1"/><col min="2" max="2" width="18" customWidth="1"/><col min="3" max="3" width="8" customWidth="1"/><col min="4" max="4" width="20" customWidth="1"/><col min="5" max="5" width="60" customWidth="1"/><col min="6" max="6" width="40" customWidth="1"/><col min="7" max="7" width="10" customWidth="1"/></cols><sheetData>' + s3 + '</sheetData><autoFilter ref="A1:G' + (m.risks.length + 1) + '"/><sheetViews><sheetView><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews></worksheet>';
+  const files = {
+    "[Content_Types].xml": enc('<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/worksheets/sheet2.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/worksheets/sheet3.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>'),
+    "_rels/.rels": enc('<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>'),
+    "xl/workbook.xml": enc('<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="预审摘要" sheetId="1" r:id="rId1"/><sheet name="逐票结论" sheetId="2" r:id="rId2"/><sheet name="风险清单" sheetId="3" r:id="rId3"/></sheets></workbook>'),
+    "xl/_rels/workbook.xml.rels": enc('<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet2.xml"/><Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet3.xml"/><Relationship Id="rId4" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>'),
+    "xl/worksheets/sheet1.xml": enc(sheet1Xml),
+    "xl/worksheets/sheet2.xml": enc(sheet2Xml),
+    "xl/worksheets/sheet3.xml": enc(sheet3Xml),
+    "xl/styles.xml": enc('<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><numFmts count="1"><numFmt numFmtId="164" formatCode="&quot;¥&quot;#,##0.00;[Red]-&quot;¥&quot;#,##0.00"/></numFmts><fonts count="2"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font></fonts><fills count="1"><fill><patternFill patternType="none"/></fill></fills><borders count="1"><border/></borders><cellStyleXfs count="1"><xf/></cellStyleXfs><cellXfs count="3"><xf xfId="0"/><xf xfId="0" fontId="1" applyFont="1"/><xf xfId="0" numFmtId="164" applyNumberFormat="1"/></cellXfs></styleSheet>')
+  };
+  const zip = xlZip(files);
+  const blob = new Blob([zip], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = m.fileName;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 5e3);
+}
+function shortNo(n) {
+  n = String(n != null ? n : "");
+  return n.length > 14 ? n.slice(0, 4) + "…" + n.slice(-8) : n;
+}
+// ===== 预审报告 DOM（RV-91：独立报告容器，打印与预览共用）=====
+function reportDOMHtml(m) {
+  const sevTxt = (r) => r === "高" ? `<span class="risk-hi">高</span>` : r === "中" ? `<span class="risk-mid">中</span>` : r === "低" ? `<span class="risk-lo">低</span>` : "—";
+  const pcCls = { "建议入账": "ok", "建议核对": "review", "阻断入账": "block", "无法预审": "unknown" };
+  const pcSymbol = { "建议入账": "✅", "建议核对": "⚠️", "阻断入账": "⛔", "无法预审": "🔶" };
+  const rows = m.tickets.map((t, i) => `<tr>
+    <td>${i + 1}</td><td>${esc(t.invoice_no)}</td><td>${esc(t.issue_date)}</td><td>${esc(t.kind)}</td><td>${esc(t.seller_name)}</td>
+    <td style="text-align:right">${esc(t.amount)}</td><td style="text-align:right">${esc(t.tax)}</td><td style="text-align:right">${esc(t.total)}</td>
+    <td>${pcSymbol[t.precheck] || ""} ${esc(t.precheck)}</td><td>${sevTxt(t.risk)}</td><td>${esc(t.risk_tags || "—")}</td><td>${t.problem_count}</td>
+  </tr>`).join("");
+  // RV-94 打印专用精简表（9 列）：#/票号/日期/蓝红/销售方/价税合计/预审结论/风险(含标签)/问题数
+  const printRows = m.tickets.map((t, i) => `<tr>
+    <td>${i + 1}</td><td>${esc(t.invoice_no)}</td><td>${esc(t.issue_date)}</td><td>${esc(t.kind)}</td><td>${esc(t.seller_name)}</td>
+    <td style="text-align:right">${esc(t.total)}</td>
+    <td>${pcSymbol[t.precheck] || ""} ${esc(t.precheck)}</td>
+    <td>${sevTxt(t.risk)}${t.risk_tags ? "｜" + esc(t.risk_tags) : ""}</td>
+    <td>${t.problem_count}</td>
+  </tr>`).join("");
+  const riskRows = m.risks.map((f, i) => `<tr>
+    <td>${i + 1}</td><td>${esc(f.rule_id)}</td><td>${esc(f.rule_name)}</td><td>${sevTxt(f.severity)}</td><td>${esc(f.invoice_no)}</td><td>${esc(f.message)}</td><td>${esc(f.status)}</td>
+  </tr>`).join("");
+  const pcHtml = [["建议入账", "ok"], ["建议核对", "review"], ["阻断入账", "block"], ["无法预审", "unknown"]].map(([name, cls]) => {
+    const cnt = m.summary.precheck[name] || 0;
+    const pct = m.summary.invoiceCount ? (cnt / m.summary.invoiceCount * 100).toFixed(1) + "%" : "0%";
+    const amt = (m.summary.precheckAmt[name] || 0).toFixed(2);
+    return `<div class="pc ${cls}"><b>${pcSymbol[name]} ${name} ${cnt} 张（${pct}）</b><span>涉及金额 ¥${esc(amt)}</span></div>`;
+  }).join("");
+  const prioHtml = m.summary.prio.length ? m.summary.prio.map((p) => `· ${esc(p.rule_id)}（命中 ${p.count} 条）`).join(" ") : "· 本批无命中问题";
+  return `<div class="rp">
+    <div class="rp-head">
+      <div class="rp-title">发票预审报告</div>
+      <div class="rp-meta">${esc(m.header.batchId)} · 生成 ${esc(m.header.exportedAt)} · 批次生成 ${esc(m.header.generatedAt)} · 数据来源：${esc(m.header.source)}</div>
+      <div class="rp-meta">检查方案：${esc(m.header.ruleset)}（生效 ${esc(m.header.effective)}） · 统计范围：本批 ${m.header.fileCount} 个文件（发票 ${m.header.invoiceCount} 张 + 识别失败 ${m.header.failedCount} 个）</div>
+    </div>
+    <h2>一、统计摘要</h2>
+    <div class="rp-summary">
+      <div class="sm"><b>发票张数</b><span>${m.summary.invoiceCount}</span></div>
+      <div class="sm"><b>价税合计净额</b><span>¥${esc(m.summary.netAmt.toFixed(2))}</span></div>
+      <div class="sm"><b>蓝票（${m.summary.blueCnt} 张）</b><span>¥${esc(m.summary.blueAmt.toFixed(2))}</span></div>
+      <div class="sm"><b>红字冲减（${m.summary.redCnt} 张）</b><span>¥${esc(m.summary.redAmt.toFixed(2))}</span></div>
+      <div class="sm"><b>税额（不含红冲）</b><span>¥${esc(m.summary.taxSum.toFixed(2))}</span></div>
+      <div class="sm"><b>开票日期</b><span>${esc(m.summary.dateRange)}</span></div>
+    </div>
+    <h2>二、预审结论分布</h2>
+    <div class="rp-pc">${pcHtml}</div>
+    <h2>三、优先处理项</h2>
+    <div>${prioHtml}</div>
+    <h2>四、逐票结论（${m.tickets.length} 张）</h2>
+    <table class="rp-tbl-screen"><thead><tr><th style="width:26px">#</th><th style="width:110px">发票号码</th><th style="width:70px">开票日期</th><th style="width:36px">蓝/红</th><th>销售方</th><th style="width:64px">金额</th><th style="width:64px">税额</th><th style="width:70px">价税合计</th><th style="width:76px">预审结论</th><th style="width:36px">风险</th><th style="width:90px">风险标签</th><th style="width:30px">问题数</th></tr></thead>
+    <tbody>${rows}</tbody></table>
+    <table class="rp-tbl-print" aria-hidden="true"><colgroup><col class="p-no"><col class="p-invno"><col class="p-date"><col class="p-kind"><col class="p-seller"><col class="p-total"><col class="p-pc"><col class="p-risk"><col class="p-cnt"></colgroup><thead><tr><th>#</th><th>发票号码</th><th>开票日期</th><th>蓝/红</th><th>销售方</th><th>价税合计</th><th>预审结论</th><th>风险</th><th>问题数</th></tr></thead>
+    <tbody>${printRows}</tbody></table>
+    <h2>五、风险清单（${m.risks.length} 条）</h2>
+    <table><colgroup><col class="r-no"><col class="r-id"><col class="r-name"><col class="r-sev"><col class="r-invno"><col class="r-msg"><col class="r-disp"></colgroup><thead><tr><th class="r-no">#</th><th class="r-id">检查项</th><th class="r-name">检查项名称</th><th class="r-sev">级别</th><th class="r-invno">发票号码</th><th class="r-msg">问题描述</th><th class="r-disp">处置</th></tr></thead>
+    <tbody>${riskRows}</tbody></table>
+    <div class="rp-disc"><b>范围说明：</b>${esc(m.header.scope)}<br/><b>免责声明：</b>${esc(m.disclaimer)}<br/>生成方式：浏览器本地生成，数据未上传第三方。</div>
+    <div class="rp-foot">检查方案 ${esc(m.header.ruleset)} · 本报告结论基于当前批次文件结构化数据，最终以电子税务局查验结果及主管税务机关认定为准。</div>
+  </div>`;
+}
+function renderReportDOM(m) {
+  let root = document.getElementById("report-print-root");
+  if (!root) { root = document.createElement("div"); root.id = "report-print-root"; document.body.appendChild(root); }
+  root.innerHTML = reportDOMHtml(m);
+  return root;
+}
+function openReportPreview() {
+  if (!__lastReport) { alert("无报告数据可预览"); return; }
+  const m = getReportModel();
+  const ov = document.createElement("div");
+  ov.className = "rev-overlay";
+  ov.id = "rpPreviewOv";
+  ov.setAttribute("role", "dialog");
+  ov.setAttribute("aria-modal", "true");
+  ov.setAttribute("aria-label", "预审报告预览");
+  ov.innerHTML = `<div class="rev-modal rp-modal">
+    <div class="rp-headbar" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-shrink:0;">
+      <div style="font-size:15px;font-weight:700;">预审报告预览</div>
+      <button class="btn-ghost" id="rpCloseBtn" type="button" style="padding:4px 12px;">关闭</button>
+    </div>
+    <div style="font-size:12px;color:var(--muted,#5c6470);margin-bottom:10px;flex-shrink:0;">屏幕预览为完整 12 列；打印 / 另存为 PDF 时自动输出 9 列精简版。</div>
+    <div class="rp-scroll" style="overflow:auto;border:1px solid var(--line);border-radius:8px;padding:16px;flex:1;min-height:0;">${reportDOMHtml(m)}</div>
+    <div class="rp-actions" style="display:flex;gap:8px;margin-top:12px;justify-content:flex-end;flex-shrink:0;">
+      <button class="btn-ghost" id="rpPrintBtn" type="button">打印 / 另存为 PDF</button>
+    </div>
+  </div>`;
+  document.body.appendChild(ov);
+  const close = () => { ov.remove(); document.removeEventListener("keydown", esc); };
+  const esc = (e) => { if (e.key === "Escape") close(); };
+  const closeBtn = ov.querySelector("#rpCloseBtn");
+  closeBtn.onclick = close;
+  setTimeout(() => { try { closeBtn.focus(); } catch (e) {} }, 0);
+  ov.querySelector("#rpPrintBtn").onclick = () => { renderReportDOM(m); setTimeout(() => { window.print(); }, 100); };
+  document.addEventListener("keydown", esc);
+  ov.addEventListener("click", (e) => { if (e.target === ov) close(); });
+}
+function csvCell(v, defend) {
+  let s = String(v != null ? v : "");
+  if (/[\t\r\n]/.test(s)) s = s.replace(/[\t\r\n]+/g, " ");
+  if (defend !== false && /^[=+\-@]/.test(s)) s = "'" + s;
+  return `"${s.replace(/"/g, '""')}"`;
+}
+function csvNumberCell(v) {
+  const s = String(v != null ? v : "");
+  if (/^-?\d+(\.\d+)?$/.test(s)) return `"${s.replace(/"/g, '""')}"`;
+  return csvCell(s, true);
+}
+function exportCSV(findings, metaMap) {
+  const rows = [["# 导出范围：全量问题清单（N 条，不随视图切换变化） · 生成 " + (/* @__PURE__ */ new Date()).toISOString()]];
+  rows.push(["检查项", "检查项名称", "严重程度", "判定", "票号", "字段", "问题", "建议", "处置状态", "处置时间"]);
+  (findings || []).forEach((f) => {
+    const d = getDisp(riskId(f));
+    rows.push([
+      f.rule_id,
+      resolveRuleMeta(f.rule_id, metaMap || {}),
+      f.severity,
+      f.confidence || "疑似",
+      f.invoice_no,
+      fieldTerm(f.field),
+      f.message,
+      f.suggestion,
+      d ? DISP_LABEL[d.status] : DISP_LABEL.pending,
+      d ? d.updatedAt.slice(0, 16).replace("T", " ") : ""
+    ]);
+  });
+  const csv = "\uFEFF" + rows.map((r) => r.map(csvCell).join(",")).join("\n");
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "invoice-precheck-findings-" + (/* @__PURE__ */ new Date()).toISOString().slice(0, 10) + ".csv";
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+document.addEventListener("click", (e) => {
+  const vs = e.target.closest(".vs");
+  if (vs) {
+    setView(vs.dataset.view);
+    return;
+  }
+  const mv = e.target.closest(".mob-view-bar .mv");
+  if (mv) {
+    setView(mv.dataset.view);
+    return;
+  }
+  const ij = e.target.closest(".inv-jump");
+  if (ij) {
+    jumpToInvoice(ij.dataset.no);
+    return;
+  }
+  const op = e.target.closest(".op");
+  if (op) {
+    setDisp(op.dataset.rid, op.dataset.st);
+    renderReport();
+    return;
+  }
+  const flt = e.target.closest(".flt");
+  if (flt) {
+    const all = document.querySelectorAll(".flt");
+    all.forEach((b) => b.classList.toggle("active", b === flt));
+    const f = flt.dataset.flt;
+    document.querySelectorAll("#view-risk .finding").forEach((el) => {
+      el.style.display = f === "pending" ? el.dataset.rid && ((getDisp(el.dataset.rid) || {}).status || "pending") === "pending" ? "" : "none" : "";
+    });
+  }
+  // F-08 KPI 下钻：点击 KPI 卡片（待复核/自动通过/解析失败）
+  const kpi = e.target.closest(".kpi[data-drill]");
+  if (kpi) {
+    drillKpi(kpi.dataset.drill);
+    return;
+  }
+  // F-08 发票→规则：点击规则 ID 跳规则视图并高亮
+  const rl = e.target.closest(".rule-link");
+  if (rl) {
+    drillRule(rl.dataset.rule);
+    return;
+  }
+  // F-08 规则→发票：规则卡"查看发票"按钮
+  const rv = e.target.closest(".drill-inv");
+  if (rv) {
+    drillRuleInv(rv.dataset.rule);
+    return;
+  }
+  // F-08 清除筛选
+  if (e.target.closest(".drill-clear")) {
+    clearDrill();
+    return;
+  }
+});
+let __lastReport = null;
+// UI-3（RV-75）：发票明细排序内存态（票号序默认，异常优先可切，不强制置顶）
+let __invSort = "natural";
+// F-08 KPI 下钻状态：{kpi: "review"|"pass"|"fail"|null, rule: "R3"|null}（会话态，不入 localStorage）
+let __drill = { kpi: null, rule: null };
+function setKpiActive(k) {
+  document.querySelectorAll(".kpi[data-drill]").forEach((el) => {
+    const on = el.dataset.drill === k;
+    el.classList.toggle("active", on);
+    el.setAttribute("aria-pressed", on ? "true" : "false");
+  });
+}
+function drillKpi(k) {
+  if (!__lastReport) return;
+  if (__drill && __drill.kpi === k && !__drill.rule) {
+    clearDrill();
+    return;
+  }
+  __drill = { kpi: k, rule: null };
+  setKpiActive(k);
+  setView("invoice");
+  renderInvoiceView();
+}
+function drillRule(rid) {
+  if (!__lastReport) return;
+  // UI-3（RV-75）：规则跳转 → 打开抽屉并滚动高亮规则卡（不再切视图）
+  openRuleDrawer();
+  setTimeout(() => {
+    const card = document.querySelector(`.rule-drawer .rule-card[data-rule="${rid}"]`);
+    if (card) {
+      card.scrollIntoView({ behavior: "smooth", block: "center" });
+      card.classList.add("flash");
+      setTimeout(() => card.classList.remove("flash"), 2000);
+    }
+  }, 120);
+}
+function drillRuleInv(rid) {
+  if (!__lastReport) return;
+  __drill = { kpi: null, rule: rid };
+  setKpiActive(null);
+  setView("invoice");
+  renderInvoiceView();
+}
+function clearDrill() {
+  __drill = { kpi: null, rule: null };
+  setKpiActive(null);
+  renderInvoiceView();
+}
+function renderInvoiceView() {
+  const d = __lastReport;
+  if (!d) return;
+  // UI-3（RV-75）：重渲染发票明细列（含 sort-bar，active 由 __invSort 回显）
+  const col = document.querySelector(".view-invoice-col");
+  if (!col) return;
+  const metaMap = buildRuleMetaMap(d.rules);
+  const nat = __invSort === "risk" ? "" : " active";
+  const risk = __invSort === "risk" ? " active" : "";
+  col.innerHTML = `<div class="sort-bar"><span>逐票清单 ${(d.invoices || []).length} 张</span><span class="sg" id="invSortSeg"><button type="button" data-sort="natural" class="${nat}">票号序</button><button type="button" data-sort="risk" class="${risk}">异常优先</button></span><button class="rule-open-btn" type="button" id="btnOpenRules">📊 检查项</button></div>${invoiceViewHtml(d, metaMap)}`;
+  bindInvSort();
+  bindRuleDrawer();
+}
+function jumpToInvoice(no) {
+  if (!__lastReport) return;
+  const isMob = window.innerWidth <= 1279;
+  if (isMob) setView("invoice");
+  setTimeout(() => {
+    const t = document.getElementById("inv-" + no);
+    if (t) {
+      t.scrollIntoView({ behavior: "smooth", block: "center" });
+      t.classList.add("flash-inv");
+      setTimeout(() => t.classList.remove("flash-inv"), 1200);
+    }
+  }, isMob ? 150 : 0);
+}
+function render(d) {
+  __lastReport = d;
+  __drill = { kpi: null, rule: null };  // 新报告/重渲染重置下钻筛选（会话态）
+  __origRender(d);
+}
+function renderReport() {
+  if (__lastReport) render(__lastReport);
+}
+function findingRow(f, metaMap, showOps) {
+  const sev = f.severity || "低";
+  const sevCls = SEV_CLS[sev] || "low";
+  const conf = CONF_ALLOW.has(f.confidence) ? f.confidence : "疑似";
+  const chain = (f.evidence_chain || []).map((e) => `<li><code>${esc(fieldTerm(e.field))}</code>${e.row != null ? `（第 ${esc(e.row)} 行）` : ""}：原文 ${esc(e.raw)} → ${esc(e.value)}${e.note ? ` · ${esc(e.note)}` : ""}</li>`).join("");
+  const amt = f.evidence_amt != null ? `¥${esc(f.evidence_amt)}` : "";
+  const rid = riskId(f);
+  const disp = getDisp(rid);
+  const st = disp ? disp.status : "pending";
+  const dim = st === "pending" ? "" : " dim";
+  const badge = st === "pending" ? "" : `<span class="stb ${st}">${st === "resolved" ? "✓" : "○"} ${DISP_LABEL[st]}</span>`;
+  const t0 = disp ? disp.updatedAt.slice(0, 16).replace("T", " ") : "";
+  const ops = showOps ? st === "pending" ? `<button class="op resolved" data-rid="${rid}" data-st="resolved">✓ 标记已处理</button><button class="op ignored" data-rid="${rid}" data-st="ignored">○ 忽略</button>` : `<button class="op undo" data-rid="${rid}" data-st="pending">↺ 撤销（回待处理）</button>` : "";
+  return `<details class="finding${dim}" data-rid="${rid}">
+    <summary>
+      <span class="bar ${sevCls}"></span>
+      <span class="sev ${sevCls}">${sev === "高" ? "▲" : sev === "中" ? "●" : "·"} <span class="rule-link" data-rule="${esc(f.rule_id)}" title="点击跳转规则分析">${esc(f.rule_id)}</span> ${esc(sev)}</span>
+      <span class="rname">${esc(resolveRuleMeta(f.rule_id, metaMap))}</span>
+      <span class="ticket" title="${esc(f.invoice_no)}">${esc(shortNo(f.invoice_no))} <button type="button" class="inv-jump" data-no="${esc(f.invoice_no)}" title="定位到发票明细">↗</button></span>
+      ${badge}
+      ${amt ? `<span class="amt">${amt}</span>` : ""}
+      <span class="caret">▸</span>
+    </summary>
+    <div class="body">
+      <div class="msg">${esc(f.message)}</div>
+      <div class="meta">票号 <code>${esc(f.invoice_no)}</code> · 相关字段 <code>${esc(fieldTerm(f.field))}</code> · 原文「${esc(f.evidence)}」 · 判定 ${esc(conf)}</div>
+      ${chain ? `<ul class="chain"><b>证据链：</b>${chain}</ul>` : ""}
+      <div class="sug"><b>建议：</b>${esc(f.suggestion)}</div>
+      ${explainBlock(f)}
+      <div class="ops">${ops}${showOps ? `<span class="hint" style="margin-top:0;">${st !== "pending" ? "处置时间 " + esc(t0) : "处置后状态保留在本机浏览器，导出 CSV 将携带处置信息"}</span>` : ""}</div>
+    </div>
+  </details>`;
+}
+function reviewBadge(i) {
+  const rec = getRev(i.invoice_no);
+  if (rec) {
+    const n = Object.keys(rec.corrected_fields || {}).length;
+    if (rec.reviewed) {
+      const txt = rec.corrected ? `数据已复核·修正${n}项` : "数据已复核·确认无误";
+      return `<span class="badge review done" title="复核时间 ${esc(rec.reviewedAt || "")}；复核≠风险处置，未处置 findings 仍在风险清单">${esc(txt)}</span>`;
+    }
+    if (n > 0) return `<span class="badge review" title="已修正 ${n} 项但尚未复核确认">待人工复核（已修正${n}项）</span>`;
+  }
+  return i.review_needed ? `<span class="badge review" title="${esc(i.review_reason || "识别低置信度/勾稽不符等")}">待人工复核</span>` : "";
+}
+function invoiceViewHtml(d, metaMap) {
+  const sevRank = { 高: 0, 中: 1, 低: 2 };
+  const byInv = {};
+  (d.findings || []).forEach((f) => (byInv[f.invoice_no] = byInv[f.invoice_no] || []).push(f));
+  const notExec = (d.rules || []).some((r) => /未执行/.test(r.state || ""));
+  const drill = __drill || {};
+  let drillNote = "";
+  if (drill.kpi === "fail") {
+    const n = (d.summary || {}).failed_count || 0;
+    drillNote = `<div class="drill-note"><span><b>识别失败 ${n} 个文件</b>：文件无法读取票面信息（无结构化数据，不生成发票记录）。</span><button class="btn-ghost drill-clear">清除筛选</button></div>`;
+  } else if (drill.kpi === "pass") {
+    drillNote = `<div class="drill-note"><span>已筛选：<b>建议入账</b>（票面信息完整、未发现问题，可按流程入账；不代表绝对合规）</span><button class="btn-ghost drill-clear">清除筛选</button></div>`;
+  } else if (drill.kpi === "review") {
+    drillNote = `<div class="drill-note"><span>已筛选：<b>建议核对</b>（存在需财务确认的问题：疑似异常/信息待补/需人工复核）</span><button class="btn-ghost drill-clear">清除筛选</button></div>`;
+  } else if (drill.kpi === "block") {
+    drillNote = `<div class="drill-note"><span>已筛选：<b>阻断入账</b>（存在高风险问题，建议先处理再入账：重复报销/勾稽不符/异常凭证等）</span><button class="btn-ghost drill-clear">清除筛选</button></div>`;
+  } else if (drill.kpi === "unknown") {
+    drillNote = `<div class="drill-note"><span>已筛选：<b>无法预审</b>（票面信息不全或无法识别，无法给出预审结论）</span><button class="btn-ghost drill-clear">清除筛选</button></div>`;
+  } else if (drill.rule) {
+    drillNote = `<div class="drill-note"><span>已按检查项 <b>${esc(drill.rule)}</b> 筛选（仅含该检查项发现问题的发票）</span><button class="btn-ghost drill-clear">清除筛选</button></div>`;
+  }
+  // F-08b（RV-64 B1）：解析失败三态判定——先判 failed_count，再判明细可用性；B2 部分明细补行；B3 字段保护
+  if (drill.kpi === "fail") {
+    const fc = ((d.summary || {}).failed_count) || 0;
+    const fl = d.failed || [];
+    let failBody;
+    if (fc === 0) {
+      failBody = `<div class="card card-pad"><div class="hint">当前无识别失败文件。</div></div>`;
+    } else if (fl.length > 0) {
+      const rows = fl.map((f) => {
+        const file = f && f.file ? esc(f.file) : "（文件信息缺失）";
+        const err = f && f.error ? esc(f.error) : "（失败原因未提供）";
+        return `<div class="fail-row"><div class="fail-file">📄 ${file}</div><div class="fail-err">${err}</div><div class="fail-act">建议：重传或检查文件格式（PDF 需可提取文字，图片需清晰）</div></div>`;
+      });
+      const missing = fc - fl.length;
+      if (missing > 0) rows.push(`<div class="fail-row fail-missing">另有 ${missing} 条失败明细未提供（数字与清单不一致，待后端补齐）</div>`);
+      failBody = `<div class="card card-pad"><div class="hint"><b>识别失败 ${fc} 个文件</b>，以下为失败明细：</div><div class="fail-list">${rows.join("")}</div></div>`;
+    } else {
+      failBody = `<div class="card card-pad"><div class="hint"><b>识别失败 ${fc} 个文件</b>，但失败明细缺失，无法展示具体原因（请反馈维护者核查报告数据）。</div></div>`;
+    }
+    return `${drillNote}${failBody}`;
+  }
+  const invs = (d.invoices || []).map((i) => {
+    const fs = (byInv[i.invoice_no] || []).slice().sort((a, b) => {
+      var _a, _b;
+      return ((_a = sevRank[a.severity]) != null ? _a : 9) - ((_b = sevRank[b.severity]) != null ? _b : 9) || a.rule_id.localeCompare(b.rule_id);
+    });
+    const maxSev = fs.length ? Math.min(...fs.map((f) => {
+      var _a;
+      return (_a = sevRank[f.severity]) != null ? _a : 9;
+    })) : 9;
+    // RV-84 下钻过滤：按预审结论（precheck）筛选，与工作台四卡严格对齐
+    const pc = i.precheck || "建议核对";
+    let keep = true;
+    if (drill.kpi === "pass") keep = pc === "建议入账";
+    else if (drill.kpi === "review") keep = pc === "建议核对";
+    else if (drill.kpi === "block") keep = pc === "阻断入账";
+    else if (drill.kpi === "unknown") keep = pc === "无法预审";
+    else if (drill.rule) keep = fs.some((f) => f.rule_id === drill.rule);
+    return __spreadProps(__spreadValues({}, i), { fs, maxSev, clean: fs.length === 0, keep, pc });
+  }).filter((i) => i.keep).sort((a, b) => {
+    if (a.clean !== b.clean) return a.clean ? 1 : -1;
+    if (a.maxSev !== b.maxSev) return a.maxSev - b.maxSev;
+    if (a.fs.length !== b.fs.length) return b.fs.length - a.fs.length;
+    return a.invoice_no.localeCompare(b.invoice_no);
+  });
+  if (!invs.length) return `${drillNote}<div class="card card-pad"><div class="hint">${drill.kpi || drill.rule ? "当前筛选下无匹配发票。" : "无发票数据。"}${drill.kpi || drill.rule ? ` <button class="btn-ghost drill-clear">清除筛选</button>` : ""}</div></div>`;
+  return `${notExec ? `<div class="view-note">⚠ 部分检查项未执行（数据不足/未配置），不能据此判定无问题</div>` : ""}
+  ${drillNote}
+  <div class="inv-group">${invs.map((i) => {
+    // RV-84：发票状态 + 预审结论 + 风险标签 + 检查项摘要（P0 字段展示）
+    const invSt = i.invoice_status || "normal";
+    const invStLabel = { normal: "正常", red_flush: "红冲", void: "作废", abnormal: "异常" }[invSt] || "正常";
+    const pcTagCls = { "建议入账": "pass", "建议核对": "review", "阻断入账": "block", "无法预审": "unknown" }[i.pc] || "review";
+    const tags = (i.risk_tags || []);
+    const tagsHtml = tags.length ? `<details class="risk-tags"><summary>${tags.length} 项风险 ▾</summary><span class="rt-inner">${tags.map((t) => `<span class="tag${t === "重复报销" || t === "金额勾稽" || t === "异常" ? " block" : " warn"}">${esc(t)}</span>`).join("")}</span></details>` : "";
+    const cks = (i.check_results || {});
+    const ckHtml = Object.keys(CHECK_META).map((code) => {
+      const c = cks[code];
+      if (!c) return "";
+      const stCls = c.status === "block" ? "block" : c.status === "warn" ? "warn" : "pass";
+      const mk = c.status === "block" ? "✕" : c.status === "warn" ? "△" : "✓";
+      return `<span class="ck ${stCls}" title="${esc(c.message || "")}（${CHECK_META[code].step}）">${mk} ${CHECK_META[code].short}</span>`;
+    }).join("");
+    const ckWarn = Object.keys(CHECK_META).filter((code) => { const c = cks[code]; return c && (c.status === "warn" || c.status === "block"); });
+    const ckNote = ckWarn.length ? ckWarn.map((code) => `<div class="ck-note ${cks[code].status === "block" ? "ckb" : "ckw"}"><b>${esc(CHECK_META[code].name)}：</b>${esc(cks[code].message)}</div>`).join("") : "";
+    return `
+    <details class="inv-card${i.clean ? " clean" : ""}${notExec && i.clean ? " partial" : ""}" id="inv-${esc(i.invoice_no)}">
+      <summary class="inv-head">
+        <span class="inv-left">
+          <span class="inv-status ${invSt}">${esc(invStLabel)}</span>
+          <span class="inv-no">${esc(shortNo(i.invoice_no))}</span>
+          <span class="inv-full">${esc(i.invoice_no)}</span>
+          <span class="inv-meta">${esc(i.seller_name || "")} · ${esc(i.issue_date || "")} · ${fmtMoney(i.total || i.amount)}${i.tax ? `（税额 ${fmtMoney(i.tax)}）` : ""}</span>
+        </span>
+        <span class="inv-right">
+          <span class="precheck-tag ${pcTagCls}">${esc(i.pc)}</span>
+          ${tagsHtml}
+          ${i.clean ? notExec ? `<span class="stb q">？ 未完全检查</span>` : `<span class="stb ok">✓ 未见异常</span>` : `<span class="stb warn">${i.fs.length} 条问题</span>`}
+          ${reviewBadge(i)}
+          ${i.review_needed || getRev(i.invoice_no) ? `<button class="btn-ghost rev-btn" onclick="event.preventDefault();event.stopPropagation();openReviewModal('${esc(i.invoice_no)}')">复核</button>` : ""}
+          <span class="caret">▸</span>
+        </span>
+      </summary>
+      <div class="inv-body">
+        ${ckNote ? `<div class="check-summary">${ckHtml}<div style="margin-top:4px;">${ckNote}</div></div>` : ""}
+        ${i.clean ? `<div class="inv-clean-note">${notExec ? "本票未见异常，但部分检查项未执行，不能判定绝对合规" : "未发现问题（已按当前检查项核查，不代表绝对合规）"}</div>` : `<div class="inv-list">${i.fs.map((f) => findingRow(f, metaMap, true)).join("")}</div>`}
+      </div>
+    </details>`;}).join("")}</div>`;
+}
+function ruleViewHtml(d, metaMap) {
+  const sevRank = { 高: 0, 中: 1, 低: 2 };
+  const byRule = {};
+  (d.findings || []).forEach((f) => (byRule[f.rule_id] = byRule[f.rule_id] || []).push(f));
+  const nInv = (d.invoices || []).length;
+  const rules = (d.rules || []).map((r) => {
+    const hits = (byRule[r.rule_id] || []).slice().sort((a, b) => {
+      var _a, _b;
+      return ((_a = sevRank[a.severity]) != null ? _a : 9) - ((_b = sevRank[b.severity]) != null ? _b : 9) || a.invoice_no.localeCompare(b.invoice_no);
+    });
+    const notExec = /未执行/.test(r.state || "");
+    const maxSev = hits.length ? Math.min(...hits.map((f) => {
+      var _a;
+      return (_a = sevRank[f.severity]) != null ? _a : 9;
+    })) : 9;
+    return __spreadProps(__spreadValues({}, r), { hits, hit: hits.length, miss: notExec ? null : Math.max(0, nInv - hits.length), notExec, maxSev });
+  }).sort((a, b) => {
+    if (a.maxSev !== b.maxSev) return a.maxSev - b.maxSev;
+    if (a.hit !== b.hit) return b.hit - a.hit;
+    return (a.rule_id || "").localeCompare(b.rule_id || "");
+  });
+  if (!rules.length) return `<div class="card card-pad"><div class="hint">无检查项数据。</div></div>`;
+  return `<div class="view-note">检查项视图（只读分析视角，不参与处置）：每个检查项的发现问题 / 未发现异常 / 未检查三态；未检查不代表合规，需补数据/配置后重跑；处置请到风险待办/逐票清单视图</div>
+  <details class="rule-hits"><summary>分级判定原则（block / warn / pass）</summary><div class="inner"><div class="hint" style="line-height:1.9">
+  <b>block（建议暂缓入账）</b>：发票状态异常（失控/作废/红冲异常）、购销方名称或税号与合同/收款方不一致、重复报销、明细合计≠票面且影响税额、查验结果不符。<br/>
+  <b>warn（建议核对）</b>：缺原始文件（XML）、关联蓝票不在本批次、明细行级不一致但不影响税额、需人工复核的识别低置信度字段。<br/>
+  <b>pass（未见异常）</b>：本检查项未发现异常；不代表整体合规，需结合全部检查项与人工复核。</div></div></details>
+  <div class="rule-group">${rules.map((r) => {
+    const sev = r.severity || "中";
+    const sevCls = SEV_CLS[sev] || "low";
+    return `<div class="rule-card" data-rule="${esc(r.rule_id)}">
+      <div class="rule-head">
+        <span class="sev ${sevCls}">${esc(r.rule_id)} ${esc(sev)}</span>
+        <span class="rname">${esc(resolveRuleMeta(r.rule_id, metaMap))}</span>
+        <span class="rule-cnt">发现问题 <b>${r.hit}</b>${r.notExec ? ` · <span class="fail">未检查</span>` : ` · 未见异常 <b>${r.miss}</b>`}</span>
+        ${r.hit ? `<button class="btn-ghost drill-inv" data-rule="${esc(r.rule_id)}">查看发票</button>` : ""}
+      </div>
+      ${r.hit ? `<details class="rule-hits"><summary>问题发票（${r.hit}）</summary><div class="inner">${r.hits.map((f) => findingRow(f, metaMap, false)).join("")}</div></details>` : ""}
+      ${r.notExec ? `<div class="rule-note">未检查（${esc(r.state)}）——不能判定合规，需补齐数据/配置后重跑</div>` : ""}
+    </div>`;
+  }).join("")}</div>`;
+}
+const VIEW_KEY = "fap:report-view";
+function applyFltState(v) {
+  const off = v !== "risk";
+  document.querySelectorAll(".flt").forEach((b) => {
+    b.disabled = off;
+  });
+  const h = document.getElementById("fltHint");
+  if (h) h.textContent = off ? "筛选仅作用于风险视图" : "";
+}
+function setView(v) {
+  // UI-3（RV-75）：桌面端 risk/invoice 同屏不再互斥；rule 走抽屉；<720px 保留 risk/invoice 只读切换
+  if (v === "rule") { openRuleDrawer(); return; }
+  if (!["risk", "invoice"].includes(v)) v = "risk";
+  try {
+    localStorage.setItem(VIEW_KEY, v);
+  } catch (e) {
+  }
+  const isMob = window.innerWidth <= 1279;
+  if (isMob) {
+    document.querySelectorAll(".report-zone > div").forEach((el) => {
+      el.style.display = (el.classList.contains("view-risk-col") && v === "risk") || (el.classList.contains("view-invoice-col") && v === "invoice") ? "" : "none";
+    });
+    document.querySelectorAll(".mob-view-bar .mv").forEach((b) => b.classList.toggle("active", b.dataset.view === v));
+  } else {
+    document.querySelectorAll(".report-zone > div").forEach((el) => { el.style.display = ""; });
+  }
+  applyFltState(v);
+  updatePrintHead(v);
+}
+function bindExportMenu() {
+  const btn = document.getElementById("btnExport");
+  const list = document.getElementById("dlList");
+  if (!btn || !list) return;
+  const close = () => { list.classList.remove("open"); btn.setAttribute("aria-expanded", "false"); };
+  const open = () => { list.classList.add("open"); btn.setAttribute("aria-expanded", "true"); };
+  btn.onclick = (e) => { e.stopPropagation(); list.classList.contains("open") ? close() : open(); };
+  document.addEventListener("click", (e) => { if (!list.contains(e.target)) close(); });
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && list.classList.contains("open")) { close(); btn.focus(); } });
+  list.addEventListener("click", close);
+}
+function applyView() {
+  let v = localStorage.getItem(VIEW_KEY);
+  if (!["risk", "invoice"].includes(v)) v = "risk";
+  const isMob = window.innerWidth <= 1279;
+  if (isMob) {
+    document.querySelectorAll(".report-zone > div").forEach((el) => {
+      el.style.display = (el.classList.contains("view-risk-col") && v === "risk") || (el.classList.contains("view-invoice-col") && v === "invoice") ? "" : "none";
+    });
+    document.querySelectorAll(".mob-view-bar .mv").forEach((b) => b.classList.toggle("active", b.dataset.view === v));
+  }
+  applyFltState(v);
+  updatePrintHead(v);
+}
+function updatePrintHead(v) {
+  var _a;
+  const ph = document.getElementById("printHead");
+  if (!ph || !__lastReport) return;
+  const name = { risk: "风险待办", invoice: "逐票清单", rule: "检查项" }[v] || "风险待办";
+  ph.textContent = name + " · 规则包 " + (((_a = __lastReport.ruleset) == null ? void 0 : _a.version) || __lastReport.ruleset_version || "?") + " · 生成 " + (__lastReport.generated_at || "");
+}
+// UI-3（RV-75）：规则分析 overlay 抽屉（保留下层可见、Esc 关闭、返回锚点、深链）
+let __ruleReturnAnchor = null;
+function openRuleDrawer(anchorId) {
+  if (anchorId) __ruleReturnAnchor = anchorId;
+  const d = __lastReport;
+  if (!d) return;
+  const metaMap = buildRuleMetaMap(d.rules);
+  const drawer = document.getElementById("ruleDrawer");
+  if (!drawer) {
+    const div = document.createElement("div");
+    div.id = "ruleDrawer";
+    div.className = "rule-drawer";
+    div.setAttribute("role", "dialog");
+    div.setAttribute("aria-modal", "true");
+    div.setAttribute("aria-label", "检查项");
+    div.innerHTML = `<div class="rd-head"><h3>检查项 <span class="sub">${(d.rules || []).length} 条 · 三态口径</span></h3><button class="rd-close" type="button">关闭 Esc</button></div><div class="rd-body">${ruleViewHtml(d, metaMap)}</div>`;
+    document.body.appendChild(div);
+    div.querySelector(".rd-close").onclick = closeRuleDrawer;
+  } else {
+    drawer.querySelector(".rd-body").innerHTML = ruleViewHtml(d, metaMap);
+  }
+  requestAnimationFrame(() => document.getElementById("ruleDrawer").classList.add("open"));
+  if (history.pushState) {
+    try { history.pushState({ ruleOpen: true }, "", "#rule=open"); } catch (e) {}
+  }
+  const closeBtn = document.getElementById("ruleDrawer").querySelector(".rd-close");
+  if (closeBtn) closeBtn.focus();
+}
+function closeRuleDrawer(returnToAnchor) {
+  const drawer = document.getElementById("ruleDrawer");
+  if (drawer) drawer.classList.remove("open");
+  if (history.replaceState) {
+    try { history.replaceState({}, "", location.pathname + location.search); } catch (e) {}
+  }
+  if (returnToAnchor !== false && __ruleReturnAnchor) {
+    const t = document.getElementById(__ruleReturnAnchor);
+    if (t) { t.scrollIntoView({ behavior: "smooth", block: "center" }); t.classList.add("flash-inv"); setTimeout(() => t.classList.remove("flash-inv"), 1200); }
+  }
+  const trig = document.querySelector(".rule-open-btn");
+  if (trig) trig.focus();
+}
+function bindRuleDrawer() {
+  const btn = document.getElementById("btnOpenRules");
+  if (btn && !btn.dataset.bound) {
+    btn.dataset.bound = "1";
+    btn.onclick = () => openRuleDrawer();
+  }
+  document.addEventListener("keydown", (ev) => {
+    const drawer = document.getElementById("ruleDrawer");
+    if (drawer && drawer.classList.contains("open") && ev.key === "Escape") {
+      closeRuleDrawer(false);
+    }
+  }, { once: false });
+  // 深链：加载时 #rule=open 或 #rule=xxx
+  const m = /#rule=([\w-]+)/.exec(location.hash);
+  if (m && m[1] === "open") setTimeout(() => openRuleDrawer(), 60);
+}
+// UI-3（RV-75）：发票明细排序（自然序/异常优先，不强制置顶）
+function bindInvSort() {
+  const seg = document.getElementById("invSortSeg");
+  if (!seg || seg.dataset.bound) return;
+  seg.dataset.bound = "1";
+  seg.querySelectorAll("button").forEach((b) => {
+    b.onclick = () => {
+      seg.querySelectorAll("button").forEach((x) => x.classList.toggle("active", x === b));
+      __invSort = b.dataset.sort;
+      const d = __lastReport;
+      if (!d || !d.invoices) return;
+      if (b.dataset.sort === "risk") {
+        const byInv = {};
+        (d.findings || []).forEach((f) => (byInv[f.invoice_no] = byInv[f.invoice_no] || []).push(f));
+        d.invoices.sort((a, b2) => (byInv[b2.invoice_no] ? byInv[b2.invoice_no].length : 0) - (byInv[a.invoice_no] ? byInv[a.invoice_no].length : 0) || a.invoice_no.localeCompare(b2.invoice_no));
+      } else {
+        d.invoices.sort((a, b2) => a.invoice_no.localeCompare(b2.invoice_no));
+      }
+      renderInvoiceView();
+    };
+  });
+}
+// RV-84：优先处理条——点击检查项 chip → 跳转逐票清单并定位该检查项问题发票
+function bindPrioChips() {
+  document.querySelectorAll(".todo-chip").forEach((b) => {
+    if (b.dataset.bound) return;
+    b.dataset.bound = "1";
+    b.onclick = () => {
+      const rid = b.dataset.prio;
+      if (!rid) return;
+      drillRuleInv(rid);
+    };
+  });
+}
+function __origRender(d) {
+  var _a, _b, _c, _d, _e, _f, _g, _h, _i;
+  const el = $("result");
+  const _sk = `<div class="skeleton"><div class="sk-line w60"></div><div class="sk-grid">${Array(5).fill('<div class="sk-card"><div class="sk-line w40"></div><div class="sk-line w70"></div></div>').join("")}</div><div class="sk-line w80"></div></div>`;
+  if (el.innerHTML === "") el.innerHTML = _sk;
+  $("empty").style.display = "none";
+  if (!d || d.error) {
+    el.innerHTML = `<div class="card card-pad high">${esc(d && d.error || "无响应")}</div>`;
+    return;
+  }
+  try {
+    const s = d.summary || {};
+    const rules = d.rules || [], rs = d.rules_summary || {};
+    const stateNote = rs.enabled_count ? `启用 ${rs.enabled_count} 条 · 命中 ${rs.命中 || 0} · 未命中 ${rs.未命中 || 0} · 未执行 ${rs.未执行 || 0}` : "";
+    // F-08 RV-62：autoPass 同源计数（同一 status 数组），不做减法；断言防口径漂移（不阻断渲染）
+    const invStatusArr = (d.invoices || []).map((i) => i.status || "未见异常");
+    const passCnt = invStatusArr.filter((st) => st === "未见异常").length;
+    const autoPass = passCnt;
+    const reviewCnt = (_a = s.review_count) != null ? _a : invStatusArr.filter((st) => st !== "未见异常").length;
+    // RV-84：预审结论口径断言——四类计数之和 = 发票张数 = total_count（防止新增 precheck 字段后口径漂移）
+    const precheckCnt2 = { "建议入账": 0, "建议核对": 0, "阻断入账": 0, "无法预审": 0 };
+    (d.invoices || []).forEach((i) => { const p = i.precheck || "建议核对"; precheckCnt2[p] = (precheckCnt2[p] || 0) + 1; });
+    if (Object.keys(precheckCnt2).reduce((a, k) => a + precheckCnt2[k], 0) !== ((_b = s.total_count) != null ? _b : (d.invoices || []).length)) {
+      console.error("[口径漂移] 预审结论四类之和≠total_count:", precheckCnt2, s.total_count);
+    }
+    // RV-62/RV-63 口径明示：断言仅覆盖"成功解析票"（total_count=len(invoices)=passCnt+reviewCnt）；
+    // 第三态"识别失败"独立于本断言（failed 不入 invoices、不计 review_count，独立计入 file_count=total_count+failed_count）
+    let __driftMsg = "";
+    if (passCnt + reviewCnt !== ((_b = s.total_count) != null ? _b : invStatusArr.length)) {
+      __driftMsg = "报告内部计数不一致（autoPass+review_count≠total_count）：请反馈维护者核查数据模型或升级后端";
+      console.error("[口径漂移] autoPass+review_count≠total_count:", passCnt, reviewCnt, s.total_count, invStatusArr.length);
+    }
+    const _drill = __drill || {};
+    const drillCls = (k) => (_drill.kpi === k ? " active" : "");
+    const metaMap = buildRuleMetaMap(d.rules);
+    // RV-84：预审结论计数从发票 precheck 字段派生（口径=发票数，与 total_count 对齐）
+    const invs4 = d.invoices || [];
+    const precheckCnt = { "建议入账": 0, "建议核对": 0, "阻断入账": 0, "无法预审": 0 };
+    invs4.forEach((i) => { const p = i.precheck || "建议核对"; precheckCnt[p] = (precheckCnt[p] || 0) + 1; });
+    const humanCnt = (_e = s.human_review_count) != null ? _e : 0;
+    // RV-84：优先处理条——按规则聚合命中数（阻断/建议核对均可），点击跳转风险待办
+    const prioTags = (() => {
+      const byRule = {};
+      (d.findings || []).forEach((f) => { byRule[f.rule_id] = (byRule[f.rule_id] || 0) + 1; });
+      const order = ["R1", "R10", "R11", "R9", "R8", "R3", "R4", "R6", "R7"];
+      const chips = [];
+      order.forEach((rid) => { if (byRule[rid]) chips.push(`<button class="todo-chip${RULES_META.find((r) => r.rule_id === rid && r.severity === "中") ? " mid" : ""}" type="button" data-prio="${rid}" title="点击查看该问题的发票">${esc(resolveRuleMeta(rid, metaMap))} <b>${byRule[rid]}</b></button>`); });
+      return chips.join("");
+    })();
+    // RV-86：价税合计净额 = 蓝票价税合计 + 红字冲减（负数）。data.total_amount 保持接口契约（剔除红冲的蓝票合计），净额在此派生
+    const totalAmt = (() => {
+      const blue = Number(s.total_amount || 0);
+      let red = 0;
+      invs4.forEach((i) => { if ((i.invoice_status || "normal") === "red_flush") red += Math.round(Number(i.total || 0) * 100) / 100; });
+      return fmtMoney(String(blue + red));
+    })();
+    const redAmt = s.red_flush_amount ? fmtMoney(String(Math.abs(Number(s.red_flush_amount)).toFixed(2))) : "";
+    const taxAmt = (() => {
+      // 用整数分累加避免浮点误差（150.3699…→150.37）
+      let t = 0;
+      invs4.forEach((i) => { if ((i.invoice_status || "normal") !== "red_flush" && (i.invoice_status || "normal") !== "void") t += Math.round(Number(i.tax || 0) * 100); });
+      const s = String(t / 100);
+      return fmtMoney(s);
+    })();
+    const blueTotal = (() => {
+      // 蓝票价税合计（剔除红冲/作废后的有效金额）
+      let t = 0;
+      invs4.forEach((i) => { if ((i.invoice_status || "normal") !== "red_flush" && (i.invoice_status || "normal") !== "void") t += Math.round(Number(i.total || 0) * 100); });
+      return fmtMoney(String(t / 100));
+    })();
+    const redTotal = (() => {
+      // 红字发票冲减合计（负数）
+      let t = 0;
+      invs4.forEach((i) => { if ((i.invoice_status || "normal") === "red_flush") t += Math.round(Number(i.total || 0) * 100); });
+      const s = String(t / 100);
+      return fmtMoney(s);
+    })();
+    const kpis = `
+  <div class="ctxbar">
+    <div class="wb-head">
+      <span class="s">本批 ${esc((_c = s.file_count) != null ? _c : 0)} 个文件（发票 ${invs4.length} 张 + 识别失败 ${esc((_f = s.failed_count) != null ? _f : 0)} 个） · 批次 ${esc(d.batch_id || "—")} · ${esc((d.generated_at || "").slice(0, 16) || "")}</span>
+    </div>
+    <div class="kpis">
+      <div class="kpi total main"><div class="n">${esc(invs4.length)}</div><div class="l">发票张数</div></div>
+      <div class="kpi total main amt3"><div class="n net">${totalAmt}</div><div class="l">价税合计净额</div><div class="n sub" title="蓝票 ${blueTotal} · 红冲 ${redTotal}">蓝票 ${blueTotal} · 红冲 ${redTotal}</div></div>
+      <div class="kpi total main"><div class="n">${taxAmt}</div><div class="l">税额（不含红冲）</div></div>
+      <div class="kpi total main"><div class="n">${redAmt ? esc(redAmt) : "—"}</div><div class="l">红冲 / 作废</div></div>
+    </div>
+    <div class="precheck-row">
+      <div class="kpi precheck ok${drillCls("pass")}" data-drill="pass" role="button" tabindex="0" aria-pressed="${_drill.kpi === "pass"}" title="查看可直接入账的发票"><div class="n ok">${esc(precheckCnt["建议入账"] || 0)}</div><div class="l">建议入账</div></div>
+      <div class="kpi precheck mid${drillCls("review")}" data-drill="review" role="button" tabindex="0" aria-pressed="${_drill.kpi === "review"}" title="查看需要财务确认后再处理的发票">${humanCnt > 0 ? `<div class="n mid">${esc(precheckCnt["建议核对"] || 0)}<span class="mini">含人工${esc(humanCnt)}</span></div>` : `<div class="n mid">${esc(precheckCnt["建议核对"] || 0)}</div>`}<div class="l">建议核对</div></div>
+      <div class="kpi precheck high${drillCls("block")}" data-drill="block" role="button" tabindex="0" aria-pressed="${_drill.kpi === "block"}" title="查看存在高风险问题、建议暂缓入账的发票"><div class="n high">${esc(precheckCnt["阻断入账"] || 0)}</div><div class="l">阻断入账</div></div>
+      <div class="kpi precheck weak${drillCls("unknown")}" data-drill="unknown" role="button" tabindex="0" aria-pressed="${_drill.kpi === "unknown"}" title="查看信息不全、无法给出预审结论的发票"><div class="n">${esc(precheckCnt["无法预审"] || 0)}</div><div class="l">无法预审</div></div>
+    </div>
+    ${prioTags ? `<div class="todo-bar"><span class="lb">优先处理：</span>${prioTags}</div>` : ""}
+    <div class="ctxmeta" title="批次/生成时间/统计口径">
+      <span class="cm-line">统计口径：建议入账+建议核对+阻断入账+无法预审=发票张数（识别失败文件独立计，不纳入预审结论统计）</span>
+      <details class="cm-detail"><summary>细则：价税口径与归类优先级</summary>
+        <div class="cm-inner">价税合计净额=蓝票价税合计−红字冲减（税额同口径剔除红冲）；红字冲减为负数显式单列；同一张发票按 无法预审＞阻断入账＞建议核对＞建议入账 唯一归类；人工复核为建议核对子集；本工作台面向受票方（购方）财务部门，「进项转出」按购方视角表述</div>
+      </details>
+    </div>
+  </div>`;
+    const rname = (id) => resolveRuleMeta(id, metaMap);
+    const findings = (d.findings || []).length === 0 ? `<div class="card card-pad"><div class="hint">本批次未发现问题，报告完成 ✓<br/>未发现问题不等于绝对合规，请结合检查项覆盖范围判断。</div></div>` : (d.findings || []).map((f) => findingRow(f, metaMap, true)).join("");
+    const farr = d.findings || [];
+    const cnt = { pending: 0, resolved: 0, ignored: 0 };
+    farr.forEach((f) => {
+      const s2 = (getDisp(riskId(f)) || {}).status || "pending";
+      cnt[s2]++;
+    });
+    const done = farr.length > 0 && cnt.pending === 0;
+    const dispBar = farr.length ? `<div class="disps">
+    <span class="dp pending">待处理 <b>${cnt.pending}</b></span>
+    <span class="dp resolved">已处理 <b>${cnt.resolved}</b></span>
+    <span class="dp ignored">已忽略 <b>${cnt.ignored}</b></span>
+    <span class="hint">口径：已处理+已忽略=完成 · 检查方案更新后处置状态会重置（结论可能变化需重判）${window.__dispStoreFail ? ` · <span class="fail">存储不可用，本次处置不会保留</span>` : ""}</span>
+    ${done ? `<span class="alldone">✓ 全部处置完成，可导出</span>` : ""}
+  </div>` : "";
+    const html = `
+  ${__driftMsg ? `<div class="drift-warn" role="alert"><b>⚠ 口径漂移</b>：${esc(__driftMsg)}</div>` : ""}
+  <div class="card">${kpis}</div>
+  <div class="print-head" id="printHead"></div>
+  <div class="view-switch">
+    <button class="vs active" data-view="risk">风险待办</button>
+    <button class="vs" data-view="invoice">逐票清单</button>
+    <button class="vs" data-view="rule">检查项</button>
+  </div>
+  <div class="mob-view-bar">
+    <button class="mv active" data-view="risk">风险待办</button>
+    <button class="mv" data-view="invoice">逐票清单</button>
+  </div>
+  <div class="section">
+    <div class="section-head">
+      <div class="flt-seg" role="group" aria-label="按处置状态筛选">
+        <button class="btn-ghost flt active" data-flt="all">全部</button>
+        <button class="btn-ghost flt" data-flt="pending">待处理</button>
+      </div>
+      <div class="tools">
+        <span class="hint" id="fltHint" style="margin:0 4px 0 0;"></span>
+        <div class="dl-menu">
+          <button class="btn" id="btnExport" type="button" aria-haspopup="true" aria-expanded="false">导出 ▾</button>
+          <div class="dl-list" id="dlList">
+            <button class="btn-ghost" onclick="exportReportXLSX()">预审报告 Excel</button>
+            <button class="btn-ghost" onclick="openReportPreview()">导出 PDF 报告</button>
+            <div class="dl-sep"></div>
+            <button class="btn-ghost" onclick="exportInvoicesXLSX()">发票清单 Excel</button>
+            <button class="btn-ghost" onclick="exportInvoicesCSV()">发票清单 CSV</button>
+            <button class="btn-ghost" onclick="exportCSV(${JSON.stringify(d.findings || []).replace(/"/g, "&quot;")}, ${JSON.stringify(d.rules || []).replace(/"/g, "&quot;")})">导出风险 CSV</button>
+          </div>
+        </div>
+        <button class="btn-ghost" onclick="window.print()">打印</button>
+      </div>
+    </div>
+    ${dispBar}
+    <div class="report-zone">
+      <div class="view-risk-col">
+        <h2>风险待办 <span class="sub">${(d.findings || []).length} 条问题 · 按严重程度排序</span></h2>
+        ${findings}
+      </div>
+      <div class="view-invoice-col">
+        <div class="sort-bar"><span>逐票清单 ${(d.invoices || []).length} 张</span><span class="sg" id="invSortSeg"><button type="button" data-sort="natural"${__invSort !== "risk" ? " class=\"active\"" : ""}>票号序</button><button type="button" data-sort="risk"${__invSort === "risk" ? " class=\"active\"" : ""}>异常优先</button></span><button class="rule-open-btn" type="button" id="btnOpenRules">📊 检查项</button></div>
+        ${invoiceViewHtml(d, metaMap)}
+      </div>
+    </div>
+  </div>
+  <div class="meta">
+    <div>检查方案：${esc(((_g = d.ruleset) == null ? void 0 : _g.version) || d.ruleset_version)}（生效 ${esc(((_h = d.ruleset) == null ? void 0 : _h.effective_date) || "")}）· 批次 ${esc(d.batch_id)} · 生成 ${esc(d.generated_at)}</div>
+    <div>范围说明：${esc(((_i = d.ruleset) == null ? void 0 : _i.scope_note) || d.scope_note || "")}</div>
+  </div>
+  <div class="disc">${esc(d.disclaimer || DISCLAIMER)}</div>`;
+    el.innerHTML = html;
+    applyView();
+    bindRuleDrawer();
+    bindInvSort();
+    bindPrioChips();
+    bindExportMenu();
+  } catch (e) {
+    console.error("[render] 失败:", e);
+    el.innerHTML = `<div class="card card-pad high"><b>报告渲染失败</b><br/>${esc(String(e && e.message || e))}<br/><button class="btn" style="margin-top:10px" onclick="render(demoReport())">重试</button></div>`;
+  }
+}
+function setMode(live) {
+  document.body.classList.toggle("live", live);
+  $("btnDemo").classList.toggle("active", !live);
+  $("btnLive").classList.toggle("active", live);
+  if (live) {
+    $("backendUrl").value = localStorage.getItem("ipc_backend") || "http://localhost:8000";
+    $("apiKey").value = localStorage.getItem("ipc_key") || "";
+    // UI-2（RV-74）：切换真实模式后回显主体 chip（本地存储的企业名）
+    if (localStorage.getItem("ipc_company")) $("coName").value = localStorage.getItem("ipc_company");
+    updateSubjectChip();
+  } else {
+    updateSubjectChip();
+  }
+  $("empty").style.display = "";
+  $("result").innerHTML = "";
+}
+async function healthCheck() {
+  const url = $("backendUrl").value.trim().replace(/\/+$/, "");
+  if (!url) {
+    $("connHint").textContent = "请填写后端地址";
+    return false;
+  }
+  localStorage.setItem("ipc_backend", url);
+  try {
+    const r = await fetch(url + "/healthz", { method: "GET" });
+    if (r.ok) {
+      const j = await r.json();
+      $("connHint").textContent = "连接成功 · 服务正常（ruleset " + (j.ruleset || "?") + "）";
+      $("connHint").className = "hint okc";
+      try { loadCompanyCfg(); } catch (e) {}
+      return true;
+    }
+    $("connHint").textContent = "连接失败：HTTP " + r.status + "（后端未启动？地址不对？）";
+    $("connHint").className = "hint err";
+    return false;
+  } catch (e) {
+    $("connHint").textContent = "连接失败：" + e.message + "（注意：GitHub Pages 是 https，后端需 https 或 localhost）";
+    $("connHint").className = "hint err";
+    return false;
+  }
+}
+async function loadCompanyCfg() {
+  const url = $("backendUrl").value.trim().replace(/\/+$/, "");
+  const key = $("apiKey").value.trim();
+  if (!url || !key) return;
+  const r = await fetch(url + "/api/config", { method: "GET", headers: { "X-API-Key": key } });
+  if (!r.ok) return;
+  const j = await r.json();
+  const ents = j.company_entities || [];
+  if (ents.length) {
+    if (ents[0].name) $("coName").value = ents[0].name;
+    if (ents[0].tax_id) $("coTaxId").value = ents[0].tax_id;
+    updateSubjectChip();
+  }
+  if (j.rules) fillRulesPanel(j.rules);
+}
+$("btnSaveCfg").onclick = async () => {
+  const url = $("backendUrl").value.trim().replace(/\/+$/, "");
+  const key = $("apiKey").value.trim();
+  const name = $("coName").value.trim();
+  const taxid = $("coTaxId").value.trim();
+  if (!url) { $("cfgHint").textContent = "请先填写后端地址"; $("cfgHint").className = "hint err"; return; }
+  if (!key) { $("cfgHint").textContent = "请先填写 API Key"; $("cfgHint").className = "hint err"; return; }
+  if (!name && !taxid) { $("cfgHint").textContent = "企业名称与税号至少填一项"; $("cfgHint").className = "hint err"; return; }
+  try {
+    const r = await fetch(url + "/api/config", {
+      method: "PUT",
+      headers: { "X-API-Key": key, "Content-Type": "application/json" },
+      body: JSON.stringify({ company_name: name, tax_id: taxid })
+    });
+    const j = await r.json();
+    if (!r.ok) { $("cfgHint").textContent = "保存失败：" + (j.detail || r.status); $("cfgHint").className = "hint err"; return; }
+    $("cfgHint").textContent = "已保存：" + j.message + (j.tax_id_masked ? "（税号 " + j.tax_id_masked + "）" : "") + "，R2 校验已生效";
+    $("cfgHint").className = "hint okc";
+    // UI-2（RV-74）：主体常驻报告头——保存后更新顶栏 chip + 本地回显
+    if (name) localStorage.setItem("ipc_company", name);
+    updateSubjectChip();
+  } catch (e) {
+    $("cfgHint").textContent = "保存失败：" + e.message;
+    $("cfgHint").className = "hint err";
+  }
+};
+// UI-2（RV-74）：设置抽屉开关 + 主体常驻 chip
+function updateSubjectChip() {
+  const name = $("coName").value.trim();
+  const chip = $("subjectChip");
+  if (name) {
+    $("subjectChipName").textContent = name;
+    chip.style.display = "inline-flex";
+  } else {
+    chip.style.display = "none";
+  }
+}
+// RV-93 P0-2：多浮层互斥 + body 滚动锁（设置全屏面板打开时关闭规则抽屉/报告预览浮层）
+function setSettingsOpen(open) {
+  const d = $("settingsDrawer");
+  if (open) {
+    const rd = document.getElementById("ruleDrawer");
+    if (rd && rd.classList.contains("open")) closeRuleDrawer(false);
+    const ovs = document.querySelectorAll(".rev-overlay");
+    ovs.forEach((o) => o.remove());
+    d.classList.add("open");
+    document.body.classList.add("settings-lock");
+  } else {
+    d.classList.remove("open");
+    document.body.classList.remove("settings-lock");
+  }
+}
+$("btnSettings").onclick = (ev) => {
+  ev.stopPropagation();
+  setSettingsOpen(!$("settingsDrawer").classList.contains("open"));
+};
+$("btnSettingsClose").onclick = () => {
+  setSettingsOpen(false);
+};
+document.addEventListener("click", (ev) => {
+  const d = $("settingsDrawer");
+  if (d.classList.contains("open") && !d.contains(ev.target) && ev.target.id !== "btnSettings") {
+    setSettingsOpen(false);
+  }
+});
+$("btnEditSubject").onclick = () => {
+  setSettingsOpen(true);
+  $("coName").focus();
+};
+
+function fillRulesPanel(rules) {
+  if (!rules) return;
+  var set = function (id, v) { if (v !== undefined && v !== null) { var el = $(id); if (el) el.value = v; } };
+  set("rcSerialTail", rules.serial_tail_len);
+  set("rcSerialGap", rules.serial_max_gap);
+  set("rcSerialMin", rules.serial_min_count);
+  if (rules.category_limits) {
+    set("rcLimitTravel", rules.category_limits.travel);
+    set("rcLimitEntertain", rules.category_limits.entertain);
+    set("rcLimitOffice", rules.category_limits.office);
+    set("rcLimitTransport", rules.category_limits.transport);
+    set("rcLimitOther", rules.category_limits.other);
+  }
+  set("rcDefaultLimit", rules.default_limit);
+  set("rcConcentrate", rules.concentrate_threshold);
+  set("rcMaxTotal", rules.max_plausible_total);
+}
+function collectRules() {
+  var num = function (id) { var v = $(id).value.trim(); return v === "" ? undefined : Number(v); };
+  var out = {};
+  var a = num("rcSerialTail"); if (a !== undefined) out.serial_tail_len = a;
+  var b = num("rcSerialGap"); if (b !== undefined) out.serial_max_gap = b;
+  var c = num("rcSerialMin"); if (c !== undefined) out.serial_min_count = c;
+  var cl = {};
+  var t = num("rcLimitTravel"); if (t !== undefined) cl.travel = t;
+  var e = num("rcLimitEntertain"); if (e !== undefined) cl.entertain = e;
+  var o = num("rcLimitOffice"); if (o !== undefined) cl.office = o;
+  var tr = num("rcLimitTransport"); if (tr !== undefined) cl.transport = tr;
+  var ot = num("rcLimitOther"); if (ot !== undefined) cl.other = ot;
+  if (Object.keys(cl).length) out.category_limits = cl;
+  var d = num("rcDefaultLimit"); if (d !== undefined) out.default_limit = d;
+  var cc = num("rcConcentrate"); if (cc !== undefined) out.concentrate_threshold = cc;
+  var m = num("rcMaxTotal"); if (m !== undefined) out.max_plausible_total = m;
+  return out;
+}
+function resetRulesPanel() {
+  var defs = { rcSerialTail: 4, rcSerialGap: 2, rcSerialMin: 3, rcLimitTravel: 5000, rcLimitEntertain: 3000, rcLimitOffice: 2000, rcLimitTransport: 1000, rcLimitOther: 5000, rcDefaultLimit: 5000, rcConcentrate: 6, rcMaxTotal: 30000000 };
+  Object.keys(defs).forEach(function (id) { var el = $(id); if (el) el.value = defs[id]; });
+  $("rulesHint").textContent = "已恢复默认值，点击「保存预警标准」生效";
+}
+$("btnResetRules").onclick = resetRulesPanel;
+$("btnSaveRules").onclick = async () => {
+  const url = $("backendUrl").value.trim().replace(/\/+$/, "");
+  const key = $("apiKey").value.trim();
+  if (!url) { $("rulesHint").textContent = "请先填写后端地址"; $("rulesHint").className = "hint err"; return; }
+  if (!key) { $("rulesHint").textContent = "请先填写 API Key"; $("rulesHint").className = "hint err"; return; }
+  try {
+    const r = await fetch(url + "/api/config", {
+      method: "PUT",
+      headers: { "X-API-Key": key, "Content-Type": "application/json" },
+      body: JSON.stringify({ rules: collectRules() })
+    });
+    const j = await r.json();
+    if (!r.ok) { $("rulesHint").textContent = "保存失败：" + (j.detail || r.status); $("rulesHint").className = "hint err"; return; }
+    $("rulesHint").textContent = "已保存（rules_hash " + (j.rules_hash || "?") + "），预警标准已生效，报告将标注自定义来源";
+    $("rulesHint").className = "hint okc";
+  } catch (e2) {
+    $("rulesHint").textContent = "保存失败：" + e2.message;
+    $("rulesHint").className = "hint err";
+  }
+};
+async function runReview() {
+  const url = $("backendUrl").value.trim().replace(/\/+$/, "");
+  const key = $("apiKey").value.trim();
+  const files = $("fileInput").files;
+  if (!url) {
+    $("connHint").textContent = "请填写后端地址";
+    $("connHint").className = "hint err";
+    return;
+  }
+  if (!key) {
+    $("connHint").textContent = "请填写 API Key（后端环境变量 INVOICE_API_KEY 的值）";
+    $("connHint").className = "hint err";
+    return;
+  }
+  if (!files.length) {
+    $("runHint").textContent = "请选择要上传的发票文件（XML/OFD/PDF）";
+    $("runHint").className = "hint err";
+    return;
+  }
+  localStorage.setItem("ipc_backend", url);
+  localStorage.setItem("ipc_key", key);
+  const fd = new FormData();
+  for (const f of files) fd.append("files", f, f.name);
+  const totalMb = Array.from(files).reduce((s, f) => s + f.size, 0) / 1048576;
+  $("btnReview").disabled = true;
+  $("btnReview").textContent = `上传中 0%（共 ${totalMb.toFixed(1)} MB）`;
+  try {
+    const j = await xhrUpload(url + "/review", key, fd, (loaded, total) => {
+      const pct = total ? Math.round(loaded / total * 100) : 0;
+      $("btnReview").textContent = `上传中 ${pct}%（${(loaded / 1048576).toFixed(1)}/${(total / 1048576).toFixed(1)} MB）`;
+    });
+    $("btnReview").textContent = "识别中…";
+    if (j.status !== 200) {
+      $("result").innerHTML = `<div class="card card-pad high">后端拒绝：${esc((j.body || {}).detail || "HTTP " + j.status)}</div>`;
+      return;
+    }
+    render(j.body);
+    if ((j.body.findings || []).length) {
+      try {
+        const er = await fetch(url + "/v1/findings/explain", {
+          method: "POST",
+          headers: { "X-API-Key": key, "Content-Type": "application/json" },
+          body: JSON.stringify({ findings: j.body.findings })
+        });
+        if (er.ok) {
+          const ej = await er.json();
+          (ej.explanations || []).forEach((exp, i) => {
+            if (exp && j.body.findings[i]) j.body.findings[i].explanation = exp;
+          });
+          render(j.body);
+        }
+      } catch (e2) {
+      }
+    }
+  } catch (e) {
+    $("result").innerHTML = `<div class="card card-pad high">请求失败：${esc(e.message)}（检查后端地址与网络；跨域需后端 CORS 放行）</div>`;
+  } finally {
+    $("btnReview").disabled = false;
+    $("btnReview").textContent = "运行预审";
+  }
+}
+function xhrUpload(url, key, fd, onProgress) {
+  return new Promise((resolve, reject) => {
+    const x = new XMLHttpRequest();
+    x.open("POST", url);
+    x.setRequestHeader("X-API-Key", key);
+    x.upload.onprogress = (e) => {
+      if (e.lengthComputable) onProgress(e.loaded, e.total);
+    };
+    x.onload = () => {
+      let body = null;
+      try {
+        body = JSON.parse(x.responseText || "null");
+      } catch (e) {
+        body = null;
+      }
+      resolve({ status: x.status, body });
+    };
+    x.onerror = () => reject(new Error("网络错误（检查后端地址与网络）"));
+    x.onabort = () => reject(new Error("上传被中止"));
+    x.send(fd);
+  });
+}
+const dz = $("dropZone");
+dz.addEventListener("click", () => $("fileInput").click());
+dz.addEventListener("keydown", (e) => {
+  if (e.key === "Enter" || e.key === " ") {
+    e.preventDefault();
+    $("fileInput").click();
+  }
+});
+dz.addEventListener("dragover", (e) => {
+  e.preventDefault();
+  dz.classList.add("over");
+});
+dz.addEventListener("dragleave", () => dz.classList.remove("over"));
+dz.addEventListener("drop", (e) => {
+  e.preventDefault();
+  dz.classList.remove("over");
+  if (e.dataTransfer.files.length) {
+    $("fileInput").files = e.dataTransfer.files;
+    syncFiles();
+  }
+});
+document.addEventListener("paste", (e) => {
+  var _a;
+  const items = ((_a = e.clipboardData) == null ? void 0 : _a.items) || [];
+  const dt = new DataTransfer();
+  let got = false;
+  for (const it of items) if (it.kind === "file") {
+    dt.items.add(it.getAsFile());
+    got = true;
+  }
+  if (got) {
+    $("fileInput").files = dt.files;
+    syncFiles();
+  }
+});
+function syncFiles() {
+  const fs = $("fileInput").files;
+  $("fileList").innerHTML = fs.length ? Array.from(fs).map((f) => `<div class="f"><span>📎</span><span class="nm">${esc(f.name)}</span><span>${(f.size / 1024).toFixed(0)}KB</span></div>`).join("") : "";
+  $("runHint").textContent = fs.length ? `已选 ${fs.length} 个文件，点击「运行预审」开始。` : "运行后右侧显示合规预审报告。文件仅发往你配置的后端，不发送第三方。";
+  $("runHint").className = "hint";
+}
+$("fileInput").onchange = syncFiles;
+$("btnCamera").onclick = () => {
+  // F-06：capture="environment" 直接调起手机后置相机；图片走本地 OCR（数据不出本机）
+  $("runHint").textContent = "已调起相机：请正拍发票（避免反光/歪斜），每张照片对应一张发票；拍完自动加入列表，点击「运行预审」识别";
+  $("runHint").className = "hint";
+  $("fileInput").click();
+};
+$("btnDemo").onclick = () => {
+  setMode(false);
+  render(demoReport());
+};
+$("btnLive").onclick = () => setMode(true);
+$("btnRun").onclick = () => render(demoReport());
+$("btnTest").onclick = healthCheck;
+$("btnReview").onclick = runReview;
+setMode(false);
+render(demoReport());
+updateStorageWarn(); // T-008：进入页面即检测本机存储容量
+
+</script>
+</body>
+</html>

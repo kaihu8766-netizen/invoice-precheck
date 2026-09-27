@@ -1,0 +1,52 @@
+# 评审红线（RV-13 采纳）：命中即必须带已批准且 diff_hash 匹配的 RV-ID 才能提交
+# 类别: paths(前缀匹配) 或 keywords(文件名/路径含词)
+rules:
+  parser_core:            # 解析核心：路由/字段提取/勾稽
+    paths: ["app/parser.py"]
+    keywords: ["parser", "parse_document", "勾稽"]
+  pdf_pipeline:           # PDF 解析/版式/OCR 路径
+    paths: ["app/pdf.py"]
+    keywords: ["pdf", "版式", "ocr", "dpi", "二维码", "qr"]
+  ocr_engine:             # OCR 渲染/Provider
+    paths: ["app/ocr.py"]
+    keywords: ["ocr", "dpi", "render"]
+  rules_engine:           # 规则/阈值（RV-78：keywords 收紧，防 "rules" 匹配 gate_rules.yaml 误命中）
+    paths: ["app/rules.py"]
+    keywords: ["阈值", "rules.py", "限额", "上限"]
+  data_redline:           # 脱敏/真实数据处理（红线相关一律必审；RV-99 C2：补 redact/anonymize_real）
+    paths: ["scripts/anonymize_to_private.py", "scripts/benchmark.py", "scripts/redact.py", "scripts/anonymize_real.py"]
+    keywords: ["anonymize", "脱敏", "private", "真实", "发票", "redact"]
+  gate_self:              # 门禁自身（RV-14/15 P0 修复：改门禁放行自己→必审；含 AGENTS/CI/hook 配置）
+    paths:
+      - "scripts/trace_gate.py"
+      - ".githooks/"
+      - "scripts/gate_rules.yaml"
+      - "AGENTS.md"
+      - "Makefile"
+      - "pyproject.toml"
+      - ".github/"
+    # RV-107：agent-communication-demo/*（deepseek_gate.py/evtools.py）属 project-trace 仓，
+    # invoice-precheck 门禁管不到——跨仓条目全部移除，由 OPEN_ISSUES #62（project-trace 门禁）承接。
+    keywords: ["gate", "hook", "钩子"]
+  demo_data:              # 演示数据口径（RV-77/78：改 demo 数据语义 → 需事前对齐，非安全红线）
+    paths: ["docs/index.html"]
+    data_segments:        # 哨兵锚点对（RV-78 弃用花括号配平）：begin/end 行号定区间，删改哨兵=命中
+      - "@demo-data:begin"
+      - "@demo-data:end"
+    keywords: ["demoReport", "summary", "invoices", "findings"]
+
+# ---- 轻量评审通道（F-20260926-01，RV-20260926-140 方案评审采纳 H1-H5） ----
+# [LIGHT] 提交资格判定：变更文件集 ⊆ 白名单 + 未命中任何红线/demo_data + 限额内
+# H1 白名单制（DeepSeek 修订）：只放明确的纯文档/纯文案类型，机制文件一律全量
+light_whitelist:
+  rules:
+    - type: markdown_docs        # 纯 md 文档（代码库文档；流程状态文档已被 EXCLUDE_PATHS 排除出 diff）
+      match: ["*.md", "**/*.md"]   # 根目录与子目录 md 都算（fnmatch ** 不匹配根文件）
+    - type: index_html           # 前端页面：仅限"非 demo_data 段 + 非 <script> 区间"的文案/样式改动
+      match: ["docs/index.html"]
+  limits:
+    max_files: 3                 # 单次 [LIGHT] 提交最多 3 个文件
+    max_lines: 30                # 单次 [LIGHT] 提交总变更行 ≤30（numstat added+deleted）
+    max_line_chars: 500          # 单文件单行 ≤500 字符（防大段逻辑压成一行绕过，H2）
+    quota_file_lines_7d: 50      # 同文件 7 天累计 LIGHT 变更行 ≥50 → 强制全量（H5）
+    quota_light_commits_7d: 5    # 每周 LIGHT 提交 >5 次 → 强制全量（H5）

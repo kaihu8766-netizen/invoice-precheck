@@ -1,0 +1,395 @@
+"""语料库驱动回归（P2 前置 v0.3，2026-09-23）。
+
+加载 tests/corpus/ 下的数电票 XML 样本（结构仿真虚构样例 + 官方 XBRL 实例 + 合成样本，
+结构化元数据见 manifest.json），验证 parser 三方言（中文标签/国标拼音缩写/EInvoice 英文结构）
+解析正确性，并按 manifest 绑定 SHA256（防文件被静默改动）。
+
+DeepSeek 里程碑评审要求：测试升级为语料库驱动（≥3 省份/3 开票系统 + XBRL + 红冲 +
+差额征税 + 多税率）。
+- v0.2：3 省份（广东/江苏/北京）× 3 开票系统（标准税局系统/网约车平台/电子发票服务平台·网页开票）
+  × 版本分叉（0.2/0.32/0.33）达成，44 测试全过。
+- v0.3：官方 XBRL 实例×2（财政部推广应用版附件3）+ 合成样本×4（红冲/差额/多税率/拼音缩写方言）
+  入库；覆盖项 XBRL/红冲/差额/多税率/中文方言/拼音方言达成（来源=official/synthetic）。
+  结构仿真/官方样例每省≥2 份仍未达成（v1 硬门 open，登记 manifest.governance）。
+"""
+import hashlib
+import json
+import sys
+import unittest
+from decimal import Decimal
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from app.parser import parse_document, parse_xml
+
+CORPUS_DIR = Path(__file__).resolve().parent / "corpus"
+
+
+def _parse(fname: str):
+    """按样本格式选择解析入口：ofd_container → parse_document（解包内嵌 XML），其余 → parse_xml。"""
+    data = (CORPUS_DIR / fname).read_bytes()
+    if fname.endswith(".ofd"):
+        return parse_document(data)
+    return parse_xml(data)
+
+
+def _load_manifest() -> dict:
+    with (CORPUS_DIR / "manifest.json").open(encoding="utf-8") as f:
+        return json.load(f)
+
+
+# (文件名, 省份, 开票系统, 场景, 格式, 期望字段断言)
+# format=invoice_xml：真实/合成票面 XML，断言完整字段；
+# format=xbrl_instance：官方入账信息结构化数据，断言结构安全（parser 未支持 xbrli 解析，仅归档）；
+# format=ofd_container：合成 OFD 容器（内嵌官方票样），断言解包后字段（A1）。
+CASES = [
+    (
+        "official-gd-special.xml",
+        "广东",
+        "标准税局系统",
+        "蓝字专票·人力资源服务·6%（官方公开样例）",
+        "invoice_xml",
+        {
+            "invoice_no": "23440000000000100001",
+            "issue_date": "2023-02-23",  # RequestTime 优先（财政部元素清单：开票日期=开票请求时间）
+            "amount": "2.00",
+            "tax": "0.12",
+            "total": "2.12",
+            "seller_name": "示例制造集团有限公司",
+            "buyer_name": "示例商贸有限公司",
+            "invoice_type": "增值税专用发票",  # GeneralOrSpecialVAT.LabelName
+        },
+    ),
+    (
+        "gaode-js-taxi.xml",
+        "江苏",
+        "网约车平台",
+        "蓝字普票·交通·3%·含退款负行（Amount=-1.15 不含税 / TotaltaxIncludedAmount=-1.19 含税）（结构仿真样例）",
+        "invoice_xml",
+        {
+            "invoice_no": "26320000000000100001",
+            "issue_date": "2025-05-20",
+            "amount": "46.07",
+            "tax": "1.38",
+            "total": "47.45",
+            "seller_name": "示例出行服务有限公司示例分公司",
+            "buyer_name": "xxxxxx有限责任公司",
+        },
+    ),
+    (
+        "bj-platform-it.xml",
+        "北京",
+        "电子发票服务平台·网页开票",
+        "蓝字专票·信息技术服务·6%·Version 0.33·含签名子树（结构仿真样例）",
+        "invoice_xml",
+        {
+            "invoice_no": "24110000000000100003",
+            "issue_date": "2025-03-12",  # RequestTime(2025-03-12 09:30:00) 带时间戳格式 → 截断为日期
+            "amount": "123456.78",
+            "tax": "7407.41",
+            "total": "130864.19",
+            "seller_name": "示例科技有限公司",
+            "buyer_name": "示例商贸有限公司",
+            "invoice_type": "增值税专用发票",
+        },
+    ),
+    (
+        "official-einv-xbrl-special.xml",
+        "广东",
+        "标准税局系统",
+        "官方 XBRL 实例·专票入账信息结构化数据（xbrli 根/einv 命名空间）",
+        "xbrl_instance",
+        {"invoice_no": "23440000000000100011"},  # 仅结构安全断言（元素名巧合可解析，不代表支持 XBRL）
+    ),
+    (
+        "official-einv-xbrl-ordinary.xml",
+        "广东",
+        "标准税局系统",
+        "官方 XBRL 实例·普票入账信息结构化数据（xbrli 根/einv 命名空间）",
+        "xbrl_instance",
+        {"invoice_no": "23440000000000100012"},
+    ),
+    (
+        "synthetic/synthetic-red-letter-cn.xml",
+        "北京",
+        "合成（中文标签结构）",
+        "红字发票·销货退回·负数金额（-2500.00/-150.00/-2650.00）·中文标签方言·含 EI390/EI391（合成）",
+        "invoice_xml",
+        {
+            "invoice_no": "26110000000000100004",
+            "issue_date": "2026-09-18",
+            "amount": "-2500.00",
+            "tax": "-150.00",
+            "total": "-2650.00",
+            "seller_name": "示例商贸有限公司",
+            "buyer_name": "示例科技（北京）有限公司",
+        },
+    ),
+    (
+        "synthetic/synthetic-differential-einv.xml",
+        "广东",
+        "合成（EInvoice 结构，同构 gaode-js-taxi）",
+        "差额征税·旅游服务·KCE=200.00·计税基础 800.00×6%=48.00·备注'差额征税：200.00。'（合成）",
+        "invoice_xml",
+        {
+            "invoice_no": "26440000000000100005",
+            "issue_date": "2026-09-10",
+            "amount": "800.00",
+            "tax": "48.00",
+            "total": "848.00",
+            "seller_name": "示例旅行社（广东）有限公司",
+        },
+    ),
+    (
+        "synthetic/synthetic-multirate-einv.xml",
+        "江苏",
+        "合成（EInvoice 结构，同构 gaode-js-taxi）",
+        "多税率明细·一票三行 6%/9%/13%→600.00/63.00/663.00（合成）",
+        "invoice_xml",
+        {
+            "invoice_no": "26320000000000100006",
+            "issue_date": "2026-08-20",
+            "amount": "600.00",
+            "tax": "63.00",
+            "total": "663.00",
+            "seller_name": "示例软件（江苏）有限公司",
+        },
+    ),
+    (
+        "synthetic/synthetic-pinyin-abbrev.xml",
+        "江苏",
+        "合成（国标拼音缩写结构）",
+        "拼音缩写方言·餐饮服务·3% 征收率（57.28/1.72/59.00）·FPHM/KPRQ/HJJE/HJSE/JSHJXX（合成）",
+        "invoice_xml",
+        {
+            "invoice_no": "26320000000000100007",
+            "issue_date": "2026-07-30",
+            "amount": "57.28",
+            "tax": "1.72",
+            "total": "59.00",
+            "seller_name": "示例生活服务（无锡）有限公司",
+        },
+    ),
+    (
+        "ofd/ofd-container-gd-sample.ofd",
+        "广东",
+        "合成容器（GB/T 33190 骨架，官方票样封装）",
+        "合成 OFD 容器·内嵌官方公开票样（EInvoice 结构）·验证 OFD 解包链路（A1）",
+        "ofd_container",
+        {
+            "invoice_no": "23440000000000100001",
+            "issue_date": "2023-02-23",
+            "amount": "2.00",
+            "tax": "0.12",
+            "total": "2.12",
+            "seller_name": "示例制造集团有限公司",
+        },
+    ),
+]
+
+
+class TestCorpusRealSamples(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.manifest = _load_manifest()
+
+    def test_manifest_exists_and_valid(self):
+        """manifest.json 必须存在且含版本/治理/样本清单（DeepSeek M1/M7）。"""
+        self.assertIn("corpus_version", self.manifest)
+        self.assertIn("samples", self.manifest)
+        self.assertIn("required_for_v1", self.manifest.get("governance", {}))
+        files_in_manifest = {s["file"] for s in self.manifest["samples"]}
+        files_on_disk = {c[0] for c in CASES}
+        self.assertEqual(files_in_manifest, files_on_disk,
+                         "manifest 与测试用例文件集合不一致")
+
+    def test_corpus_files_exist(self):
+        """语料库文件必须存在（防目录被误删后测试静默跳过）。"""
+        for fname, *_ in CASES:
+            self.assertTrue((CORPUS_DIR / fname).exists(), f"语料缺失：{fname}")
+
+    def test_manifest_sha256_filled(self):
+        """语料库 v0.1 门槛：所有样本 SHA256 必须回填（不允许 AUTO 占位入库）。"""
+        for s in self.manifest["samples"]:
+            with self.subTest(file=s["file"]):
+                self.assertNotEqual(s["sha256"], "AUTO", f"{s['file']} 哈希未回填")
+
+    def test_corpus_sha256_bound(self):
+        """manifest 记录的 SHA256 必须与磁盘文件一致（防静默篡改/替换）。"""
+        for fname, *_ in CASES:
+            with self.subTest(fname=fname):
+                sample = next(s for s in self.manifest["samples"] if s["file"] == fname)
+                data = (CORPUS_DIR / fname).read_bytes()
+                actual = hashlib.sha256(data).hexdigest()
+                self.assertEqual(actual, sample["sha256"],
+                                 f"[{fname}] SHA256 与 manifest 不一致（文件被改动？）")
+
+    def test_corpus_parse_and_fields(self):
+        """票面 XML（真实+合成）：字段级断言（语料库驱动回归核心）。
+        XBRL 实例样本仅断言结构安全（见 test_xbrl_instances_archive）。"""
+        for fname, province, system, scenario, fmt, expected in CASES:
+            if fmt != "invoice_xml":
+                continue
+            with self.subTest(fname=fname):
+                inv = _parse(fname)
+                for key, want in expected.items():
+                    got = getattr(inv, key)
+                    if key in ("amount", "tax", "total"):
+                        self.assertEqual(str(got), want,
+                                         f"[{fname}] {key} 应为 {want}，实为 {got}")
+                    else:
+                        self.assertEqual(got, want,
+                                         f"[{fname}] {key} 应为 {want}，实为 {got}")
+
+    def test_corpus_reconciliation(self):
+        """勾稽校验：金额+税额=价税合计（票面 XML 均应勾稽成立，无告警级异常）。"""
+        for fname, *_ in CASES:
+            with self.subTest(fname=fname):
+                inv = _parse(fname)
+                self.assertLessEqual(abs(inv.amount + inv.tax - inv.total),
+                                     Decimal("0.01"),
+                                     f"[{fname}] 勾稽异常：{inv.amount}+{inv.tax}≠{inv.total}")
+                self.assertFalse(
+                    any("勾稽异常" in w for w in inv.parse_warnings),
+                    f"[{fname}] 不应有勾稽异常告警：{inv.parse_warnings}",
+                )
+
+    def test_corpus_invoice_no_20digits(self):
+        """样本发票号码 20 位数字（数电票票号规则）。"""
+        for fname, *_ in CASES:
+            with self.subTest(fname=fname):
+                inv = _parse(fname)
+                self.assertTrue(inv.invoice_no.isdigit() and len(inv.invoice_no) == 20,
+                                f"[{fname}] 票号应 20 位数字：{inv.invoice_no}")
+                self.assertFalse(any("发票号码位数" in w for w in inv.parse_warnings))
+
+    def test_corpus_raw_fields_masked(self):
+        """raw_fields 税号必须脱敏（防 PII 外泄：中英文键都覆盖）。"""
+        for fname, *_ in CASES:
+            with self.subTest(fname=fname):
+                inv = _parse(fname)
+                for k, v in inv.raw_fields.items():
+                    if "IdNum" in k or "识别号" in k or "税号" in k:
+                        self.assertIn("****", v, f"[{fname}] {k} 未脱敏：{v}")
+
+    def test_gaode_negative_line_does_not_break_total(self):
+        """高德样例：明细行含负金额（退款），合计仍取 BasicInformation 路径值。"""
+        data = (CORPUS_DIR / "gaode-js-taxi.xml").read_bytes()
+        inv = parse_xml(data)
+        self.assertEqual(str(inv.total), "47.45")
+        self.assertEqual(str(inv.amount), "46.07")
+
+    def test_synthetic_samples_marked(self):
+        """合成样本必须显式标注（synthetic=true + source_tier=synthetic_schema_based + 构造依据），
+        与结构仿真样例可区分（DeepSeek 评审：不得静默冒充样例来源）。"""
+        for s in self.manifest["samples"]:
+            if s.get("synthetic"):
+                with self.subTest(file=s["file"]):
+                    self.assertEqual(s["source_tier"], "synthetic_schema_based",
+                                     f"{s['file']} 合成样本来源分级错误")
+                    self.assertTrue(s.get("construction_basis"),
+                                    f"{s['file']} 缺少构造依据 construction_basis")
+                    self.assertNotIn("official_public_sample", s["source_tier"])
+
+    def test_xbrl_instances_archive(self):
+        """官方 XBRL 实例：结构安全归档断言。
+        parser 尚未支持 xbrli 结构解析——本测试验证：
+        ① parse_xml 不抛异常（元素名巧合可解析部分字段，不代表支持 XBRL）；
+        ② manifest 明确标记 format=xbrl_instance + verification=official_sample；
+        ③ 结构安全性：不因 XBRL 实例导致崩溃/误判为票面。"""
+        for fname, *_ in [c for c in CASES if c[4] == "xbrl_instance"]:
+            with self.subTest(fname=fname):
+                sample = next(s for s in self.manifest["samples"] if s["file"] == fname)
+                self.assertEqual(sample["format"], "xbrl_instance")
+                self.assertEqual(sample["verification"], "official_sample")
+                self.assertEqual(sample["source_tier"], "official_public_sample")
+                inv = _parse(fname)  # 不抛异常（结构安全）
+                self.assertTrue(inv.invoice_no, f"[{fname}] 应至少解析出发票号码")
+
+    def test_red_letter_negative_reconciliation(self):
+        """红字合成样本：金额为负且勾稽成立（-2500 + -150 = -2650），
+        明细负行/负数票面不破坏合计路径（DeepSeek M2 口径统一）。"""
+        data = (CORPUS_DIR / "synthetic/synthetic-red-letter-cn.xml").read_bytes()
+        inv = parse_xml(data)
+        self.assertLess(inv.amount, 0)
+        self.assertLess(inv.tax, 0)
+        self.assertLess(inv.total, 0)
+        self.assertFalse(any("勾稽异常" in w for w in inv.parse_warnings))
+
+
+class TestG0ItemLevelExtraction(unittest.TestCase):
+    """G0 行级中间表示升级（2026-09-23）：明细行提取/票面语义字段。
+
+    结构依据（实测三方言票样）：
+    - EInvoice 英文结构行容器 = IssuItemInformation（真实票每行一个）/ ItemDetail（合成样例逐行，
+      外层 IssuItemInformation 包裹）；行内字段 ItemName/Amount/TaxRate/ComTaxAm|TaxAm/TotaltaxIncludedAmount。
+    - 中文标签/国标拼音方言无行容器（合成样本未含明细行）→ items 为空，诚实标注，
+      明细行标签待真实票核验（SYNTHETIC.md 未核验项）。
+    """
+
+    def test_multirate_item_lines_and_reconciliation(self):
+        """多税率合成样本：3 行明细，行税率原文集合 {0.06,0.09,0.13}（EInvoice 结构小数字面量；
+        口径统一/一致性判定属 G1 规则层），Σ行金额=票面金额、Σ行税额=票面税额。"""
+        inv = parse_xml((CORPUS_DIR / "synthetic/synthetic-multirate-einv.xml").read_bytes())
+        self.assertEqual(len(inv.items), 3, f"应提取 3 行明细，实为 {len(inv.items)}")
+        self.assertEqual(sorted({it.tax_rate for it in inv.items}), ["0.06", "0.09", "0.13"])
+        self.assertEqual(sum(it.amount for it in inv.items), inv.amount,
+                         "Σ明细行金额 ≠ 票面金额")
+        self.assertEqual(sum(it.tax_amount for it in inv.items), inv.tax,
+                         "Σ明细行税额 ≠ 票面税额")
+        self.assertTrue(all(it.name for it in inv.items), "明细行应有名称")
+        self.assertFalse(any("勾稽异常" in w for w in inv.parse_warnings))
+
+    def test_differential_kce_extracted(self):
+        """差额征税合成样本：KCE 扣除额 200.00 提取；行级 1 行（计税基础 800.00×0.06）。"""
+        inv = parse_xml((CORPUS_DIR / "synthetic/synthetic-differential-einv.xml").read_bytes())
+        self.assertTrue(inv.is_differential)
+        self.assertEqual(inv.differential_deduction, Decimal("200.00"))
+        self.assertEqual(len(inv.items), 1)
+        self.assertEqual(str(inv.items[0].amount), "800.00")
+        self.assertEqual(inv.items[0].tax_rate, "0.06")
+        self.assertEqual(str(inv.items[0].tax_amount), "48.00")
+
+    def test_red_letter_blue_no_extracted(self):
+        """红冲中文方言：被红冲蓝字发票号码提取（红冲关联占位：单票上传只做票面提取）。"""
+        inv = parse_xml((CORPUS_DIR / "synthetic/synthetic-red-letter-cn.xml").read_bytes())
+        self.assertTrue(inv.is_red_letter)
+        self.assertTrue(inv.red_letter_blue_no,
+                        "应提取被红冲蓝字发票号码（中文方言字段）")
+
+    def test_no_item_container_dialects_empty_items(self):
+        """无明细行容器的方言（拼音缩写/中文标签单行票）：items 为空且不引入告警。"""
+        for fname in ("synthetic/synthetic-pinyin-abbrev.xml",
+                      "synthetic/synthetic-red-letter-cn.xml"):
+            with self.subTest(fname=fname):
+                inv = parse_xml((CORPUS_DIR / fname).read_bytes())
+                self.assertEqual(inv.items, [], f"[{fname}] 无行容器应 items 为空")
+
+    def test_real_samples_item_lines(self):
+        """样例行级：广东官方专票 1 行（ItemName）、江苏结构仿真网约车 2 行（退款负行场景）、北京结构仿真专票 1 行。"""
+        expectations = {
+            "official-gd-special.xml": 1,
+            "gaode-js-taxi.xml": 2,     # IssuItemInformation×2（含退款负行）
+            "bj-platform-it.xml": 1,
+        }
+        for fname, n in expectations.items():
+            with self.subTest(fname=fname):
+                inv = parse_xml((CORPUS_DIR / fname).read_bytes())
+                self.assertEqual(len(inv.items), n, f"[{fname}] 行级条数不符")
+                self.assertTrue(all(it.name for it in inv.items),
+                                f"[{fname}] 行级应有名称")
+                self.assertTrue(any(it.amount != 0 or it.tax_amount != 0 for it in inv.items),
+                                f"[{fname}] 行级应有金额/税额")
+                # 行级金额不应污染票面：Σ行金额≠票面金额时也不影响票面合计（负行场景允许不等）
+                self.assertFalse(any("勾稽异常" in w for w in inv.parse_warnings))
+
+    def test_item_fields_not_leak_to_raw_fields(self):
+        """行内字段（Amount/TaxRate 等）不得泄漏进票面 raw_fields（防 PII/字段污染）。"""
+        inv = parse_xml((CORPUS_DIR / "synthetic/synthetic-multirate-einv.xml").read_bytes())
+        for k in ("Amount", "TaxRate", "TaxAm"):
+            self.assertNotIn(k, inv.raw_fields, f"行内字段 {k} 不应出现在票面 raw_fields")
+
+
+if __name__ == "__main__":
+    unittest.main()

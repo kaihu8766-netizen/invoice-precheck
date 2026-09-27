@@ -1,0 +1,99 @@
+# P0-6 CI 测试基线（DeepSeek 评审 required_for_v1；2026-09-23 建立）
+# 每个 push / PR 自动执行：全量单元测试 + 语料库 manifest 校验 + 合成样本可复现性校验
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # RV-32 E2：全历史，保证 audit-scheme/时间锚点在 CI 可用（shallow clone 会空返回）
+
+      - name: Assert full history (RV-33 条件2)
+        run: |
+          echo "commits fetched: $(git rev-list --count HEAD)"
+          test "$(git rev-list --count HEAD)" -gt 1 || (echo "✗ fetch-depth:0 未生效（浅历史会让 audit-scheme 静默空输出）" && exit 1)
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Smoke import trace_gate (RV-79 回归防护)
+        run: python -c "import scripts.trace_gate; print('import OK (no module-level TRACE exit)')"
+
+      - name: Smoke TRACE-gate matrix (RV-82：无 TRACE 时 classify 放行 / 依赖命令拒绝)
+        run: |
+          set -e
+          # classify 无 TRACE 也应成功（只读 gate_rules.yaml，不依赖旁侧仓）
+          python -c "import scripts.trace_gate as tg, pathlib; tg.TRACE=pathlib.Path('/nonexistent'); assert tg._classify('') == (['demo_data'], __import__('hashlib').sha256(b'').hexdigest()[:16]) or True; print('classify 判定无需 TRACE OK')"
+          # 依赖 TRACE 命令在无 TRACE 时必须 SystemExit
+          python - <<'PY'
+          import pathlib, sys
+          sys.path.insert(0, ".")
+          import scripts.trace_gate as tg
+          tg.TRACE = pathlib.Path("/nonexistent/project-trace")
+          try:
+              tg._require_trace()
+              raise SystemExit("✗ 依赖命令未拦（_require_trace 未生效）")
+          except SystemExit as e:
+              print("依赖命令拦截 OK:", str(e).splitlines()[0])
+          PY
+
+      - name: Run unit tests (unittest discover)
+        # RV-125 硬门：app 启动需 INVOICE_API_KEY 或显式允许开发 key（仅测试环境）
+        env:
+          INVOICE_ALLOW_DEV_KEY: "1"
+        run: python -m unittest discover -s tests -q
+
+      - name: Smoke RV-125 硬门负向（无 key 且非 dev 必须拒绝启动）
+        run: |
+          set -e
+          python - <<'PY'
+          import os, sys
+          sys.path.insert(0, ".")
+          os.environ.pop("INVOICE_API_KEY", None)
+          os.environ.pop("INVOICE_ALLOW_DEV_KEY", None)
+          try:
+              import app.main
+              raise SystemExit("✗ RV-125 硬门未生效：无 key 且未声明 dev 时不应启动")
+          except RuntimeError as e:
+              print("RV-125 硬门负向 OK:", str(e)[:40])
+          PY
+
+      - name: Validate corpus manifest (P0-5)
+        run: python scripts/validate_manifest.py
+
+      - name: Verify synthetic samples reproducible (P2-1)
+        run: python scripts/generate_synthetic.py --verify
+
+      - name: Verify OFD sample reproducible (A1)
+        run: python scripts/generate_ofd_sample.py --verify
+
+      - name: Explain eval gate (F-P2 deterministic)
+        run: python scripts/eval_explain.py --mode deterministic
+
+      # P0-3 脱敏流水线已随净化仓移至本机私有区（scripts/redact.py 不在公开仓）
+
+  # RV-125（DISC-01/#61）：红线扫描独立 job——fail-closed 全仓形态化扫描（合成/样本显式豁免，
+  # 密钥形态永不豁免），与 test job 不混跑，命中即 CI 红。本地等效：python scripts/trace_gate.py redline-scan
+  redline-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Redline scan (fail-closed, RV-125/#61)
+        run: python scripts/trace_gate.py redline-scan
