@@ -311,7 +311,7 @@
    },
    "source_tier": "synthetic_schema_based",
    "authority": "low",
-   "license": "结构仿真虚构样例（已脱敏，无真实数据），无再分发限制",
+   "license": "结构仿真虚构样例，无真实数据，无再分发限制",
    "redistribution": "unrestricted",
    "verification": "unverified_against_official",
    "system_evidence": "UndefinedLabel.LabelName='网页开票'（原帖上下文，inferred/unknown 级别）",
