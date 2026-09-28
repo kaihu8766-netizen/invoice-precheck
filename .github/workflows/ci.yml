@@ -33,6 +33,10 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
+      - name: Lint gate — syntax compileall (RV-20260928-18)
+        # 无新增依赖的轻量语法门禁：任何 .py 语法错误在此拦截（配合 unittest + redline-scan 构成 CI 三闸门）
+        run: python -m compileall -q app scripts tests
+
       - name: Smoke import trace_gate (RV-79 回归防护)
         run: python -c "import scripts.trace_gate; print('import OK (no module-level TRACE exit)')"
 

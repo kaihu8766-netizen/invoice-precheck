@@ -1,6 +1,11 @@
+# T-012 CD 发布门禁（RV-20260928-18）：Pages 仅在 CI 成功后部署
+# 修复前缺陷：push 触发 ci.yml 与 pages.yml 各自独立运行，CI 红时 Pages 仍部署
+# 修复后：workflow_run 门禁——CI 结论非 success 不部署；workflow_dispatch 保留手动强制发布
 name: Deploy to GitHub Pages
 on:
-  push:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
     branches: [main]
   workflow_dispatch:
 permissions:
@@ -12,12 +17,23 @@ concurrency:
   cancel-in-progress: true
 jobs:
   deploy:
+    if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch' }}
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}   # 部署被 CI 验证过的同一 commit，防错位
+      - name: Guard — 部署 commit 必须为 main 最新（RV-20260928-18 条件）
+        # 防"旧 commit 回滚线上 / 非主线 commit 被部署"：workflow_run 只验 conclusion，这里补验 head 一致性
+        if: github.event_name == 'workflow_run'
+        run: |
+          set -e
+          latest=$(git ls-remote origin refs/heads/main | awk '{print $1}')
+          test "${{ github.event.workflow_run.head_sha }}" = "$latest" || { echo "✗ 部署对象 ${{ github.event.workflow_run.head_sha }} ≠ main 最新 $latest，跳过部署（防回滚/错位）"; exit 1; }
+          echo "✓ 部署 commit 为 main 最新"
       - name: 准备发布内容（仅产品文件，白名单复制，排除内部文档）
         run: |
           mkdir -p _site/assets
