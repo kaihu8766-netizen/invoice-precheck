@@ -721,10 +721,10 @@ code{ overflow-wrap:anywhere; word-break:break-word; }
         <details class="card" style="margin-top:10px;border:1px dashed var(--line);background:#fafbfc;">
           <summary style="cursor:pointer;padding:8px 12px;font-size:12.5px;font-weight:600;color:var(--sub);">数据限制说明（演示数据口径）</summary>
           <div style="padding:8px 12px 10px;font-size:12px;color:#57606a;line-height:1.75;">
-            <div>· <b>本演示全部使用合成/脱敏数据</b>：不含任何真实发票；样例覆盖重复报销/差额征税/金额勾稽/红冲关联/识别低置信度复核等检查场景。</div>
+            <div>· <b>本演示全部使用合成/脱敏数据</b>：不含任何真实发票；样例覆盖重复报销/差额征税/金额勾稽/红冲关联/识别不确定复核等检查场景。</div>
             <div>· 真实数据验证结果（文本型 14 张、图片版 38 张、机动车免税 31 张）已归档为基准集记录，源文件按数据红线验后删除，演示环境<b>不可重跑真实样本</b>。</div>
             <div>· 预警标准已用 31 张真实样本校准（金额上限 100 万→3000 万），类别限额仍为财政部默认口径（待补样本）。</div>
-            <div>· "需人工复核"= 识别低置信度/勾稽不符/字段缺失的兜底标记，<b>不自动放行</b>；处置状态仅保存在本机浏览器，刷新可重置。</div>
+            <div>· "需人工复核"= 识别不确定/勾稽不符/字段缺失的兜底标记，<b>不自动放行</b>；处置状态仅保存在本机浏览器，刷新可重置。</div>
           </div>
         </details>
       </section>
@@ -941,7 +941,7 @@ const FIN_TERMS = {
 const FIELD_TERMS = {
   "source_hash": "文件一致性标识",
   "sha256": "文件内容比对（结果：一致）",
-  "KCE": "识别置信度",
+  "KCE": "识别可信度",
   "TaxRate": "税率",
   "Amount": "金额",
   "ComTaxAm": "税额",
@@ -1273,7 +1273,7 @@ function openReviewModal(invNo) {
   const i = _findInv(invNo);
   if (!i) return;
   const rec = getRev(invNo);
-  const reason = esc(i.review_reason || "识别低置信度 / 勾稽不一致 / 字段缺失");
+  const reason = esc(i.review_reason || "识别不确定 / 勾稽不一致 / 字段缺失");
   const fields = REV_FIELDS.map((f) => {
     var _a, _b, _c;
     const val = rec ? (_b = (_a = rec.current[f.k]) != null ? _a : i[f.k]) != null ? _b : "" : (_c = i[f.k]) != null ? _c : "";
@@ -1996,7 +1996,7 @@ function reviewBadge(i) {
     }
     if (n > 0) return `<span class="badge review" title="已修正 ${n} 项但尚未复核确认">待人工复核（已修正${n}项）</span>`;
   }
-  return i.review_needed ? `<span class="badge review" title="${esc(i.review_reason || "识别低置信度/勾稽不符等")}">待人工复核</span>` : "";
+  return i.review_needed ? `<span class="badge review" title="${esc(i.review_reason || "识别不确定/勾稽不符等")}">待人工复核</span>` : "";
 }
 function invoiceViewHtml(d, metaMap) {
   const sevRank = { 高: 0, 中: 1, 低: 2 };
@@ -2131,10 +2131,10 @@ function ruleViewHtml(d, metaMap) {
   });
   if (!rules.length) return `<div class="card card-pad"><div class="hint">无检查项数据。</div></div>`;
   return `<div class="view-note">检查项视图（只读分析视角，不参与处置）：每个检查项的发现问题 / 未发现异常 / 未检查三态；未检查不代表合规，需补数据/配置后重跑；处置请到风险待办/逐票清单视图</div>
-  <details class="rule-hits"><summary>分级判定原则（block / warn / pass）</summary><div class="inner"><div class="hint" style="line-height:1.9">
-  <b>block（建议暂缓入账）</b>：发票状态异常（失控/作废/红冲异常）、购销方名称或税号与合同/收款方不一致、重复报销、明细合计≠票面且影响税额、查验结果不符。<br/>
-  <b>warn（建议核对）</b>：缺原始文件（XML）、关联蓝票不在本批次、明细行级不一致但不影响税额、需人工复核的识别低置信度字段。<br/>
-  <b>pass（未见异常）</b>：本检查项未发现异常；不代表整体合规，需结合全部检查项与人工复核。</div></div></details>
+  <details class="rule-hits"><summary>预审结论分级说明</summary><div class="inner"><div class="hint" style="line-height:1.9">
+  <b>阻断入账</b>：发票状态异常（失控/作废/红冲异常）、购销方名称或税号与合同/收款方不一致、重复报销、明细合计≠票面且影响税额、查验结果不符。<br/>
+  <b>建议核对</b>：缺原始文件（XML）、关联蓝票不在本批次、明细行级不一致但不影响税额、需人工复核的识别不确定字段。<br/>
+  <b>未见异常</b>：本检查项未发现异常；不代表整体合规，需结合全部检查项与人工复核。</div></div></details>
   <div class="rule-group">${rules.map((r) => {
     const sev = r.severity || "中";
     const sevCls = SEV_CLS[sev] || "low";
@@ -2392,7 +2392,7 @@ function __origRender(d) {
     <div class="precheck-row">
       <div class="kpi precheck ok${drillCls("pass")}" data-drill="pass" role="button" tabindex="0" aria-pressed="${_drill.kpi === "pass"}" title="查看可直接入账的发票"><div class="n ok">${esc(precheckCnt["建议入账"] || 0)}</div><div class="l">建议入账</div></div>
       <div class="kpi precheck mid${drillCls("review")}" data-drill="review" role="button" tabindex="0" aria-pressed="${_drill.kpi === "review"}" title="查看需要财务确认后再处理的发票">${humanCnt > 0 ? `<div class="n mid">${esc(precheckCnt["建议核对"] || 0)}<span class="mini">含人工${esc(humanCnt)}</span></div>` : `<div class="n mid">${esc(precheckCnt["建议核对"] || 0)}</div>`}<div class="l">建议核对</div></div>
-      <div class="kpi precheck high${drillCls("block")}" data-drill="block" role="button" tabindex="0" aria-pressed="${_drill.kpi === "block"}" title="查看存在高风险问题、建议暂缓入账的发票"><div class="n high">${esc(precheckCnt["阻断入账"] || 0)}</div><div class="l">阻断入账</div></div>
+      <div class="kpi precheck high${drillCls("block")}" data-drill="block" role="button" tabindex="0" aria-pressed="${_drill.kpi === "block"}" title="查看存在高风险问题、建议阻断入账的发票"><div class="n high">${esc(precheckCnt["阻断入账"] || 0)}</div><div class="l">阻断入账</div></div>
       <div class="kpi precheck weak${drillCls("unknown")}" data-drill="unknown" role="button" tabindex="0" aria-pressed="${_drill.kpi === "unknown"}" title="查看信息不全、无法给出预审结论的发票"><div class="n">${esc(precheckCnt["无法预审"] || 0)}</div><div class="l">无法预审</div></div>
     </div>
     ${prioTags ? `<div class="todo-bar"><span class="lb">优先处理：</span>${prioTags}</div>` : ""}
@@ -2662,7 +2662,7 @@ $("btnSaveRules").onclick = async () => {
     });
     const j = await r.json();
     if (!r.ok) { $("rulesHint").textContent = "保存失败：" + (j.detail || r.status); $("rulesHint").className = "hint err"; return; }
-    $("rulesHint").textContent = "已保存（rules_hash " + (j.rules_hash || "?") + "），预警标准已生效，报告将标注自定义来源";
+    $("rulesHint").textContent = "已保存，预警标准已生效，报告将标注自定义来源";
     $("rulesHint").className = "hint okc";
   } catch (e2) {
     $("rulesHint").textContent = "保存失败：" + e2.message;
