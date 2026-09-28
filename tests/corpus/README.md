@@ -25,7 +25,7 @@
 > 来源：财政部会计司《电子凭证会计数据标准——全面数字化的电子发票（推广应用版）》附件3 实例文档（http://kjs.mof.gov.cn/zt/kuaijixinxihuajianshe/dzpzkjsjbzshsd/sjbz/202505/t20250519_3964020.htm ）。
 > **能力边界**：parser 当前不支持 xbrli 结构解析（root 识别/字段语义面向票面 XML）；本样本为 XBRL 覆盖项归档，解析能力登记 P2 待办，不得静默当作票面解析。
 
-### 合成样本（schema 依据构造，`synthetic/` 子目录，构造规范见 SYNTHETIC.md）
+### 合成样本（schema 依据构造，`synthetic/` 与 `ofd/` 子目录，构造规范见 SYNTHETIC.md）
 
 | 文件 | 覆盖项 | 构造口径 |
 |---|---|---|
@@ -33,6 +33,7 @@
 | synthetic-differential-einv.xml | 差额征税（EInvoice） | 广东 2644；旅游服务；KCE=200.00；800×6%=48；备注"差额征税：200.00。" |
 | synthetic-multirate-einv.xml | 多税率（EInvoice） | 江苏 2632；三行 6%/9%/13%→600/63/663 |
 | synthetic-pinyin-abbrev.xml | 国标拼音缩写 | 江苏 2632；餐饮 3%→57.28/1.72/59.00；FPHM/KPRQ/HJJE/HJSE/JSHJXX |
+| ofd/ofd-container-gd-sample.ofd | 合成 OFD 容器（`ofd/` 子目录） | 广东 4400；GB/T 33190 骨架封装官方票样（official-gd-special.xml，已脱敏）；验证 OFD 解包链路 |
 
 ## 验收覆盖（v0.3：DeepSeek M1 仍 = partial）
 
