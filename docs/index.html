@@ -634,7 +634,7 @@ code{ overflow-wrap:anywhere; word-break:break-word; }
       </div>
     </div>
     <div class="top-right">
-      <span id="subjectChip" class="subject-chip" style="display:none;" title="当前校验主体（R2 抬头/税号）"><span class="nm" id="subjectChipName">示例科技有限公司</span><button class="btn-edit" id="btnEditSubject" type="button">修改</button></span>
+      <span id="subjectChip" class="subject-chip" style="display:none;" title="当前校验主体（抬头/税号）"><span class="nm" id="subjectChipName">示例科技有限公司</span><button class="btn-edit" id="btnEditSubject" type="button">修改</button></span>
       <div class="seg" role="group" aria-label="运行模式">
         <button id="btnDemo" class="active">演示模式</button>
         <button id="btnLive">真实模式</button>
@@ -646,14 +646,14 @@ code{ overflow-wrap:anywhere; word-break:break-word; }
           <details class="adv" id="advCfg" style="margin-top:14px;">
             <summary>连接与系统设置（高级）</summary>
             <div class="inner">
-          <h4>连接后端</h4>
+          <h4>连接服务</h4>
           <div class="fld">
             <label for="backendUrl">服务地址</label>
             <input id="backendUrl" type="text" inputmode="url" placeholder="https://xxx.trycloudflare.com 或 http://localhost:8000" style="font-size:16px;">
           </div>
           <div class="fld">
-            <label for="apiKey">接口密钥</label>
-            <input id="apiKey" type="password" autocomplete="off" placeholder="后端环境变量 INVOICE_API_KEY 的值" style="font-size:16px;">
+            <label for="apiKey">访问密钥</label>
+            <input id="apiKey" type="password" autocomplete="off" placeholder="服务端环境变量 INVOICE_API_KEY 的值" style="font-size:16px;">
           </div>
           <button id="btnTest" class="btn btn-ghost" style="margin-top:10px;">测试连接</button>
           <div class="hint" id="connHint">地址与密钥仅保存在本浏览器，不发送到第三方。</div>
@@ -669,7 +669,7 @@ code{ overflow-wrap:anywhere; word-break:break-word; }
             <input id="coTaxId" type="text" placeholder="18 位税号" style="font-size:16px;">
           </div>
           <button id="btnSaveCfg" class="btn btn-ghost" style="margin-top:10px;">保存企业主体</button>
-          <div class="hint" id="cfgHint">保存后 R2 将校验每张票购买方税号是否本公司：不一致 → 高风险；税号一致但名称差异 → 低风险提示。首版仅支持单主体（集团多法人/代开场景暂不覆盖）。</div>
+          <div class="hint" id="cfgHint">保存后系统将校验每张票购买方税号是否本公司：不一致 → 高风险；税号一致但名称差异 → 低风险提示。首版仅支持单主体（集团多法人/代开场景暂不覆盖）。</div>
           <details id="rulesCfg" style="margin-top:14px;border:1px dashed var(--line);border-radius:8px;padding:10px 12px;">
             <summary style="cursor:pointer;font-size:12.5px;font-weight:600;color:var(--sub);">检查方案预警标准校准（默认值见各输入框占位符）</summary>
             <div style="margin-top:8px;font-size:12.5px;font-weight:600;color:var(--brand);">R3 连号</div>
@@ -690,7 +690,7 @@ code{ overflow-wrap:anywhere; word-break:break-word; }
               <button id="btnSaveRules" class="btn btn-ghost" style="flex:1;">保存预警标准</button>
               <button id="btnResetRules" class="btn btn-ghost" style="flex:1;">恢复默认</button>
             </div>
-            <div class="hint" id="rulesHint">预警标准保存到本地后端 data/config.json（不入 Git）。变更会记录生效时间与配置标识，报告中标注"预警标准来自自定义配置"。</div>
+            <div class="hint" id="rulesHint">预警标准保存到本地服务 data/config.json（不随网页发布）。变更会记录生效时间与配置标识，报告中标注"预警标准来自自定义配置"。</div>
           </details>
         </div>
       </div>
@@ -857,7 +857,7 @@ function buildReportModel(d, opts) {
       batchId: d.batch_id || "—", generatedAt: d.generated_at || nowStr, exportedAt: nowStr,
       ruleset: (rs.name || "发票合规检查方案") + " v" + (rs.version || d.ruleset_version || ""),
       effective: rs.effective_date || "", scope: rs.scope_note || d.scope_note || "",
-      source: opts.liveMode ? "真实模式（连接后端）" : "演示模式（内置样例）",
+      source: opts.liveMode ? "真实模式（连接服务）" : "演示模式（内置样例）",
       fileCount: s.file_count != null ? s.file_count : invs.length,
       invoiceCount: invs.length,
       failedCount: s.failed_count != null ? s.failed_count : 0,
@@ -2033,7 +2033,7 @@ function invoiceViewHtml(d, metaMap) {
         return `<div class="fail-row"><div class="fail-file">📄 ${file}</div><div class="fail-err">${err}</div><div class="fail-act">建议：重传或检查文件格式（PDF 需可提取文字，图片需清晰）</div></div>`;
       });
       const missing = fc - fl.length;
-      if (missing > 0) rows.push(`<div class="fail-row fail-missing">另有 ${missing} 条失败明细未提供（数字与清单不一致，待后端补齐）</div>`);
+      if (missing > 0) rows.push(`<div class="fail-row fail-missing">另有 ${missing} 条失败明细未提供（数字与清单不一致，待服务补齐）</div>`);
       failBody = `<div class="card card-pad"><div class="hint"><b>识别失败 ${fc} 个文件</b>，以下为失败明细：</div><div class="fail-list">${rows.join("")}</div></div>`;
     } else {
       failBody = `<div class="card card-pad"><div class="hint"><b>识别失败 ${fc} 个文件</b>，但失败明细缺失，无法展示具体原因（请反馈维护者核查报告数据）。</div></div>`;
@@ -2208,7 +2208,7 @@ function updatePrintHead(v) {
   const ph = document.getElementById("printHead");
   if (!ph || !__lastReport) return;
   const name = { risk: "风险待办", invoice: "逐票清单", rule: "检查项" }[v] || "风险待办";
-  ph.textContent = name + " · 规则包 " + (((_a = __lastReport.ruleset) == null ? void 0 : _a.version) || __lastReport.ruleset_version || "?") + " · 生成 " + (__lastReport.generated_at || "");
+  ph.textContent = name + " · 检查方案 " + (((_a = __lastReport.ruleset) == null ? void 0 : _a.version) || __lastReport.ruleset_version || "?") + " · 生成 " + (__lastReport.generated_at || "");
 }
 // UI-3（RV-75）：规则分析 overlay 抽屉（保留下层可见、Esc 关闭、返回锚点、深链）
 let __ruleReturnAnchor = null;
@@ -2330,7 +2330,7 @@ function __origRender(d) {
     // 第三态"识别失败"独立于本断言（failed 不入 invoices、不计 review_count，独立计入 file_count=total_count+failed_count）
     let __driftMsg = "";
     if (passCnt + reviewCnt !== ((_b = s.total_count) != null ? _b : invStatusArr.length)) {
-      __driftMsg = "报告内部计数不一致（autoPass+review_count≠total_count）：请反馈维护者核查数据模型或升级后端";
+      __driftMsg = "报告内部计数不一致（autoPass+review_count≠total_count）：请反馈维护者核查数据或升级服务";
       console.error("[口径漂移] autoPass+review_count≠total_count:", passCnt, reviewCnt, s.total_count, invStatusArr.length);
     }
     const _drill = __drill || {};
@@ -2501,7 +2501,7 @@ function setMode(live) {
 async function healthCheck() {
   const url = $("backendUrl").value.trim().replace(/\/+$/, "");
   if (!url) {
-    $("connHint").textContent = "请填写后端地址";
+    $("connHint").textContent = "请填写服务地址";
     return false;
   }
   localStorage.setItem("ipc_backend", url);
@@ -2509,16 +2509,16 @@ async function healthCheck() {
     const r = await fetch(url + "/healthz", { method: "GET" });
     if (r.ok) {
       const j = await r.json();
-      $("connHint").textContent = "连接成功 · 服务正常（ruleset " + (j.ruleset || "?") + "）";
+      $("connHint").textContent = "连接成功 · 服务正常（检查方案 " + (j.ruleset || "?") + "）";
       $("connHint").className = "hint okc";
       try { loadCompanyCfg(); } catch (e) {}
       return true;
     }
-    $("connHint").textContent = "连接失败：HTTP " + r.status + "（后端未启动？地址不对？）";
+    $("connHint").textContent = "连接失败：状态码 " + r.status + "（服务未启动？地址填错？）";
     $("connHint").className = "hint err";
     return false;
   } catch (e) {
-    $("connHint").textContent = "连接失败：" + e.message + "（注意：GitHub Pages 是 https，后端需 https 或 localhost）";
+    $("connHint").textContent = "连接失败：" + e.message + "（提示：网页版运行在 https 环境，服务地址需为 https 或本机 localhost）";
     $("connHint").className = "hint err";
     return false;
   }
@@ -2543,8 +2543,8 @@ $("btnSaveCfg").onclick = async () => {
   const key = $("apiKey").value.trim();
   const name = $("coName").value.trim();
   const taxid = $("coTaxId").value.trim();
-  if (!url) { $("cfgHint").textContent = "请先填写后端地址"; $("cfgHint").className = "hint err"; return; }
-  if (!key) { $("cfgHint").textContent = "请先填写 API Key"; $("cfgHint").className = "hint err"; return; }
+  if (!url) { $("cfgHint").textContent = "请先填写服务地址"; $("cfgHint").className = "hint err"; return; }
+  if (!key) { $("cfgHint").textContent = "请先填写访问密钥"; $("cfgHint").className = "hint err"; return; }
   if (!name && !taxid) { $("cfgHint").textContent = "企业名称与税号至少填一项"; $("cfgHint").className = "hint err"; return; }
   try {
     const r = await fetch(url + "/api/config", {
@@ -2554,7 +2554,7 @@ $("btnSaveCfg").onclick = async () => {
     });
     const j = await r.json();
     if (!r.ok) { $("cfgHint").textContent = "保存失败：" + (j.detail || r.status); $("cfgHint").className = "hint err"; return; }
-    $("cfgHint").textContent = "已保存：" + j.message + (j.tax_id_masked ? "（税号 " + j.tax_id_masked + "）" : "") + "，R2 校验已生效";
+    $("cfgHint").textContent = "已保存：" + j.message + (j.tax_id_masked ? "（税号 " + j.tax_id_masked + "）" : "") + "，税号校验已生效";
     $("cfgHint").className = "hint okc";
     // UI-2（RV-74）：主体常驻报告头——保存后更新顶栏 chip + 本地回显
     if (name) localStorage.setItem("ipc_company", name);
@@ -2652,8 +2652,8 @@ $("btnResetRules").onclick = resetRulesPanel;
 $("btnSaveRules").onclick = async () => {
   const url = $("backendUrl").value.trim().replace(/\/+$/, "");
   const key = $("apiKey").value.trim();
-  if (!url) { $("rulesHint").textContent = "请先填写后端地址"; $("rulesHint").className = "hint err"; return; }
-  if (!key) { $("rulesHint").textContent = "请先填写 API Key"; $("rulesHint").className = "hint err"; return; }
+  if (!url) { $("rulesHint").textContent = "请先填写服务地址"; $("rulesHint").className = "hint err"; return; }
+  if (!key) { $("rulesHint").textContent = "请先填写访问密钥"; $("rulesHint").className = "hint err"; return; }
   try {
     const r = await fetch(url + "/api/config", {
       method: "PUT",
@@ -2674,12 +2674,12 @@ async function runReview() {
   const key = $("apiKey").value.trim();
   const files = $("fileInput").files;
   if (!url) {
-    $("connHint").textContent = "请填写后端地址";
+    $("connHint").textContent = "请填写服务地址";
     $("connHint").className = "hint err";
     return;
   }
   if (!key) {
-    $("connHint").textContent = "请填写 API Key（后端环境变量 INVOICE_API_KEY 的值）";
+    $("connHint").textContent = "请填写访问密钥（服务端环境变量 INVOICE_API_KEY 的值）";
     $("connHint").className = "hint err";
     return;
   }
@@ -2702,7 +2702,7 @@ async function runReview() {
     });
     $("btnReview").textContent = "识别中…";
     if (j.status !== 200) {
-      $("result").innerHTML = `<div class="card card-pad high">后端拒绝：${esc((j.body || {}).detail || "HTTP " + j.status)}</div>`;
+      $("result").innerHTML = `<div class="card card-pad high">服务拒绝：${esc((j.body || {}).detail || "HTTP " + j.status)}</div>`;
       return;
     }
     render(j.body);
@@ -2724,7 +2724,7 @@ async function runReview() {
       }
     }
   } catch (e) {
-    $("result").innerHTML = `<div class="card card-pad high">请求失败：${esc(e.message)}（检查后端地址与网络；跨域需后端 CORS 放行）</div>`;
+    $("result").innerHTML = `<div class="card card-pad high">请求失败：${esc(e.message)}（检查服务地址与网络；跨域需服务端 CORS 放行）</div>`;
   } finally {
     $("btnReview").disabled = false;
     $("btnReview").textContent = "运行预审";
@@ -2747,7 +2747,7 @@ function xhrUpload(url, key, fd, onProgress) {
       }
       resolve({ status: x.status, body });
     };
-    x.onerror = () => reject(new Error("网络错误（检查后端地址与网络）"));
+    x.onerror = () => reject(new Error("网络错误（检查服务地址与网络）"));
     x.onabort = () => reject(new Error("上传被中止"));
     x.send(fd);
   });
@@ -2790,7 +2790,7 @@ document.addEventListener("paste", (e) => {
 function syncFiles() {
   const fs = $("fileInput").files;
   $("fileList").innerHTML = fs.length ? Array.from(fs).map((f) => `<div class="f"><span>📎</span><span class="nm">${esc(f.name)}</span><span>${(f.size / 1024).toFixed(0)}KB</span></div>`).join("") : "";
-  $("runHint").textContent = fs.length ? `已选 ${fs.length} 个文件，点击「运行预审」开始。` : "运行后右侧显示合规预审报告。文件仅发往你配置的后端，不发送第三方。";
+  $("runHint").textContent = fs.length ? `已选 ${fs.length} 个文件，点击「运行预审」开始。` : "运行后右侧显示合规预审报告。文件仅发往你配置的服务地址，不发送第三方。";
   $("runHint").className = "hint";
 }
 $("fileInput").onchange = syncFiles;
