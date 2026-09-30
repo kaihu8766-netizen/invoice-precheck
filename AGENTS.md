@@ -111,6 +111,7 @@ python3 scripts/trace_gate.py check --message "你的 commit message"
 
 ## 门禁边界（RV-14 诚实标注）
 - 门禁防"遗忘/误操作"，不防恶意绕过（git commit --no-verify、git -c core.hooksPath=/dev/null 等 git 原生逃逸通道存在，项目信任执行者）。
+- **门禁完整性边界（RV-20261001-351 反例A 补）**：commit-msg 守卫只验 `scripts/trace_gate.py` 与 `scripts/gate_rules.yaml` 的存在性，不验内容完整性——桩化替换（如把 trace_gate.py 换成 `sys.exit(0)` 的桩）、删除钩子本体、改 `core.hooksPath`、`--no-verify` 均属本地钩子无法技术性封堵的边界；需服务器端 pre-receive 钩子或 CI 对两文件 sha256 做仓外锚校验才可拦截（invoice-precheck AGENTS.md §门禁边界，RV-14 体系）。
 - 门禁自改（scripts/trace_gate.py、.githooks/commit-msg、scripts/gate_rules.yaml、AGENTS.md 等）同样命中 gate_self 红线，必须评审；project-trace 侧 gate 工具（agent-communication-demo/deepseek_gate.py、evtools.py、tests/）由 #62 门禁承接（RV-107）。
 - 事前对齐门禁（RV-22 诚实定位）：闸门 3 强制"功能提交必须有已批准方案评审"（防遗忘）；方案是否真的事前由 audit-scheme 事后审计（时间戳可查）；无法防止"用 fix 前缀包装功能提交"——该行为会绕过闸门 3，但会被用户监督/审计发现，属于恶意绕过范畴（不防）。
 

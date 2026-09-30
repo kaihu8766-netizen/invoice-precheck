@@ -1,14 +1,39 @@
 #!/bin/sh
-# commit-msg 钩子（RV-9 建 + RV-13 升级 + RV-22 事前对齐门禁）：三闸门
+# commit-msg 钩子（RV-9 建 + RV-13 升级 + RV-22 事前对齐门禁 + RV-20261001-347 闸门5）：五闸门
 #  闸门 1（RV-9）：message 必须含合法 ID 引用（GATE/RV/DEC/ISS）
 #  闸门 2（RV-13）：命中评审红线（app/pdf.py/rules.py/parser.py/ocr.py/脱敏脚本 等）
 #    → 必须带已批准且 diff_hash 与当前 staged diff 完全一致的 RV-ID，否则拒绝提交
 #  闸门 3（RV-22 事前对齐门禁）：功能提交（message 以 feat( 开头）→ 必须引用 F-xxx
 #    且存在已批准(adopted)的方案评审 RV（phase=scheme 且 feature 匹配），否则拒绝提交
+#  闸门 4（F-20260926-01）：轻量评审通道——[LIGHT] 标记提交走白名单/限额/配额/RV 校验
+#  闸门 5（RV-20261001-347）：risk_level 分级门禁——非 [LIGHT] 非空代码 diff
+#    必须带已 adopted 且 diff_hash 匹配的 RV；risk 等级仅供观察期统计（RV-349：分级仅供观测，
+#    非空代码 diff 一律要求 RV，不因 low 直放）；mode=warn 观察期只告警不阻断
 # 安装：git config core.hooksPath .githooks
 
 MSG_FILE="$1"
 MSG=$(cat "$MSG_FILE")
+
+# 门禁基础守卫（RV-349 反证A + RV-350 反证1 + RV-351 消息拆分：fail-open → fail-closed）
+# 原守卫 `[ -f gate_rules.yaml ]` 静默跳过 → rm 配置后闸门2/5 绕过；RV-350 反证1 指出
+# `[ -f trace_gate.py ]` 为前提同样可被"删 trace_gate.py"绕过（工作区删除不进 diff）。
+# 现改为：钩子被调用即检查 trace_gate.py 与 gate_rules.yaml 任一缺失 / yaml 模块缺失 → 拒绝所有提交，
+# 直到恢复或经评审改掉守卫。两条 if 消息各自只提自己缺的文件（RV-351：T7 断言可分辨）。
+# 诚实边界（RV-351 反例A/B）：守卫只验存在性不验完整性——桩化替换 trace_gate.py、
+# 删除本钩子本体、改 core.hooksPath、--no-verify 均属"防遗忘不防恶意"边界，由 AGENTS.md §边界 声明，
+# 需服务器端 pre-receive/CI 兜底（见 AGENTS.md）。
+if ! [ -f scripts/trace_gate.py ]; then
+    echo "✗ commit-msg 钩子拒绝：scripts/trace_gate.py 缺失——门禁本体被删，拒绝所有提交（RV-350 反证1 封堵）" >&2
+    exit 1
+fi
+if ! [ -f scripts/gate_rules.yaml ]; then
+    echo "✗ commit-msg 钩子拒绝：scripts/gate_rules.yaml 缺失——门禁配置被删，拒绝所有提交（RV-349 反证A 封堵）" >&2
+    exit 1
+fi
+if ! python3 -c "import yaml" 2>/dev/null; then
+    echo "✗ commit-msg 钩子拒绝：python yaml 模块缺失——无法执行门禁，拒绝所有提交（fail-closed）" >&2
+    exit 1
+fi
 
 # 闸门 1：ID 引用存在性（保留原有校验）
 if ! printf '%s' "$MSG" | grep -Eq '\b(GATE|RV|DEC|ISS)[-:][0-9]{6,8}(-[0-9]+)?\b|\bISS-[0-9]+\b'; then
@@ -17,7 +42,7 @@ if ! printf '%s' "$MSG" | grep -Eq '\b(GATE|RV|DEC|ISS)[-:][0-9]{6,8}(-[0-9]+)?\
 fi
 
 # 闸门 2：红线分类 + RV diff_hash 校验（机器规则替代主观判断）
-if python3 -c "import yaml" 2>/dev/null && [ -f scripts/trace_gate.py ] && [ -f scripts/gate_rules.yaml ]; then
+if [ -f scripts/trace_gate.py ]; then
     python3 scripts/trace_gate.py check-rv --message "$MSG"
     RC=$?
     if [ $RC -ne 0 ]; then
@@ -43,6 +68,16 @@ if printf '%s' "$MSG" | grep -q '\[LIGHT\]'; then
         if [ $RC -ne 0 ]; then
             exit $RC
         fi
+    fi
+fi
+
+# 闸门 5（RV-20261001-347）：risk_level 分级门禁——非 [LIGHT] 非空代码 diff 必须带已 adopted
+# 且 diff_hash 匹配的 RV；[LIGHT] 提交（闸门4已验证）与空 staged（闸门2已管）由 check-risk 内部跳过
+if [ -f scripts/trace_gate.py ]; then
+    python3 scripts/trace_gate.py check-risk --message "$MSG"
+    RC=$?
+    if [ $RC -ne 0 ]; then
+        exit $RC
     fi
 fi
 exit 0

@@ -751,6 +751,180 @@ def cmd_check_rv(message: str, rules: str = "", hash_field: str = "diff_hash") -
 # RV-23 口径 2：功能提交触发正则定死（feat: / feat(scope): / feat!: / feat(scope)!: 均算）
 # RV-24 修正：原 [)]? 形态对 feat: 不匹配（feat 后无 ( 即失败），改可选 (scope) 组
 FEAT_RE = re.compile(r"^feat(?:\([^)]*\))?!?:")
+# ---------- 闸门5：risk_level 分级门禁（RV-20261001-347 采纳实施） ----------
+
+def _validate_rv_hash(message: str, cur_hash: str, hash_field: str = "diff_hash") -> tuple[bool, str]:
+    """校验 message 引用的 RV 档案已 adopted 且 diff_hash 与当前 staged 一致（闸门5用）。
+
+    与 cmd_check_rv 命中分支同口径；复用 _extract_hash_field（RV-114：测试耦合生产代码防假回归）。
+    返回 (ok, reason)。
+    """
+    m = re.search(r"\bRV-([0-9]{6,8}(?:-[0-9]+)?)\b", message)
+    if not m:
+        return False, "必须带已 adopted 的 RV-ID（闸门5：非 [LIGHT] 非空代码 diff）"
+    rv = m.group(1)
+    ymd, no = rv.split("-")[0], "-".join(rv.split("-")[1:])
+    arch_glob = f"{ymd[:4]}-{ymd[4:6]}-{ymd[6:]}-{no}"
+    idx = _read_text(RV_INDEX)
+    rv_line = next((ln for ln in idx.splitlines() if arch_glob in ln), None)
+    arch = None
+    if rv_line:
+        cm = re.search(r"\|\s*([^|]+\.md)\s*\|", rv_line)
+        if cm:
+            arch = cm.group(1).strip()
+    if not arch:
+        return False, f"RV-{rv} 未在评审索引中找到档案"
+    arch_path = Path(RV_INDEX).parent / arch
+    if not arch_path.exists():
+        return False, f"RV-{rv} 档案不存在（{arch}）"
+    atext = arch_path.read_text(encoding="utf-8")
+    if not re.search(r"^status:\s*adopted", atext, re.M):
+        return False, f"RV-{rv} 未置 adopted（须批准后提交）"
+    dm = _extract_hash_field(atext, hash_field)
+    if not dm or dm == "e3b0c44298fc1c14":
+        return False, f"RV-{rv} 档案未记录有效的 {hash_field}"
+    if dm != cur_hash:
+        return False, f"RV-{rv} 的 {hash_field}({dm}) ≠ 当前 staged({cur_hash})——评审后改动过代码，请重新评审"
+    return True, f"RV-{rv} {hash_field} 匹配（{cur_hash}）"
+
+
+def _diff_new_files(diff: str) -> list[str]:
+    """从 unified diff 提取新增文件（"new file mode" 行，与 _classify_light H4 同口径）。"""
+    cur = None
+    new = []
+    for ln in diff.splitlines():
+        if ln.startswith("diff --git"):
+            m = re.search(r"b/(\S+)", ln)
+            cur = m.group(1) if m else None
+        elif ln.startswith("new file mode") and cur:
+            new.append(cur)
+    return new
+
+
+def _file_changes_7d(files: set[str], threshold: int) -> list[str]:
+    """同文件 7 天累计变更行数 > threshold → 返回文件名（RV-20261001-347 Q4 防拆分）。
+
+    口径对齐 [LIGHT] 配额（RV-143 反证2：按新增+删除累计，不只加行）。
+    当前 staged 未提交，git log 天然不含本次 → 窗口"不含当前提交"。
+    查询失败返回 []（warn 观察期兜底；deny 阶段该缺口由人工审计兜住）。
+    """
+    import subprocess
+    from collections import defaultdict
+    try:
+        out = subprocess.run(
+            ["git", "log", "--since=7 days ago", "--numstat", "--format=", "--", "."],
+            capture_output=True, text=True, cwd=ROOT).stdout
+    except Exception:
+        return []
+    per = defaultdict(int)
+    for ln in out.splitlines():
+        if ln.strip() and "\t" in ln:
+            parts = ln.split("\t")
+            # numstat: added\tdeleted\tpath；二进制为 '-' → isdigit 跳过
+            if len(parts) == 3 and parts[0].isdigit() and parts[1].isdigit():
+                fname = parts[2]
+                if fname in files:
+                    per[fname] += int(parts[0]) + int(parts[1])
+    return [f for f in files if per.get(f, 0) > threshold]
+
+
+def _risk_gate_mode(rules_path: Path | None) -> tuple[str, str]:
+    """读取 gate_rules.yaml risk_gate.mode，返回 (mode, err)。
+
+    RV-348 反证3 修正：非法值/YAML 异常/文件缺失**不再静默回落 warn**——
+    显式报错并 fail-closed（取 deny）。观察期 warn 是配置值本身；配置损坏属机制异常，
+    按 deny 处理更安全（拒绝提交总比静默漏审好）。
+    返回 err 非空时调用方须按 deny 语义处理（阻断）并打印 err。
+    """
+    rules_path = rules_path or (Path(__file__).parent / "gate_rules.yaml")
+    if rules_path.is_file():
+        try:
+            import yaml
+            data = yaml.safe_load(rules_path.read_text(encoding="utf-8"))
+            mode = (data or {}).get("risk_gate", {}).get("mode", "warn")
+            if mode in ("warn", "deny"):
+                return mode, ""
+            return "deny", f"risk_gate.mode 非法值 '{mode}'（仅接受 warn|deny）→ fail-closed 取 deny"
+        except Exception as e:
+            return "deny", f"risk_gate 配置读取失败（{e}）→ fail-closed 取 deny"
+    return "deny", f"gate_rules.yaml 不存在（{rules_path}）→ fail-closed 取 deny"
+
+
+def _log_risk_warn(risk: str, files: list[str]) -> None:
+    """观察期"应拦截但放行"落盘可审计（RV-348 ⑥3）：追加 scripts/.risk_gate_warns.log（gitignore）。
+
+    7 天观察期结束时用此日志统计真实拦截数，支撑"切 deny"决策；避免观察期变成无限期。
+    """
+    try:
+        f = ROOT / "scripts" / ".risk_gate_warns.log"
+        with open(f, "a", encoding="utf-8") as fh:
+            fh.write(f"{datetime.datetime.now().isoformat(timespec='seconds')} risk={risk} "
+                     f"files={','.join(sorted(set(files))[:5])}\n")
+    except Exception:
+        pass  # 日志失败不影响门禁主流程（warn 模式本就放行）
+
+
+def cmd_check_risk(message: str, rules: str = "", hash_field: str = "diff_hash") -> int:
+    """check-risk --message <msg>：闸门5——risk_level 分级门禁（commit-msg 调用）。
+
+    语义（RV-20261001-347 拍板版）：
+    - 空 staged（仅档案/排除路径）→ 跳过（闸门2 check-rv 已处理：需 RV 引用+adopted）
+    - message 带 [LIGHT] → 跳过（闸门4 全套判据处理，[LIGHT] 是唯一免全量评审入口）
+    - 其余非空代码 diff：risk=high/medium/**非空 low** 一律要求已 adopted 且 diff_hash 匹配的 RV
+      （low 不再直放——其判据(≤3文件≤30行)比 [LIGHT] 白名单宽，直放=新建漏审通道，RV-347 P0-A）
+    - 防拆分规避：新增文件→升 medium；同文件 7 天累计变更 >30 行→升 medium（RV-347 Q4）
+    - gate_rules.yaml risk_gate.mode：warn=打印"应拦截"不阻断（观察期）；deny=阻断（RV-347 Q5）
+    """
+    import subprocess
+    diff = subprocess.run(["git", "diff", "--cached", "--binary", "--", ".", *EXCLUDE_PATHS],
+                          capture_output=True, text=True, cwd=ROOT).stdout
+    if not diff.strip():
+        return 0  # 空 staged：闸门2 check-rv 已处理
+    if "[LIGHT]" in message:
+        return 0  # [LIGHT] 由闸门4判定（白名单/限额/配额/RV），闸门5不重复拦截
+    rp = Path(rules).resolve() if rules else None
+    if rp and not rp.is_file():
+        print(f"[check-risk] FAIL：--rules 文件不存在：{rp}", file=sys.stderr)
+        return 1
+    hits, cur_hash = _classify(diff, rp)
+    risk = _classify_risk(diff, hits, cur_hash)
+    st = _numstat_stats(diff)
+    upgrades = []
+    # 防拆分 1：新增文件 → 至少 medium
+    nf = _diff_new_files(diff)
+    if nf:
+        upgrades.append(f"新增文件 {', '.join(nf[:3])}{'…' if len(nf) > 3 else ''}")
+        if risk == "low":
+            risk = "medium"
+    # 防拆分 2：同文件 7 天累计变更 >30 行 → 升 medium
+    over = _file_changes_7d(set(st["files"]), 30)
+    if over:
+        upgrades.append(f"同文件 7 天累计变更>30 行：{', '.join(sorted(over)[:3])}{'…' if len(over) > 3 else ''}")
+        if risk == "low":
+            risk = "medium"
+    ok, reason = _validate_rv_hash(message, cur_hash, hash_field)
+    tag = f"[check-risk] risk={risk}"
+    if upgrades:
+        tag += f"（{'；'.join(upgrades)}）"
+    mode, mode_err = _risk_gate_mode(rp)
+    if mode_err:
+        print(f"{tag} ⚠ {mode_err}", file=sys.stderr)
+    if ok:
+        print(f"{tag} diff_hash={cur_hash} → {reason}")
+        return 0
+    print(f"{tag} ✗ {reason}", file=sys.stderr)
+    # RV-348 反证3：配置异常 → fail-closed 按 deny 阻断（warn 只允许发生在配置正常且 mode=warn）
+    if mode_err or mode == "deny":
+        print("[check-risk] FAIL：非 [LIGHT] 非空代码 diff 必须带已 adopted 且 diff_hash 匹配的 RV"
+              + ("（配置异常 fail-closed）" if mode_err else "（risk_gate.mode=deny）"), file=sys.stderr)
+        return 1
+    # 观察期：打印告警 + 落盘统计（RV-348 ⑥3），放行
+    _log_risk_warn(risk, st["files"])
+    print("[check-risk] WARN（risk_gate.mode=warn 观察期）：应拦截但放行——观察期满经评审切 deny 收紧"
+          + "（已计入 .risk_gate_warns.log）", file=sys.stderr)
+    return 0
+
+
 # RV-23 口径 1：message 中出现的全部 F-xxx 都必须满足（防挂靠已批准 feature 包装未批准功能）
 # 定长 F-[0-9]{8}-[0-9]{2}（RV-25 修正：\d→[0-9] 防 Unicode 数字误判）；findall set 去重逐条校验，"顺带提到"的 F 号无豁免（有意为之）
 FID_RE = re.compile(r"\bF-([0-9]{8}-[0-9]{2})\b")
@@ -1033,6 +1207,10 @@ def main() -> int:
     cr.add_argument("--rules", default="", help="自定义规则文件（默认本仓 gate_rules.yaml）")
     cr.add_argument("--hash-field", default="diff_hash",
                     help="档案中对比的哈希字段（project-trace 钩子传 project_trace_diff_hash）")
+    crk = sub.add_parser("check-risk")  # 闸门5（RV-20261001-347）：risk_level 分级门禁
+    crk.add_argument("--message", required=True)
+    crk.add_argument("--rules", default="", help="自定义规则文件（默认本仓 gate_rules.yaml）")
+    crk.add_argument("--hash-field", default="diff_hash", help="档案中对比的哈希字段")
     pf = sub.add_parser("preflight"); pf.add_argument("--desc", required=True)
     cs = sub.add_parser("check-scheme"); cs.add_argument("--message", required=True)
     au = sub.add_parser("audit-scheme")
@@ -1042,7 +1220,7 @@ def main() -> int:
     lt.add_argument("--message", required=True)
     lt.add_argument("--rules", default="", help="自定义规则文件（默认本仓 gate_rules.yaml）")
     lt.set_defaults(requires_trace=False)
-    for p in (g, c, i, cr, pf, cs, au):
+    for p in (g, c, i, cr, crk, pf, cs, au):
         p.set_defaults(requires_trace=True)
     args = ap.parse_args()
     # RV-79/82：依赖 TRACE 的 cmd 在入口统一断言（import 阶段不再 SystemExit）；
@@ -1059,6 +1237,8 @@ def main() -> int:
         return cmd_classify(args.staged, args.rules, args.json)
     if args.cmd == "check-rv":
         return cmd_check_rv(args.message, args.rules, args.hash_field)
+    if args.cmd == "check-risk":
+        return cmd_check_risk(args.message, args.rules, args.hash_field)
     if args.cmd == "preflight":
         return cmd_preflight(args.desc)
     if args.cmd == "check-scheme":

@@ -50,3 +50,11 @@ light_whitelist:
     max_line_chars: 500          # 单文件单行 ≤500 字符（防大段逻辑压成一行绕过，H2）
     quota_file_lines_7d: 50      # 同文件 7 天累计 LIGHT 变更行 ≥50 → 强制全量（H5）
     quota_light_commits_7d: 5    # 每周 LIGHT 提交 >5 次 → 强制全量（H5）
+
+# ---- 闸门5：risk_level 分级观测 + 非空一律要求 RV（RV-20261001-347 实施，RV-349 口径修正）----
+# risk 等级仅供观察期统计（RV-349 反证4：非空代码 diff 一律要求 RV，low 不直放，等级不影响放行决策）。
+# risk_gate.mode：warn=观察期（打印"应拦截"不阻断，落盘 .risk_gate_warns.log 供统计）；deny=强制阻断。
+# 观察期：落地（2026-10-01）起 7 天，观察期满收紧为 deny 需新一轮评审（改配置本身是 gate_self）。
+# 预授权（RV-347）：观察期内允许免评审把 mode 从 deny 切回 warn（快速降级留痕：git diff 可审计）。
+risk_gate:
+  mode: warn        # 观察期默认 warn；7 天期满后经评审切 deny
