@@ -474,5 +474,74 @@ class TestLightChannel(unittest.TestCase):
         self.assertTrue(ok, f"非 script 区间文案改动应通过，原因: {reasons}")
 
 
+class TestRiskLevel(unittest.TestCase):
+    """F-20260930-02：机器分级 _classify_risk 单测。"""
+
+    def _diff(self, files, added_lines, deleted_lines=0):
+        lines = []
+        for f in files:
+            lines.append(f"diff --git a/{f} b/{f}")
+            lines.append("index 111..222 100644")
+            lines.append(f"--- a/{f}")
+            lines.append(f"+++ b/{f}")
+            lines.append("@@ -1,1 +1,1 @@")
+            for i in range(added_lines):
+                lines.append(f"+新增行{i}")
+            for i in range(deleted_lines):
+                lines.append(f"-删除行{i}")
+        return "\n".join(lines)
+
+    def test_empty_diff_is_low(self):
+        self.assertEqual(tg._classify_risk("", [], ""), "low")
+
+    def test_hits_nonempty_is_high(self):
+        diff = self._diff(["docs/index.html"], 5)
+        self.assertEqual(tg._classify_risk(diff, ["gate_self"], ""), "high")
+
+    def test_gate_self_file_is_high(self):
+        diff = self._diff(["scripts/trace_gate.py"], 3)
+        self.assertEqual(tg._classify_risk(diff, [], ""), "high")
+
+    def test_large_diff_is_high(self):
+        diff = self._diff(["docs/index.html"], 250)
+        self.assertEqual(tg._classify_risk(diff, [], ""), "high")
+
+    def test_high_risk_keyword_in_added_line(self):
+        diff = (
+            "diff --git a/config.py b/config.py\n"
+            "index 111..222 100644\n"
+            "--- a/config.py\n"
+            "+++ b/config.py\n"
+            "@@ -1,1 +1,1 @@\n"
+            "+api_key = 'secret123'\n"
+        )
+        self.assertEqual(tg._classify_risk(diff, [], ""), "high")
+
+    def test_keyword_in_deleted_line_not_trigger(self):
+        diff = (
+            "diff --git a/config.py b/config.py\n"
+            "index 111..222 100644\n"
+            "--- a/config.py\n"
+            "+++ b/config.py\n"
+            "@@ -1,1 +1,1 @@\n"
+            "-api_key = 'old'\n"
+            "+config = 'new'\n"
+        )
+        result = tg._classify_risk(diff, [], "")
+        self.assertIn(result, ("low", "medium"))
+
+    def test_small_single_file_is_low(self):
+        diff = self._diff(["docs/index.html"], 10)
+        self.assertEqual(tg._classify_risk(diff, [], ""), "low")
+
+    def test_four_files_is_medium(self):
+        diff = self._diff(["a.py", "b.py", "c.py", "d.py"], 5)
+        self.assertEqual(tg._classify_risk(diff, [], ""), "medium")
+
+    def test_medium_is_fail_closed(self):
+        diff = self._diff(["docs/index.html"], 40)
+        self.assertEqual(tg._classify_risk(diff, [], ""), "medium")
+
+
 if __name__ == "__main__":
     unittest.main()

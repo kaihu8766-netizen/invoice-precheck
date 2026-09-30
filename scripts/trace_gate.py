@@ -353,6 +353,53 @@ def _classify(staged_diff: str, rules_path: Path | None = None) -> tuple[list[st
     return sorted(set(hits)), diff_hash
 
 
+# F-20260930-02：机器分级自动分级（成本治理①）
+# 独立函数，不改变 _classify 返回值（现有调用点 2 元组解包不受影响）
+# 判据与 light 通道口径对齐（max_files=3 / max_lines=30），else→medium（fail-closed，不新建漏审通道）
+_RISK_HIGH_KEYWORDS = (
+    "delete", "drop ", "secret", "token", "password", "api_key",
+    "force", "overwrite", "rm -rf", "chmod 777",
+)
+
+
+def _classify_risk(staged_diff: str, hits: list[str], diff_hash: str = "") -> str:
+    """机器分级：返回 high/medium/low。主力 AI 只能建议，机器判据为权威。
+
+    high（满足任一）：命中红线 / HARD_GATE_SELF / 高危关键词（按新增行匹配）/ diff>200行
+    low（同时满足）：files<=3 且 lines<=30 且 hits空 且 无高危关键词（与 light 通道口径一致）
+    medium：其他所有情况（fail-closed，不新建漏审通道）
+    """
+    if not staged_diff.strip():
+        return "low"  # 空 diff（仅档案/文档）= low
+    st = _numstat_stats(staged_diff)
+    n_files = len(set(st["files"]))
+    total_lines = st["added"] + st["deleted"]
+
+    # high 判据
+    if hits:
+        return "high"
+    HARD_GATE_SELF = ("scripts/trace_gate.py", ".githooks/commit-msg", "scripts/gate_rules.yaml", "AGENTS.md")
+    if any(f.startswith(h) for f in st["files"] for h in HARD_GATE_SELF):
+        return "high"
+    if total_lines > 200:
+        return "high"
+    # 高危关键词：只匹配新增行（+开头），单词边界，避免 Array.push 误判
+    import re as _re_risk
+    for ln in staged_diff.splitlines():
+        if ln.startswith("+") and not ln.startswith("+++"):
+            body = ln[1:].lower()
+            for kw in _RISK_HIGH_KEYWORDS:
+                if _re_risk.search(r"\b" + _re_risk.escape(kw) + r"\b", body):
+                    return "high"
+
+    # low 判据（与 light 通道口径对齐）
+    if n_files <= 3 and total_lines <= 30 and not hits:
+        return "low"
+
+    # medium：fail-closed，其他所有情况
+    return "medium"
+
+
 def _numstat_stats(diff: str) -> dict:
     """从 staged diff 文本解析变更统计（F-20260926-01）。
 
@@ -574,9 +621,9 @@ def cmd_light(message: str, rules: str = "") -> int:
     return 0
 
 
-def cmd_classify(staged: bool, rules: str = "") -> int:
-    """classify --staged：分类当前 staged diff，输出命中红线类别 + diff_hash。"""
-    import subprocess
+def cmd_classify(staged: bool, rules: str = "", json_output: bool = False) -> int:
+    """classify --staged：分类当前 staged diff，输出命中红线类别 + diff_hash + risk_level。"""
+    import subprocess, json as _json
     diff = subprocess.run(["git", "diff", "--cached", "--binary", "--", ".", *EXCLUDE_PATHS],
                           capture_output=True, text=True, cwd=ROOT).stdout if staged else ""
     if not staged:
@@ -587,11 +634,16 @@ def cmd_classify(staged: bool, rules: str = "") -> int:
         print(f"[classify] FAIL：--rules 文件不存在：{rp}", file=sys.stderr)
         return 2
     hits, diff_hash = _classify(diff, rp)
+    risk = _classify_risk(diff, hits, diff_hash)
+    if json_output:
+        print(_json.dumps({"hits": hits, "diff_hash": diff_hash, "risk_level": risk}, ensure_ascii=False))
+        return 0 if not hits else 1
     if hits:
         print(f"[classify] 命中评审红线：{', '.join(hits)}")
     else:
         print("[classify] 未命中评审红线（可仅带常规 ID 提交）")
     print(f"[classify] diff_hash={diff_hash}")
+    print(f"[classify] risk_level={risk}")
     return 0 if not hits else 1
 
 
@@ -975,6 +1027,7 @@ def main() -> int:
     i = sub.add_parser("ids"); i.add_argument("--grep", required=True)
     cl = sub.add_parser("classify"); cl.add_argument("--staged", action="store_true")
     cl.add_argument("--rules", default="", help="自定义规则文件（默认本仓 gate_rules.yaml；project-trace 用其 gate_rules.trace.yaml）")
+    cl.add_argument("--json", action="store_true", help="JSON 输出（含 risk_level）")
     cl.set_defaults(requires_trace=False)
     cr = sub.add_parser("check-rv"); cr.add_argument("--message", required=True)
     cr.add_argument("--rules", default="", help="自定义规则文件（默认本仓 gate_rules.yaml）")
@@ -1003,7 +1056,7 @@ def main() -> int:
     if args.cmd == "ids":
         return cmd_ids(args.grep)
     if args.cmd == "classify":
-        return cmd_classify(args.staged, args.rules)
+        return cmd_classify(args.staged, args.rules, args.json)
     if args.cmd == "check-rv":
         return cmd_check_rv(args.message, args.rules, args.hash_field)
     if args.cmd == "preflight":
