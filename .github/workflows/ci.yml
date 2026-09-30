@@ -32,6 +32,10 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
+          pip install playwright
+
+      - name: Install Playwright chromium (T-006 e2e)
+        run: python -m playwright install chromium
 
       - name: Lint gate — syntax compileall (RV-20260928-18)
         # 无新增依赖的轻量语法门禁：任何 .py 语法错误在此拦截（配合 unittest + redline-scan 构成 CI 三闸门）
