@@ -46,5 +46,19 @@ class TestEnsureEnv(unittest.TestCase):
         self.assertEqual(env["INVOICE_API_KEY"], "keep-this-key-value-16chars")
 
 
+
+    def test_parse_tunnel_url_accepts_url_line(self):
+        # RV-371：含完整 https URL 的行 → 提取 URL
+        line = "2026-10-01T15:11:33Z INF |  https://incredible-pots-abc123.trycloudflare.com |"
+        self.assertEqual(sp._parse_tunnel_url(line), "https://incredible-pots-abc123.trycloudflare.com")
+
+    def test_parse_tunnel_url_skips_log_line(self):
+        # RV-371：无 https 的日志行 → None（旧版 bug：整行当 URL）
+        line = "2026-10-01T15:11:32Z INF Requesting new quick Tunnel on trycloudflare.com"
+        self.assertIsNone(sp._parse_tunnel_url(line))
+
+    def test_parse_tunnel_url_handles_empty(self):
+        self.assertIsNone(sp._parse_tunnel_url(""))
+        self.assertIsNone(sp._parse_tunnel_url(None))
 if __name__ == "__main__":
     unittest.main()

@@ -169,8 +169,20 @@ def install_deps() -> None:
         raise RuntimeError("依赖安装失败，请检查网络后重试（或手动执行：pip install -r requirements.txt）")
 
 
+def _parse_tunnel_url(line: str) -> str | None:
+    """从 cloudflared 输出行提取隧道 URL（RV-371：只接受含完整 https URL 的行；
+    日志行如 'Requesting new quick Tunnel on trycloudflare.com' 不含 https → 返回 None）。"""
+    import re as _re
+    m = _re.search(r"https://[a-z0-9-]+\.trycloudflare\.com", line or "")
+    return m.group(0) if m else None
+
+
 def start_tunnel(cf: Path):
-    """起 quick tunnel，轮询输出解析 trycloudflare.com 地址。返回 (url, proc)。"""
+    """起 quick tunnel，轮询输出解析 trycloudflare.com 地址。返回 (url, proc)。
+
+    RV-371：stdout 用 daemon 线程收集（readline 阻塞会令超时形同虚设），
+    主循环轮询 + 真超时（120s）。
+    """
     log("启动 Cloudflare Tunnel（quick，匿名免费）…")
     env = dict(os.environ)
     proc = subprocess.Popen(
@@ -178,24 +190,25 @@ def start_tunnel(cf: Path):
         stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
         env=env, bufsize=1
     )
+    collected = []
+    t = threading.Thread(target=lambda: [collected.append(l.strip()) for l in proc.stdout],
+                         daemon=True)
+    t.start()
     url = None
     lines = []
     deadline = time.time() + 120
     while time.time() < deadline:
-        line = proc.stdout.readline()
-        if line:
-            lines.append(line.strip())
-            idx = line.find("trycloudflare.com")
-            if idx != -1:
-                start = line.rfind("https://", 0, idx)
-                if start == -1:
-                    start = max(line.rfind("http://", 0, idx), 0)
-                url = line[start:idx + len("trycloudflare.com")].strip()
+        time.sleep(0.2)
+        while collected:
+            ln = collected.pop(0)
+            lines.append(ln)
+            url = _parse_tunnel_url(ln)
+            if url:
                 break
-        elif proc.poll() is not None:
+        if url:
             break
-        else:
-            time.sleep(0.2)
+        if proc.poll() is not None and not collected:
+            break
     if not url:
         tail = "\n".join(lines[-8:])
         raise RuntimeError(

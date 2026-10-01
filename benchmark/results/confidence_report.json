@@ -1,6 +1,6 @@
 {
  "goldset_version": "v0.1.0",
- "generated_at": "2026-10-01 16:48:01",
+ "generated_at": "2026-10-01 23:14:32",
  "note": "字段级置信度评估（RV-20261001-362 修订）：conf=路径先验×字段证据惩罚×OCR行P25；AUC=置信度升序 vs 错误；n<5 档位不报 Wilson 区间",
  "buckets": {
   "high": {
