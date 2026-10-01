@@ -30,3 +30,6 @@ data/config.json
 
 # 闸门5观察期日志（RV-348 ⑥3：运行时落盘，不入库）
 scripts/.risk_gate_warns.log
+
+# 一键启动运行时目录（cloudflared 自动下载位，RV-369）
+scripts/.runtime/
