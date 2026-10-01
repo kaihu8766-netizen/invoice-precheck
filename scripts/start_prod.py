@@ -109,20 +109,35 @@ def read_env() -> dict:
 
 
 def ensure_env() -> dict:
+    """读取/生成 .env，并强制生产安全默认（RV-20261001-370 修复）。
+
+    RV-370（隔日自检）：原 setdefault 缺陷——陈旧 .env 含 dev/LLM=1 时被保留，
+    会"静默以 dev 语义启动"且涉税数据可能经 LLM 出境。现强制重置为生产安全值
+    （INVOICE_ENV=prod / LLM=0 / 金额=0），旧值不同时告警——一键启动=生产语义，
+    LLM 外发必须是用户事后显式手动修改 .env 的行为。
+    """
     env = read_env()
     changed = False
+    forced = []
+    for k, safe in (("INVOICE_ENV", "prod"),
+                    ("INVOICE_LLM_ENABLED", "0"),
+                    ("INVOICE_LLM_SEND_AMOUNT", "0")):
+        old_v = env.get(k)
+        if old_v is not None and old_v != safe:
+            forced.append(f"{k}: {old_v} → {safe}")
+        env[k] = safe
     if not env.get("INVOICE_API_KEY") or len(env["INVOICE_API_KEY"]) < 16:
         env["INVOICE_API_KEY"] = secrets.token_hex(32)
         changed = True
-    env.setdefault("INVOICE_ENV", "prod")
-    env.setdefault("INVOICE_LLM_ENABLED", "0")
-    env.setdefault("INVOICE_LLM_SEND_AMOUNT", "0")
     env.setdefault("INVOICE_HOST", "127.0.0.1")
     env.setdefault("INVOICE_PORT", "8000")
-    if changed:
+    if forced:
+        log(f"⚠ 已强制重置 .env 安全默认（原值不保留）：{'；'.join(forced)}。"
+            "如需 LLM 解释请手动编辑 .env 后重启（显式行为）。")
+    if changed or forced:
         lines = [f"{k}={v}" for k, v in env.items()]
         ENV_FILE.write_text("\n".join(lines) + "\n", encoding="utf-8")
-        log("已生成/更新 .env（密钥仅存本地，不入 Git）")
+        log("已更新 .env（密钥仅存本地，不入 Git）")
     return env
 
 
