@@ -55,23 +55,56 @@ MAX_TOTAL_BYTES = 50 * 1024 * 1024  # 50MB
 # RV-125（DISC-01/#11）：默认 key 必须显式声明本地开发才允许——公网误用默认 key 从概率问题变为不可能。
 # 硬门：未设 INVOICE_API_KEY 且未显式 INVOICE_ALLOW_DEV_KEY=1 → 拒绝启动（不静默降级为 warning）。
 DEV_API_KEY = "dev-invoice-precheck-key"
+ENV = os.environ.get("INVOICE_ENV", "dev").lower()
 ALLOW_DEV_KEY = os.environ.get("INVOICE_ALLOW_DEV_KEY") == "1"
+# RV-367（T-014 缺口1）：生产环境禁止 ALLOW_DEV_KEY——防运维为排障带默认 key 起服务并经 Tunnel 暴露。
+if ENV == "prod" and ALLOW_DEV_KEY:
+    raise RuntimeError(
+        "INVOICE_ENV=prod 与 INVOICE_ALLOW_DEV_KEY=1 互斥——生产部署禁止默认开发 key，拒绝启动（RV-367 硬门）"
+    )
 if not os.environ.get("INVOICE_API_KEY") and not ALLOW_DEV_KEY:
     raise RuntimeError(
         "INVOICE_API_KEY 未设置且未声明 INVOICE_ALLOW_DEV_KEY=1（仅限本机开发）——"
         "拒绝启动：防开发默认 key 在公网/内网暴露（RV-125 硬门）"
     )
 API_KEY = os.environ.get("INVOICE_API_KEY") or DEV_API_KEY
+
+# T-014 前置③ / T-056：企业级审计（SQLite append-only + 哈希链，数据不出机）
+from .audit import AuditStore
+AUDIT_DB = Path(__file__).resolve().parent.parent / "data" / "audit.db"
+AUDIT = AuditStore(AUDIT_DB)
+
+def _fp(data: bytes) -> str:
+    """文件指纹（SHA256 前 16 位）——审计标识原始文件，不存明文。"""
+    import hashlib as _hl
+    return _hl.sha256(data).hexdigest()[:16]
+
+
+def _audit_name(name: str | None) -> str:
+    """审计用文件名脱敏（RV-368 条件2）：只保留扩展名——文件名可能含 PII（如'张三发票.jpg'）。"""
+    return (Path(name or "").suffix or "?")[:16].lower()
 if not os.environ.get("INVOICE_API_KEY"):
     logger.warning(
         "INVOICE_API_KEY 未设置，已显式声明 INVOICE_ALLOW_DEV_KEY=1（仅限本机开发；公网部署必须设置强 key）"
     )
+# 生产环境强制强 key（≥16 位），拒绝弱 key（RV-367：文档声明不如代码强制）
+if ENV == "prod" and len(API_KEY or "") < 16:
+    raise RuntimeError("INVOICE_ENV=prod 要求 INVOICE_API_KEY ≥ 16 位——拒绝弱 key 启动（RV-367 硬门）")
 
 app = FastAPI(title="发票合规预审", version="0.1.0")
 
+# RV-367（T-014 缺口1）：CORS 源由 INVOICE_CORS_ORIGINS 白名单注入（逗号分隔）。
+# prod 未设白名单 → 仅 localhost（fail-closed）；dev 且 ALLOW_DEV_KEY=1 → 通配（本地调试）。
+_cors_env = os.environ.get("INVOICE_CORS_ORIGINS", "").strip()
+if _cors_env:
+    _cors_origins = [o.strip() for o in _cors_env.split(",") if o.strip()]
+elif ENV == "prod":
+    _cors_origins = ["http://localhost:8000"]
+else:
+    _cors_origins = ["*"] if ALLOW_DEV_KEY else ["http://localhost:8000"]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"] if ALLOW_DEV_KEY else ["http://localhost:8000"],  # RV-125：非本地开发收紧默认源；生产白名单见 docs/DEPLOY.md
+    allow_origins=_cors_origins,
     allow_methods=["*"],
     allow_headers=["X-API-Key", "Content-Type"],
 )
@@ -105,6 +138,48 @@ async def security_headers(request, call_next):
     resp.headers["X-Frame-Options"] = "DENY"
     resp.headers["Referrer-Policy"] = "no-referrer"
     return resp
+
+
+# ---- 限流（RV-367 缺口2：公网暴露后 key 爆破与 DoS 面）----
+# IP 维度滑动窗口：业务端点 60 秒窗口；窗口内超限 → 429。
+import collections
+import ipaddress as _ipaddr
+
+_RATE_LIMIT_WINDOW = 60          # 秒
+_RATE_LIMIT_MAX = 60             # 每窗口最大请求（业务端点合计；静态页不受限）
+_ratelimit: dict[str, list[float]] = collections.defaultdict(list)
+
+_PROTECTED_PREFIXES = ("/parse", "/review", "/api/", "/export", "/healthz")
+
+
+def _client_ip(request: Request) -> str:
+    """取客户端 IP（Tunnel 部署经 X-Forwarded-For 头，信任最近一跳；本地取直连地址）。
+
+    RV-368 条件3（暴露面说明）：XFF 可伪造——本限流只防"非定向刷量"，不防分布式
+    伪造攻击；生产必须仅经 Cloudflare Tunnel 暴露（CF 覆写 XFF 为真实用户 IP），
+    禁止直连端口暴露（见 docs/DEPLOY.md §6 运维警示）。
+    """
+    xff = request.headers.get("x-forwarded-for", "")
+    if xff:
+        parts = [p.strip() for p in xff.split(",")]
+        if parts and parts[-1]:
+            return parts[-1]
+    return request.client.host if request.client else "unknown"
+
+
+@app.middleware("http")
+async def rate_limit(request, call_next):
+    if not request.url.path.startswith(_PROTECTED_PREFIXES) or request.method == "OPTIONS":
+        return await call_next(request)
+    now = time.time()
+    key_ip = _client_ip(request)
+    bucket = _ratelimit[key_ip]
+    bucket[:] = [t for t in bucket if now - t < _RATE_LIMIT_WINDOW]
+    if len(bucket) >= _RATE_LIMIT_MAX:
+        logger.warning("rate limit hit: ip=%s path=%s", key_ip, request.url.path)
+        return JSONResponse(status_code=429, content={"detail": "请求过于频繁，请稍后再试"})
+    bucket.append(now)
+    return await call_next(request)
 
 
 @app.middleware("http")
@@ -142,11 +217,11 @@ async def healthz():
     ent = _APP_CONFIG.get("company_entities") or [{}]
     e0 = ent[0] if ent else {}
     initialized = bool(e0.get("name") and e0.get("tax_id"))
+    # RV-367 缺口3：healthz 是公开端点——收敛信息，去掉 config_source（本地路径存在性探测敏感）
     return {
         "status": "ok",
         "ruleset": RULESET_VERSION,
         "config_initialized": initialized,
-        "config_source": "file" if (Path(__file__).resolve().parent.parent / "data" / "config.json").exists() else "default",
     }
 
 
@@ -218,6 +293,9 @@ async def put_config(request: Request):
     except ValueError as e:
         raise HTTPException(500, str(e)) from e
     _APP_CONFIG = load_config()  # 重载（含环境变量覆盖语义）
+    AUDIT.log("config_changed", {"fields": sorted(k for k in ("company_name", "tax_id") if k in body),
+                                 "rules_changed": "rules" in body,
+                                 "rules_hash": _APP_CONFIG.get("meta", {}).get("rules_hash", "")})
     return {
         "status": "ok",
         "message": "配置已保存",
@@ -232,10 +310,14 @@ async def parse(file: UploadFile = File(...)):
     data = await file.read(MAX_FILE_BYTES + 1)
     if len(data) > MAX_FILE_BYTES:
         raise HTTPException(413, f"文件超过 {MAX_FILE_BYTES // 1024 // 1024}MB 上限")
+    fp = _fp(data)
     try:
         inv = parse_document(data)
     except ValueError as e:
+        AUDIT.log("parsed", {"file_fp": fp, "ok": False, "n_findings": 0, "error": "bad_format"})
         raise HTTPException(400, str(e)) from e
+    AUDIT.log("file_uploaded", {"file_fp": fp, "size": len(data), "name": _audit_name(file.filename)})
+    AUDIT.log("parsed", {"file_fp": fp, "ok": True, "n_findings": 0})
     return invoice_to_dict(inv)
 
 
@@ -265,6 +347,12 @@ async def review(files: list[UploadFile] = File(...)):
         except Exception as e:  # 隔离边界：读取+解析全链路，坏文件不拖垮整批
             logger.exception("parse failed: %s", _safe_name(f.filename))
             failed.append({"name": _safe_name(f.filename), "error": _public_error(e)})
+
+    # T-014 前置③：审计埋点（batch 维度；不含明文 PII——文件内容不落审计，仅指纹/数量）
+    AUDIT.log("file_uploaded", {"file_fp": f"batch:{batch_id}", "size": total_bytes,
+                                "n_files": len(files)})
+    AUDIT.log("parsed", {"file_fp": f"batch:{batch_id}", "ok": (len(failed) == 0),
+                         "n_files": len(files), "n_failed": len(failed)})
 
     findings, rule_states = run_rules_with_states(invoices, config=_current_rules_config())
     # RV-48：报告标注规则阈值来源（自定义阈值时附 rules_hash 审计快照）
@@ -317,6 +405,89 @@ async def explain(request: Request):
     }
 
 
+# ================= T-014 前置③ / T-056：企业级审计 API =================
+
+@app.post("/api/audit/review-decision")
+async def audit_review_decision(request: Request):
+    """复核决定落服务端 append-only（取代 localStorage 单机态——T-056 核心）。
+
+    入参：{"finding_id": str, "decision": "pass|reject|rework", "note": str(≤200)}
+    payload 不含发票明文；note 截断 200 字符；审计事件含哈希链。
+    """
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(400, "请求体不是合法 JSON")
+    finding_id = str(body.get("finding_id") or "").strip()
+    decision = str(body.get("decision") or "").strip()
+    if decision not in {"pass", "reject", "rework"}:
+        raise HTTPException(400, "decision 应为 pass/reject/rework 之一")
+    if not finding_id:
+        raise HTTPException(400, "finding_id 不能为空")
+    note = str(body.get("note") or "")[:200]
+    ev = AUDIT.log("finding_reviewed", {
+        "finding_id": finding_id[:80],
+        "decision": decision,
+        "note": note,
+        "client_ip_masked": "**",
+    })
+    return {"status": "ok", "event": ev["event_id"], "event_hash": ev["event_hash"]}
+
+
+@app.get("/api/audit/events")
+async def audit_events(limit: int = 50, offset: int = 0, event_type: str | None = None):
+    """审计事件查询（需 X-API-Key；分页；倒序最新在前）。"""
+    limit = max(1, min(limit, 500))
+    offset = max(0, offset)
+    rows = AUDIT.list_events(limit=limit, offset=offset, event_type=event_type)
+    return {"total": AUDIT.count(event_type), "limit": limit, "offset": offset,
+            "events": rows}
+
+
+@app.get("/api/audit/verify")
+async def audit_verify():
+    """哈希链完整性自检（审计可溯源核验；隔日自检任务可调用）。
+
+    tail_hash 供外部锚记录（RV-368 条件3）：把 tail_hash+total 记入外部档案
+    （如 project-trace DailySummary），比对可发现尾部截断/整链重算——内部一致性
+    无法单独证明未篡改，需外部锚联合。
+    """
+    ok, bad = AUDIT.verify_chain()
+    last = AUDIT._last_hash()
+    return {"ok": ok, "chain_ok": ok, "tampered_rows": bad, "total": AUDIT.count(),
+            "tail_hash": last, "tail_is_genesis": last == "GENESIS"}
+
+
+@app.post("/api/audit/export")
+async def audit_export(request: Request):
+    """导出留痕（RV-368 条件1）：前端导出 CSV 时调用；payload 仅记条数与类型，无明文。"""
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(400, "请求体不是合法 JSON")
+    kind = str(body.get("kind") or "csv")[:20]
+    n = int(body.get("n_rows") or 0)
+    n = max(0, min(n, 10_000_000))
+    ev = AUDIT.log("exported", {"kind": kind, "n_rows": n})
+    return {"status": "ok", "event": ev["event_id"]}
+
+
+@app.delete("/api/data/{ref}")
+async def data_delete(ref: str):
+    """PII 删除权（合规：留存期限与删除权流程定义——T-014 前置③）。
+
+    当前真实模式解析为瞬态（不持久化原始文件），无本体可删：
+    本端点行使"删除权留痕"语义——记录 data_deleted 审计事件（保留指纹，不保留内容），
+    并返回删除权行使凭据。未来启用原始文件留存时，此处接本体删除（同一审计语义）。
+    """
+    ref = str(ref).strip()[:80]
+    if not ref:
+        raise HTTPException(400, "ref 不能为空")
+    ev = AUDIT.log("data_deleted", {"ref_fp": ref, "ref_kind": "invoice", "has_body": False})
+    return {"status": "ok", "message": "删除权已行使并留痕（当前无持久化本体；审计事件保留指纹不保留内容）",
+            "event_id": ev["event_id"]}
+
+
 @app.get("/{pwa_path:path}")
 async def pwa_static(pwa_path: str):
     """PWA 静态资源白名单（F-06：manifest/SW/icons；仅列出的文件对外，防目录泄露）。"""
@@ -326,5 +497,7 @@ async def pwa_static(pwa_path: str):
     media = {"service-worker.js": "text/javascript",
              "manifest.json": "application/manifest+json"}.get(pwa_path)
     return FileResponse(f, media_type=media)
+
+
 
 

@@ -1266,6 +1266,35 @@ function setRev(invNo, rec) {
   closeRevModal();
   if (__lastReport) renderReport();
 }
+// T-056（T-014 前置③）：复核决定服务端化——真实模式（后端可用）同步写 append-only 审计；
+// demo 模式（无后端）静默跳过（本地留痕 + 导出注明）。fire-and-forget，失败不阻塞本地流程。
+function hasBackend() {
+  const url = localStorage.getItem("ipc_backend");
+  const key = localStorage.getItem("ipc_key");
+  return Boolean(url && url.trim() && key && key.trim());
+}
+function postAuditExport(kind, nRows) {
+  if (!hasBackend()) return;
+  const url = (localStorage.getItem("ipc_backend") || "").replace(/\/$/, "");
+  const key = localStorage.getItem("ipc_key") || "";
+  fetch(url + "/api/audit/export", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-API-Key": key },
+    body: JSON.stringify({ kind: kind, n_rows: nRows })
+  }).catch(() => { window.__auditSyncFail = true; });
+}
+function postAuditDecision(invNo, decision, note) {
+  if (!hasBackend()) return;
+  const url = (localStorage.getItem("ipc_backend") || "").replace(/\/$/, "");
+  const key = localStorage.getItem("ipc_key") || "";
+  fetch(url + "/api/audit/review-decision", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-API-Key": key },
+    body: JSON.stringify({ finding_id: String(invNo || "").slice(0, 80), decision: decision, note: String(note || "").slice(0, 200) })
+  }).then((r) => {
+    if (!r.ok) window.__auditSyncFail = true;
+  }).catch(() => { window.__auditSyncFail = true; });
+}
 function _findInv(invNo) {
   return __lastReport && (__lastReport.invoices || []).find((x) => x.invoice_no === invNo) || null;
 }
@@ -1287,7 +1316,7 @@ function openReviewModal(invNo) {
     <div class="rev-head">复核工作台 · 票 ${esc(shortNo(invNo))}</div>
     ${statusNote}
     <div class="rev-fields">${fields}</div>
-    <div class="rev-audit">${rec ? auditHtml(rec) : `<span class="hint">留痕：确认/修正将记录原始快照与操作流水（仅保存在本机浏览器，审计以导出为准）。修正值不参与检查判定与处置（处置基于识别原始值）</span>`}</div>
+    <div class="rev-audit">${rec ? auditHtml(rec) : `<span class="hint">留痕：确认/修正将记录原始快照与操作流水${hasBackend() ? "，并同步写入服务端 append-only 审计日志" : "（仅保存在本机浏览器，审计以导出为准）"}。修正值不参与检查判定与处置（处置基于识别原始值）</span>`}</div>
     <div class="rev-actions">
       <button class="btn-ghost" onclick="closeRevModal()">取消</button>
       <button class="btn-ghost" onclick="reviewAction('${esc(invNo)}','confirm')">确认无误</button>
@@ -1339,6 +1368,7 @@ function reviewAction(invNo, action) {
   });
   if (action === "clear") {
     if (!window.confirm("重置将删除本票复核记录（含修正与流水），回滚到待人工复核；底层识别结果不受影响。继续？")) return;
+    postAuditDecision(invNo, "rework", "重置复核（人工撤销复核决定）");
     setRev(invNo, null);
     return;
   }
@@ -1351,6 +1381,9 @@ function reviewAction(invNo, action) {
   if (action === "confirm" && oldRec && oldRec.corrected) {
     auditLog.push({ t: (/* @__PURE__ */ new Date()).toISOString(), op: "复核确认（保留修正）", field: "—", from: "corrected", to: "corrected" });
   }
+  const nCorr = Object.keys(corrected_fields).length;
+  postAuditDecision(invNo, action === "confirm" ? "pass" : "rework",
+    action === "confirm" ? "确认无误" : ("人工修正 " + nCorr + " 项：" + Object.keys(corrected_fields).join(",")).slice(0, 200));
   setRev(invNo, { invoice_no: invNo, original, current, corrected_fields, reviewed, corrected, reviewedAt: (/* @__PURE__ */ new Date()).toISOString(), auditLog });
 }
 function fmtMoney(v) {
@@ -1815,6 +1848,7 @@ function exportCSV(findings, metaMap) {
   a.download = "invoice-precheck-findings-" + (/* @__PURE__ */ new Date()).toISOString().slice(0, 10) + ".csv";
   a.click();
   URL.revokeObjectURL(a.href);
+  postAuditExport("csv", (findings || []).length);  // RV-368 条件1：导出留痕（真实模式）
 }
 document.addEventListener("click", (e) => {
   const vs = e.target.closest(".vs");

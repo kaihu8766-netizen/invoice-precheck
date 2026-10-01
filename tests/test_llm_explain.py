@@ -76,24 +76,39 @@ class TestExplainBasics(unittest.TestCase):
         with mock.patch.object(llm_explain, "LLM_ENABLED", False):
             exps = llm_explain.explain_findings(fs)
         self.assertEqual(len(exps), 26)  # 输出与输入对齐（不丢弃）
-        self.assertEqual(exps[0]["what"], fs[0]["message"])  # 高位序在批内优先（模板即时生成，截断不影响输出长度）
+        self.assertEqual(exps[0]["finding_index"], 0)  # 高位序在批内优先（finding_index 溯源；what 经脱敏不逐字比）
 
 
 class TestRedactionAndInjection(unittest.TestCase):
     def test_contract_redacted(self):
-        """送入 LLM 的契约：票号/税号/手机号/公司名脱敏，金额保留。"""
+        """送入 LLM 的契约（默认）：票号/税号/手机号/公司名/金额全部脱敏（RV-367 fail-closed）。"""
         f = make_finding(
             invoice_no="26440000000000100002",
             message="销方 示例制造集团有限公司 税号 91310000MA1FL1XXXX 手机号 13812345678 金额 300.00",
             evidence="税号 91310000MA1FL1XXXX",
         )
+        llm_explain.LLM_SEND_AMOUNT = False
         contract = llm_explain._build_contract(f, {"name": "明细行勾稽", "basis": "增值税发票管理办法"})
         blob = json.dumps(contract, ensure_ascii=False)
         self.assertNotIn("示例制造集团有限公司", blob)
         self.assertNotIn("91310000MA1FL1XXXX", blob)
         self.assertNotIn("13812345678", blob)
         self.assertNotIn("26440000000000100002", blob)
-        self.assertIn("300.00", blob)  # 金额保留（解释上下文）
+        self.assertNotIn("300.00", blob)  # 默认金额掩码
+        self.assertIn("金额(已脱敏)", blob)
+
+    def test_contract_amount_kept_when_enabled(self):
+        """显式 INVOICE_LLM_SEND_AMOUNT=1 → 金额保留（身份字段仍脱敏）。"""
+        f = make_finding(
+            invoice_no="26440000000000100002",
+            message="销方 示例制造集团有限公司 税号 91310000MA1FL1XXXX 手机号 13812345678 金额 300.00",
+            evidence="税号 91310000MA1FL1XXXX",
+        )
+        llm_explain.LLM_SEND_AMOUNT = True
+        contract = llm_explain._build_contract(f, {"name": "明细行勾稽", "basis": "增值税发票管理办法"})
+        blob = json.dumps(contract, ensure_ascii=False)
+        self.assertIn("300.00", blob)  # 金额保留
+        self.assertNotIn("示例制造集团有限公司", blob)  # 身份仍脱敏
 
     def test_injection_as_data(self):
         """字段含指令性文本 → 作为数据处理（围栏），不进 system，不产生越权执行。"""
