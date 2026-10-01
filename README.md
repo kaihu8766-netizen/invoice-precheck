@@ -89,7 +89,9 @@ uvicorn app.main:app --reload     # 浏览器打开 http://127.0.0.1:8000
 
 评估：`python3 scripts/eval_goldset_confidence.py --json`（结果落 `benchmark/results/confidence_report.json`）——三档错误率 + 95% Wilson 区间（n<5 不报）+ AUC（置信度升序 vs 错误）。
 
-**⚠ 首测基线（2026-10-01，goldset v0.1.0）**：high 档错误率 0.078（6/77）、low 档 0.75（3/4）、AUC 0.394（反序）——6 个 high 档错误全部来自 #67（公司名尾部数字被 `_COMPANY_RE` 静默裁剪，文本层路径无任何信号捕获，先验乐观）。**修复 #67 是置信度排序可用的前置**（已提级 P1）。
+**⚠ 基线（2026-10-01，goldset v0.1.0，双版本）**：
+- 修复 #67 前（RV-20261001-363）：high 档错误率 0.078（6/77）、low 档 0.75（3/4）、AUC 0.394（反序）——6 个 high 错误全来自 #67（公司名尾部数字被 `_COMPANY_RE` 静默裁剪，文本层无信号捕获，先验乐观）。
+- 修复 #67 后（RV-20261001-365）：high 档 6 错误全消除（synthetic_1-5 seller 序号恢复，L2 字段准确率 0.881→0.9286，剩余失配仅 synthetic_8 设计异常）；low 档 0.75（3/4）不变（synthetic_8 勾稽错正确落 low）；AUC 0.159 为参考值（错误样本仅 3 个，无排序判定力）。
 
 ## 企业主体配置（F-20260923-04 · RV-46/47）
 

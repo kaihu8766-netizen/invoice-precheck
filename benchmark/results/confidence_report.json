@@ -1,12 +1,12 @@
 {
  "goldset_version": "v0.1.0",
- "generated_at": "2026-10-01 16:33:30",
+ "generated_at": "2026-10-01 16:48:01",
  "note": "字段级置信度评估（RV-20261001-362 修订）：conf=路径先验×字段证据惩罚×OCR行P25；AUC=置信度升序 vs 错误；n<5 档位不报 Wilson 区间",
  "buckets": {
   "high": {
-   "error_rate": 0.0779,
-   "err/n": "6/77",
-   "wilson95": "0.078 [0.036, 0.160] (n=77)"
+   "error_rate": 0.013,
+   "err/n": "1/77",
+   "wilson95": "0.013 [0.002, 0.070] (n=77)"
   },
   "mid": {
    "error_rate": 0.0,
@@ -19,8 +19,8 @@
    "wilson95": "insufficient(n<5)"
   }
  },
- "auc": 0.3944,
- "auc_note": "有效",
+ "auc": 0.1588,
+ "auc_note": "错误样本不足，AUC 仅参考",
  "tiers": {
   "L1": {
    "n": 5,
@@ -280,7 +280,7 @@
     "seller_name": {
      "conf": 0.95,
      "bucket": "high",
-     "error": true
+     "error": false
     }
    }
   },
@@ -323,7 +323,7 @@
     "seller_name": {
      "conf": 0.95,
      "bucket": "high",
-     "error": true
+     "error": false
     }
    }
   },
@@ -366,7 +366,7 @@
     "seller_name": {
      "conf": 0.95,
      "bucket": "high",
-     "error": true
+     "error": false
     }
    }
   },
@@ -409,7 +409,7 @@
     "seller_name": {
      "conf": 0.95,
      "bucket": "high",
-     "error": true
+     "error": false
     }
    }
   },
@@ -452,7 +452,7 @@
     "seller_name": {
      "conf": 0.95,
      "bucket": "high",
-     "error": true
+     "error": false
     }
    }
   },

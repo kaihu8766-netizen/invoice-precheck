@@ -94,7 +94,20 @@ def _extract_text_fields(text: str, qr_total: Decimal = Decimal("0")) -> dict:
     no = _INVOICE_NO_RE.search(joined)
     date = _DATE_RE.search(joined)
     taxids = _TAXID_RE.findall(joined)
-    cos = _COMPANY_RE.findall(joined)
+    # #67 修复（RV-20261001-364）：findall → finditer + 紧邻数字后缀并入（≤6 位）。
+    # 原文"示例服务有限公司1"（合成样本序号）原被裁剪为"示例服务有限公司"；
+    # 扩展逻辑比正则直接加"(?:[0-9]{1,6})?"更可控：仅并入紧邻 suffix 的数字（限长、可审计）。
+    cos = []
+    for m in _COMPANY_RE.finditer(joined):
+        name = m.group(0)
+        rest = joined[m.end():m.end() + 7]
+        tail = ""
+        for ch in rest:
+            if ch.isdigit() and len(tail) < 6:
+                tail += ch
+            else:
+                break
+        cos.append(name + tail)
     yens = [_clean_money(x) for x in _YEN_RE.findall(joined)]
 
     # 公司名去重保序（默认版式：购买方=第一个，销售方=第二个）

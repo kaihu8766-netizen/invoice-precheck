@@ -193,5 +193,36 @@ class TestParser(unittest.TestCase):
 
 
 
+class TestCompanyTailDigit(unittest.TestCase):
+    """#67 修复回归（RV-20261001-364）：公司名紧邻数字后缀并入，且非公司名数字串不误收。"""
+
+    def _extract(self, text: str):
+        from app.pdf import _extract_text_fields
+        return _extract_text_fields(text)
+
+    def test_company_tail_digit_kept(self):
+        # 原文含序号：不应裁剪（#67 根因）
+        tf = self._extract("销售方信息\n示例服务有限公司1\n")
+        self.assertIn("示例服务有限公司1", tf["seller_name"] or tf["buyer_name"])
+
+    def test_plain_company_unchanged(self):
+        tf = self._extract("销售方信息\n示例服务有限公司\n")
+        self.assertIn("示例服务有限公司", tf["seller_name"] or tf["buyer_name"])
+
+    def test_no_suffix_string_not_captured(self):
+        # 无公司后缀词的金额行不应被当公司名捕获（RV-364 问题1）
+        tf = self._extract("服务费100元\n示例服务有限公司\n")
+        cos = [c for c in (tf.get("buyer_name"), tf.get("seller_name")) if c]
+        self.assertNotIn("服务费100", "\n".join(cos))
+        self.assertNotIn("服务费", "\n".join(cos))
+
+    def test_digit_tail_capped_at_6(self):
+        # 超过 6 位数字不并入（限长）
+        tf = self._extract("销售方信息\n示例服务有限公司1234567\n")
+        names = [c for c in (tf.get("buyer_name"), tf.get("seller_name")) if c]
+        joined_names = "\n".join(names)
+        self.assertNotIn("1234567", joined_names)
+
+
 if __name__ == "__main__":
     unittest.main()

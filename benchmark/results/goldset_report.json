@@ -1,18 +1,18 @@
 {
  "goldset_version": "v0.1.0",
- "generated_at": "2026-10-01 16:33:43",
+ "generated_at": "2026-10-01 16:48:14",
  "note": "真值比对口径（RV-20261001-360 修订）；旧 benchmark.py 自洽 reconcile 不可与本报告同表比较",
  "tiers": {
   "L2": {
    "n": 8,
    "skipped": 0,
    "parse_rate": "8/8",
-   "field_accuracy": 0.8393,
-   "field_comparable": "47/56",
+   "field_accuracy": 0.9286,
+   "field_comparable": "52/56",
    "miss_rate": "0/1",
    "false_positive_rate": "0/7",
-   "avg_ms": 374.5,
-   "p95_ms": 600.5
+   "avg_ms": 373.8,
+   "p95_ms": 617.6
   }
  },
  "rows": [
@@ -23,7 +23,7 @@
    "parsed": true,
    "skipped": false,
    "field_acc": {
-    "matched": 6,
+    "matched": 7,
     "comparable": 7,
     "detail": {
      "invoice_no": "ok",
@@ -32,14 +32,14 @@
      "tax": "ok",
      "total": "ok",
      "buyer_name": "ok",
-     "seller_name": "truth=示例服务有限公司1|got=示例服务有限公司"
+     "seller_name": "ok"
     }
    },
    "expected_issues": [],
    "got_review_needed": false,
    "missed": 0,
    "false_positive": 0,
-   "elapsed_ms": 600.5,
+   "elapsed_ms": 628.2,
    "error": ""
   },
   {
@@ -49,7 +49,7 @@
    "parsed": true,
    "skipped": false,
    "field_acc": {
-    "matched": 6,
+    "matched": 7,
     "comparable": 7,
     "detail": {
      "invoice_no": "ok",
@@ -58,14 +58,14 @@
      "tax": "ok",
      "total": "ok",
      "buyer_name": "ok",
-     "seller_name": "truth=示例服务有限公司2|got=示例服务有限公司"
+     "seller_name": "ok"
     }
    },
    "expected_issues": [],
    "got_review_needed": false,
    "missed": 0,
    "false_positive": 0,
-   "elapsed_ms": 297.5,
+   "elapsed_ms": 295.5,
    "error": ""
   },
   {
@@ -75,7 +75,7 @@
    "parsed": true,
    "skipped": false,
    "field_acc": {
-    "matched": 6,
+    "matched": 7,
     "comparable": 7,
     "detail": {
      "invoice_no": "ok",
@@ -84,14 +84,14 @@
      "tax": "ok",
      "total": "ok",
      "buyer_name": "ok",
-     "seller_name": "truth=示例服务有限公司3|got=示例服务有限公司"
+     "seller_name": "ok"
     }
    },
    "expected_issues": [],
    "got_review_needed": false,
    "missed": 0,
    "false_positive": 0,
-   "elapsed_ms": 293.3,
+   "elapsed_ms": 288.3,
    "error": ""
   },
   {
@@ -101,7 +101,7 @@
    "parsed": true,
    "skipped": false,
    "field_acc": {
-    "matched": 6,
+    "matched": 7,
     "comparable": 7,
     "detail": {
      "invoice_no": "ok",
@@ -110,14 +110,14 @@
      "tax": "ok",
      "total": "ok",
      "buyer_name": "ok",
-     "seller_name": "truth=示例服务有限公司4|got=示例服务有限公司"
+     "seller_name": "ok"
     }
    },
    "expected_issues": [],
    "got_review_needed": false,
    "missed": 0,
    "false_positive": 0,
-   "elapsed_ms": 289.5,
+   "elapsed_ms": 281.9,
    "error": ""
   },
   {
@@ -127,7 +127,7 @@
    "parsed": true,
    "skipped": false,
    "field_acc": {
-    "matched": 6,
+    "matched": 7,
     "comparable": 7,
     "detail": {
      "invoice_no": "ok",
@@ -136,14 +136,14 @@
      "tax": "ok",
      "total": "ok",
      "buyer_name": "ok",
-     "seller_name": "truth=示例服务有限公司5|got=示例服务有限公司"
+     "seller_name": "ok"
     }
    },
    "expected_issues": [],
    "got_review_needed": false,
    "missed": 0,
    "false_positive": 0,
-   "elapsed_ms": 288.2,
+   "elapsed_ms": 295.8,
    "error": ""
   },
   {
@@ -169,7 +169,7 @@
    "got_review_needed": false,
    "missed": 0,
    "false_positive": 0,
-   "elapsed_ms": 282.6,
+   "elapsed_ms": 280.3,
    "error": ""
   },
   {
@@ -195,7 +195,7 @@
    "got_review_needed": false,
    "missed": 0,
    "false_positive": 0,
-   "elapsed_ms": 633.7,
+   "elapsed_ms": 617.6,
    "error": ""
   },
   {
@@ -232,7 +232,7 @@
    "got_review_needed": true,
    "missed": 0,
    "false_positive": 0,
-   "elapsed_ms": 310.4,
+   "elapsed_ms": 302.6,
    "error": ""
   }
  ]
