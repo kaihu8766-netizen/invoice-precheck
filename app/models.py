@@ -57,6 +57,14 @@ class NormalizedInvoice:
     # 原始证据（报告展示用）
     raw_fields: dict = field(default_factory=dict)
 
+    # 字段级证据与置信度（T-054 · RV-20261001-362：字段级概率化契约）
+    # field_evidence: 解析层按字段的证据惩罚因子（0-1，1=无惩罚）；缺失字段置信=0
+    # ocr_confs:      OCR 路径行级置信度（非 OCR 路径为空）；供 confidence.py 行聚合
+    # field_conf:     confidence.py 计算后的字段级置信度 {字段: 0-1}（默认空，向后兼容）
+    field_evidence: dict = field(default_factory=dict)
+    ocr_confs: list = field(default_factory=list)
+    field_conf: dict = field(default_factory=dict)
+
     # 票面语义标志（P0-8 金额异常类型化基础；parser 提取，规则 R8 消费）
     is_red_letter: bool = False    # 红字发票（票种含"红"或备注含红冲/红字）
     is_differential: bool = False  # 差额征税票（备注含"差额征税"或存在 KCE 扣除额字段）

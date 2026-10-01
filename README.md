@@ -78,6 +78,19 @@ uvicorn app.main:app --reload     # 浏览器打开 http://127.0.0.1:8000
 
 跑分：`python3 scripts/run_goldset.py --json`（结果落 `benchmark/results/goldset_report.json`）。
 
+## 字段级置信度（T-054 · RV-20261001-362 修订）
+
+`app/confidence.py`：`field_confidence(inv)` 输出每字段 0-1 置信度，公式 **路径先验 × Π(字段级证据惩罚) × OCR 行 P25（仅 OCR 路径）**。
+
+- 路径先验：XML/OFD 直读 0.99 > PDF 文本层 0.95 > OCR 0.85（ADR-001 解析优先级）
+- 字段级证据（parser 输出 `field_evidence`）：二维码与文本不一致×0.6、价税勾稽不符×0.5、购/销方版式反转×0.7、无二维码佐证×0.9；缺失字段置信=0
+- 三档：high≥0.95（可直接通过）/ mid 0.80-0.95 / low<0.80（进人工复核；阈值与既有 review 阈值对齐）
+- OCR 行聚合用 P25 而非 min（页脚/水印单条噪声行不再拉爆所有字段）
+
+评估：`python3 scripts/eval_goldset_confidence.py --json`（结果落 `benchmark/results/confidence_report.json`）——三档错误率 + 95% Wilson 区间（n<5 不报）+ AUC（置信度升序 vs 错误）。
+
+**⚠ 首测基线（2026-10-01，goldset v0.1.0）**：high 档错误率 0.078（6/77）、low 档 0.75（3/4）、AUC 0.394（反序）——6 个 high 档错误全部来自 #67（公司名尾部数字被 `_COMPANY_RE` 静默裁剪，文本层路径无任何信号捕获，先验乐观）。**修复 #67 是置信度排序可用的前置**（已提级 P1）。
+
 ## 企业主体配置（F-20260923-04 · RV-46/47）
 
 R2 抬头/税号校验要真正工作，必须配置本公司主体（前端"真实模式 → 连接后端 → 企业主体设置"，或环境变量）。

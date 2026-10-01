@@ -1,0 +1,775 @@
+{
+ "goldset_version": "v0.1.0",
+ "generated_at": "2026-10-01 16:33:30",
+ "note": "字段级置信度评估（RV-20261001-362 修订）：conf=路径先验×字段证据惩罚×OCR行P25；AUC=置信度升序 vs 错误；n<5 档位不报 Wilson 区间",
+ "buckets": {
+  "high": {
+   "error_rate": 0.0779,
+   "err/n": "6/77",
+   "wilson95": "0.078 [0.036, 0.160] (n=77)"
+  },
+  "mid": {
+   "error_rate": 0.0,
+   "err/n": "0/8",
+   "wilson95": "0.000 [0.000, 0.324] (n=8)"
+  },
+  "low": {
+   "error_rate": 0.75,
+   "err/n": "3/4",
+   "wilson95": "insufficient(n<5)"
+  }
+ },
+ "auc": 0.3944,
+ "auc_note": "有效",
+ "tiers": {
+  "L1": {
+   "n": 5,
+   "skipped": 0
+  },
+  "L2": {
+   "n": 8,
+   "skipped": 0
+  },
+  "L3": {
+   "n": 0,
+   "skipped": 31
+  }
+ },
+ "rows": [
+  {
+   "sample_id": "l1_xbrl_ordinary",
+   "tier": "L1",
+   "skipped": false,
+   "parse_path": "xml",
+   "fields": {
+    "invoice_no": {
+     "conf": 0.99,
+     "bucket": "high",
+     "error": false
+    },
+    "issue_date": {
+     "conf": 0.99,
+     "bucket": "high",
+     "error": false
+    },
+    "amount": {
+     "conf": 0.99,
+     "bucket": "high",
+     "error": false
+    },
+    "tax": {
+     "conf": 0.99,
+     "bucket": "high",
+     "error": false
+    },
+    "total": {
+     "conf": 0.99,
+     "bucket": "high",
+     "error": false
+    },
+    "seller_name": {
+     "conf": 0.99,
+     "bucket": "high",
+     "error": false
+    }
+   }
+  },
+  {
+   "sample_id": "l1_xbrl_special",
+   "tier": "L1",
+   "skipped": false,
+   "parse_path": "xml",
+   "fields": {
+    "invoice_no": {
+     "conf": 0.99,
+     "bucket": "high",
+     "error": false
+    },
+    "issue_date": {
+     "conf": 0.99,
+     "bucket": "high",
+     "error": false
+    },
+    "amount": {
+     "conf": 0.99,
+     "bucket": "high",
+     "error": false
+    },
+    "tax": {
+     "conf": 0.99,
+     "bucket": "high",
+     "error": false
+    },
+    "total": {
+     "conf": 0.99,
+     "bucket": "high",
+     "error": false
+    },
+    "seller_name": {
+     "conf": 0.99,
+     "bucket": "high",
+     "error": false
+    }
+   }
+  },
+  {
+   "sample_id": "l1_gd_special",
+   "tier": "L1",
+   "skipped": false,
+   "parse_path": "xml",
+   "fields": {
+    "invoice_no": {
+     "conf": 0.99,
+     "bucket": "high",
+     "error": false
+    },
+    "issue_date": {
+     "conf": 0.99,
+     "bucket": "high",
+     "error": false
+    },
+    "amount": {
+     "conf": 0.99,
+     "bucket": "high",
+     "error": false
+    },
+    "tax": {
+     "conf": 0.99,
+     "bucket": "high",
+     "error": false
+    },
+    "total": {
+     "conf": 0.99,
+     "bucket": "high",
+     "error": false
+    },
+    "buyer_name": {
+     "conf": 0.99,
+     "bucket": "high",
+     "error": false
+    },
+    "seller_name": {
+     "conf": 0.99,
+     "bucket": "high",
+     "error": false
+    }
+   }
+  },
+  {
+   "sample_id": "l1_bj_platform",
+   "tier": "L1",
+   "skipped": false,
+   "parse_path": "xml",
+   "fields": {
+    "invoice_no": {
+     "conf": 0.99,
+     "bucket": "high",
+     "error": false
+    },
+    "issue_date": {
+     "conf": 0.99,
+     "bucket": "high",
+     "error": false
+    },
+    "amount": {
+     "conf": 0.99,
+     "bucket": "high",
+     "error": false
+    },
+    "tax": {
+     "conf": 0.99,
+     "bucket": "high",
+     "error": false
+    },
+    "total": {
+     "conf": 0.99,
+     "bucket": "high",
+     "error": false
+    },
+    "buyer_name": {
+     "conf": 0.99,
+     "bucket": "high",
+     "error": false
+    },
+    "seller_name": {
+     "conf": 0.99,
+     "bucket": "high",
+     "error": false
+    }
+   }
+  },
+  {
+   "sample_id": "l1_gaode_taxi",
+   "tier": "L1",
+   "skipped": false,
+   "parse_path": "xml",
+   "fields": {
+    "invoice_no": {
+     "conf": 0.99,
+     "bucket": "high",
+     "error": false
+    },
+    "issue_date": {
+     "conf": 0.99,
+     "bucket": "high",
+     "error": false
+    },
+    "amount": {
+     "conf": 0.99,
+     "bucket": "high",
+     "error": false
+    },
+    "tax": {
+     "conf": 0.99,
+     "bucket": "high",
+     "error": false
+    },
+    "total": {
+     "conf": 0.99,
+     "bucket": "high",
+     "error": false
+    },
+    "buyer_name": {
+     "conf": 0.99,
+     "bucket": "high",
+     "error": false
+    },
+    "seller_name": {
+     "conf": 0.99,
+     "bucket": "high",
+     "error": false
+    }
+   }
+  },
+  {
+   "sample_id": "synthetic_1",
+   "tier": "L2",
+   "skipped": false,
+   "parse_path": "qr+text",
+   "fields": {
+    "invoice_no": {
+     "conf": 0.855,
+     "bucket": "mid",
+     "error": false
+    },
+    "issue_date": {
+     "conf": 0.95,
+     "bucket": "high",
+     "error": false
+    },
+    "amount": {
+     "conf": 0.95,
+     "bucket": "high",
+     "error": false
+    },
+    "tax": {
+     "conf": 0.95,
+     "bucket": "high",
+     "error": false
+    },
+    "total": {
+     "conf": 0.95,
+     "bucket": "high",
+     "error": false
+    },
+    "buyer_name": {
+     "conf": 0.95,
+     "bucket": "high",
+     "error": false
+    },
+    "seller_name": {
+     "conf": 0.95,
+     "bucket": "high",
+     "error": true
+    }
+   }
+  },
+  {
+   "sample_id": "synthetic_2",
+   "tier": "L2",
+   "skipped": false,
+   "parse_path": "qr+text",
+   "fields": {
+    "invoice_no": {
+     "conf": 0.855,
+     "bucket": "mid",
+     "error": false
+    },
+    "issue_date": {
+     "conf": 0.95,
+     "bucket": "high",
+     "error": false
+    },
+    "amount": {
+     "conf": 0.95,
+     "bucket": "high",
+     "error": false
+    },
+    "tax": {
+     "conf": 0.95,
+     "bucket": "high",
+     "error": false
+    },
+    "total": {
+     "conf": 0.95,
+     "bucket": "high",
+     "error": false
+    },
+    "buyer_name": {
+     "conf": 0.95,
+     "bucket": "high",
+     "error": false
+    },
+    "seller_name": {
+     "conf": 0.95,
+     "bucket": "high",
+     "error": true
+    }
+   }
+  },
+  {
+   "sample_id": "synthetic_3",
+   "tier": "L2",
+   "skipped": false,
+   "parse_path": "qr+text",
+   "fields": {
+    "invoice_no": {
+     "conf": 0.855,
+     "bucket": "mid",
+     "error": false
+    },
+    "issue_date": {
+     "conf": 0.95,
+     "bucket": "high",
+     "error": false
+    },
+    "amount": {
+     "conf": 0.95,
+     "bucket": "high",
+     "error": false
+    },
+    "tax": {
+     "conf": 0.95,
+     "bucket": "high",
+     "error": false
+    },
+    "total": {
+     "conf": 0.95,
+     "bucket": "high",
+     "error": false
+    },
+    "buyer_name": {
+     "conf": 0.95,
+     "bucket": "high",
+     "error": false
+    },
+    "seller_name": {
+     "conf": 0.95,
+     "bucket": "high",
+     "error": true
+    }
+   }
+  },
+  {
+   "sample_id": "synthetic_4",
+   "tier": "L2",
+   "skipped": false,
+   "parse_path": "qr+text",
+   "fields": {
+    "invoice_no": {
+     "conf": 0.855,
+     "bucket": "mid",
+     "error": false
+    },
+    "issue_date": {
+     "conf": 0.95,
+     "bucket": "high",
+     "error": false
+    },
+    "amount": {
+     "conf": 0.95,
+     "bucket": "high",
+     "error": false
+    },
+    "tax": {
+     "conf": 0.95,
+     "bucket": "high",
+     "error": false
+    },
+    "total": {
+     "conf": 0.95,
+     "bucket": "high",
+     "error": false
+    },
+    "buyer_name": {
+     "conf": 0.95,
+     "bucket": "high",
+     "error": false
+    },
+    "seller_name": {
+     "conf": 0.95,
+     "bucket": "high",
+     "error": true
+    }
+   }
+  },
+  {
+   "sample_id": "synthetic_5",
+   "tier": "L2",
+   "skipped": false,
+   "parse_path": "qr+text",
+   "fields": {
+    "invoice_no": {
+     "conf": 0.855,
+     "bucket": "mid",
+     "error": false
+    },
+    "issue_date": {
+     "conf": 0.95,
+     "bucket": "high",
+     "error": false
+    },
+    "amount": {
+     "conf": 0.95,
+     "bucket": "high",
+     "error": false
+    },
+    "tax": {
+     "conf": 0.95,
+     "bucket": "high",
+     "error": false
+    },
+    "total": {
+     "conf": 0.95,
+     "bucket": "high",
+     "error": false
+    },
+    "buyer_name": {
+     "conf": 0.95,
+     "bucket": "high",
+     "error": false
+    },
+    "seller_name": {
+     "conf": 0.95,
+     "bucket": "high",
+     "error": true
+    }
+   }
+  },
+  {
+   "sample_id": "synthetic_6",
+   "tier": "L2",
+   "skipped": false,
+   "parse_path": "qr+text",
+   "fields": {
+    "invoice_no": {
+     "conf": 0.855,
+     "bucket": "mid",
+     "error": false
+    },
+    "issue_date": {
+     "conf": 0.95,
+     "bucket": "high",
+     "error": false
+    },
+    "amount": {
+     "conf": 0.95,
+     "bucket": "high",
+     "error": false
+    },
+    "tax": {
+     "conf": 0.95,
+     "bucket": "high",
+     "error": false
+    },
+    "total": {
+     "conf": 0.95,
+     "bucket": "high",
+     "error": false
+    },
+    "buyer_name": {
+     "conf": 0.95,
+     "bucket": "high",
+     "error": false
+    },
+    "seller_name": {
+     "conf": 0.95,
+     "bucket": "high",
+     "error": false
+    }
+   }
+  },
+  {
+   "sample_id": "synthetic_7",
+   "tier": "L2",
+   "skipped": false,
+   "parse_path": "qr+text",
+   "fields": {
+    "invoice_no": {
+     "conf": 0.855,
+     "bucket": "mid",
+     "error": false
+    },
+    "issue_date": {
+     "conf": 0.95,
+     "bucket": "high",
+     "error": false
+    },
+    "amount": {
+     "conf": 0.95,
+     "bucket": "high",
+     "error": false
+    },
+    "tax": {
+     "conf": 0.95,
+     "bucket": "high",
+     "error": false
+    },
+    "total": {
+     "conf": 0.95,
+     "bucket": "high",
+     "error": false
+    },
+    "buyer_name": {
+     "conf": 0.95,
+     "bucket": "high",
+     "error": false
+    },
+    "seller_name": {
+     "conf": 0.95,
+     "bucket": "high",
+     "error": false
+    }
+   }
+  },
+  {
+   "sample_id": "anon_01",
+   "tier": "L3",
+   "skipped": true,
+   "reason": "样本本体缺失"
+  },
+  {
+   "sample_id": "anon_02",
+   "tier": "L3",
+   "skipped": true,
+   "reason": "样本本体缺失"
+  },
+  {
+   "sample_id": "anon_03",
+   "tier": "L3",
+   "skipped": true,
+   "reason": "样本本体缺失"
+  },
+  {
+   "sample_id": "anon_04",
+   "tier": "L3",
+   "skipped": true,
+   "reason": "样本本体缺失"
+  },
+  {
+   "sample_id": "anon_05",
+   "tier": "L3",
+   "skipped": true,
+   "reason": "样本本体缺失"
+  },
+  {
+   "sample_id": "anon_06",
+   "tier": "L3",
+   "skipped": true,
+   "reason": "样本本体缺失"
+  },
+  {
+   "sample_id": "anon_07",
+   "tier": "L3",
+   "skipped": true,
+   "reason": "样本本体缺失"
+  },
+  {
+   "sample_id": "anon_08",
+   "tier": "L3",
+   "skipped": true,
+   "reason": "样本本体缺失"
+  },
+  {
+   "sample_id": "anon_09",
+   "tier": "L3",
+   "skipped": true,
+   "reason": "样本本体缺失"
+  },
+  {
+   "sample_id": "anon_10",
+   "tier": "L3",
+   "skipped": true,
+   "reason": "样本本体缺失"
+  },
+  {
+   "sample_id": "anon_11",
+   "tier": "L3",
+   "skipped": true,
+   "reason": "样本本体缺失"
+  },
+  {
+   "sample_id": "anon_12",
+   "tier": "L3",
+   "skipped": true,
+   "reason": "样本本体缺失"
+  },
+  {
+   "sample_id": "anon_13",
+   "tier": "L3",
+   "skipped": true,
+   "reason": "样本本体缺失"
+  },
+  {
+   "sample_id": "anon_14",
+   "tier": "L3",
+   "skipped": true,
+   "reason": "样本本体缺失"
+  },
+  {
+   "sample_id": "anon_15",
+   "tier": "L3",
+   "skipped": true,
+   "reason": "样本本体缺失"
+  },
+  {
+   "sample_id": "anon_16",
+   "tier": "L3",
+   "skipped": true,
+   "reason": "样本本体缺失"
+  },
+  {
+   "sample_id": "anon_17",
+   "tier": "L3",
+   "skipped": true,
+   "reason": "样本本体缺失"
+  },
+  {
+   "sample_id": "anon_18",
+   "tier": "L3",
+   "skipped": true,
+   "reason": "样本本体缺失"
+  },
+  {
+   "sample_id": "anon_19",
+   "tier": "L3",
+   "skipped": true,
+   "reason": "样本本体缺失"
+  },
+  {
+   "sample_id": "anon_20",
+   "tier": "L3",
+   "skipped": true,
+   "reason": "样本本体缺失"
+  },
+  {
+   "sample_id": "anon_21",
+   "tier": "L3",
+   "skipped": true,
+   "reason": "样本本体缺失"
+  },
+  {
+   "sample_id": "anon_22",
+   "tier": "L3",
+   "skipped": true,
+   "reason": "样本本体缺失"
+  },
+  {
+   "sample_id": "anon_23",
+   "tier": "L3",
+   "skipped": true,
+   "reason": "样本本体缺失"
+  },
+  {
+   "sample_id": "anon_24",
+   "tier": "L3",
+   "skipped": true,
+   "reason": "样本本体缺失"
+  },
+  {
+   "sample_id": "anon_25",
+   "tier": "L3",
+   "skipped": true,
+   "reason": "样本本体缺失"
+  },
+  {
+   "sample_id": "anon_26",
+   "tier": "L3",
+   "skipped": true,
+   "reason": "样本本体缺失"
+  },
+  {
+   "sample_id": "anon_27",
+   "tier": "L3",
+   "skipped": true,
+   "reason": "样本本体缺失"
+  },
+  {
+   "sample_id": "anon_28",
+   "tier": "L3",
+   "skipped": true,
+   "reason": "样本本体缺失"
+  },
+  {
+   "sample_id": "anon_29",
+   "tier": "L3",
+   "skipped": true,
+   "reason": "样本本体缺失"
+  },
+  {
+   "sample_id": "anon_30",
+   "tier": "L3",
+   "skipped": true,
+   "reason": "样本本体缺失"
+  },
+  {
+   "sample_id": "anon_31",
+   "tier": "L3",
+   "skipped": true,
+   "reason": "样本本体缺失"
+  },
+  {
+   "sample_id": "synthetic_8",
+   "tier": "L2",
+   "skipped": false,
+   "parse_path": "qr+text",
+   "fields": {
+    "invoice_no": {
+     "conf": 0.855,
+     "bucket": "mid",
+     "error": false
+    },
+    "issue_date": {
+     "conf": 0.0,
+     "bucket": "low",
+     "error": true
+    },
+    "amount": {
+     "conf": 0.475,
+     "bucket": "low",
+     "error": true
+    },
+    "tax": {
+     "conf": 0.475,
+     "bucket": "low",
+     "error": true
+    },
+    "total": {
+     "conf": 0.475,
+     "bucket": "low",
+     "error": false
+    },
+    "buyer_name": {
+     "conf": 0.95,
+     "bucket": "high",
+     "error": false
+    },
+    "seller_name": {
+     "conf": 0.95,
+     "bucket": "high",
+     "error": true
+    }
+   }
+  }
+ ]
+}

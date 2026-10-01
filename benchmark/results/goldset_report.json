@@ -1,6 +1,6 @@
 {
  "goldset_version": "v0.1.0",
- "generated_at": "2026-10-01 16:05:18",
+ "generated_at": "2026-10-01 16:33:43",
  "note": "真值比对口径（RV-20261001-360 修订）；旧 benchmark.py 自洽 reconcile 不可与本报告同表比较",
  "tiers": {
   "L2": {
@@ -11,8 +11,8 @@
    "field_comparable": "47/56",
    "miss_rate": "0/1",
    "false_positive_rate": "0/7",
-   "avg_ms": 396.5,
-   "p95_ms": 615.8
+   "avg_ms": 374.5,
+   "p95_ms": 600.5
   }
  },
  "rows": [
@@ -39,7 +39,7 @@
    "got_review_needed": false,
    "missed": 0,
    "false_positive": 0,
-   "elapsed_ms": 784.6,
+   "elapsed_ms": 600.5,
    "error": ""
   },
   {
@@ -65,7 +65,7 @@
    "got_review_needed": false,
    "missed": 0,
    "false_positive": 0,
-   "elapsed_ms": 294.0,
+   "elapsed_ms": 297.5,
    "error": ""
   },
   {
@@ -91,7 +91,7 @@
    "got_review_needed": false,
    "missed": 0,
    "false_positive": 0,
-   "elapsed_ms": 294.8,
+   "elapsed_ms": 293.3,
    "error": ""
   },
   {
@@ -117,7 +117,7 @@
    "got_review_needed": false,
    "missed": 0,
    "false_positive": 0,
-   "elapsed_ms": 295.5,
+   "elapsed_ms": 289.5,
    "error": ""
   },
   {
@@ -143,7 +143,7 @@
    "got_review_needed": false,
    "missed": 0,
    "false_positive": 0,
-   "elapsed_ms": 298.0,
+   "elapsed_ms": 288.2,
    "error": ""
   },
   {
@@ -169,7 +169,7 @@
    "got_review_needed": false,
    "missed": 0,
    "false_positive": 0,
-   "elapsed_ms": 281.5,
+   "elapsed_ms": 282.6,
    "error": ""
   },
   {
@@ -195,7 +195,7 @@
    "got_review_needed": false,
    "missed": 0,
    "false_positive": 0,
-   "elapsed_ms": 615.8,
+   "elapsed_ms": 633.7,
    "error": ""
   },
   {
@@ -232,7 +232,7 @@
    "got_review_needed": true,
    "missed": 0,
    "false_positive": 0,
-   "elapsed_ms": 307.5,
+   "elapsed_ms": 310.4,
    "error": ""
   }
  ]

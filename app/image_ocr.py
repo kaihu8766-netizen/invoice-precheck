@@ -97,4 +97,7 @@ def parse_image(data: bytes) -> NormalizedInvoice:
             inv.review_needed = True
             inv.parse_warnings.append(
                 f"OCR 置信度偏低（{len(low)} 行 <0.80），建议人工核对")
+    # T-054 · RV-20261001-362：OCR 行 confs 透传（confidence.py 行聚合；图片路径先验 0.85）
+    inv.ocr_confs = list(confs)
+    inv.field_evidence = {}
     return inv

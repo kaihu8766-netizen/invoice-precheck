@@ -315,6 +315,7 @@ def parse_xml(data: bytes) -> NormalizedInvoice:
         k: (_mask(v) if _is_taxid_key(k) else v)
         for k, v in fields.items() if k in _RAW_WHITELIST_EXT
     }
+    raw_fields["parse_path"] = "xml"  # T-054：直读路径标记（confidence.py 路径先验 0.99）
 
     # 票面语义标志（P0-8：红冲/差额的类型化识别，供 R8 金额异常规则消费）
     remark = fields.get("备注") or fields.get("Remark") or ""

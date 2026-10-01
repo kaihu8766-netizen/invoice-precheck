@@ -242,6 +242,24 @@ def parse_pdf(data: bytes, source_hash: str = "") -> NormalizedInvoice:
                 review_why.append(f"OCR 关键字段置信度偏低（最低 {min(low):.2f}）")
         if missing:
             review_why.append(f"关键字段缺失: {','.join(missing)}")
+
+        # T-054 · RV-20261001-362：字段级证据惩罚因子（0-1，1=无惩罚；confidence.py 路径先验×惩罚）
+        fe: dict[str, float] = {}
+        if qr_core.get("invoice_no") and tf["invoice_no"] and qr_core["invoice_no"] != tf["invoice_no"]:
+            fe["invoice_no"] = 0.6  # 二维码与版式文本不一致
+        elif not qr_core.get("invoice_no"):
+            fe["invoice_no"] = 0.9  # 无二维码佐证（纯文本）
+        if qr_core.get("total") and tf["total"] and qr_core["total"] != tf["total"]:
+            fe["total"] = 0.6       # 二维码价税合计与版式不一致
+        if inv.total > 0 and inv.amount + inv.tax != inv.total:
+            for f_ in ("amount", "tax", "total"):
+                fe.setdefault(f_, 0.5)  # 价税勾稽不符：金额/税额/合计同时降信
+        if tf.get("party_swapped"):
+            for f_ in ("buyer_name", "seller_name"):
+                fe[f_] = 0.7          # 购/销方版式反转：名称方向待人工确认
+        inv.field_evidence = fe
+        inv.ocr_confs = list(_ocr_conf)  # OCR 路径行 confs（非 OCR 为空）
+
         inv.parse_warnings = warnings
         if review_why:
             inv.review_needed = True
