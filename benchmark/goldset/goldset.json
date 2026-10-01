@@ -1,0 +1,542 @@
+{
+ "goldset_version": "v0.1.0",
+ "created": "2026-10-01",
+ "policy": "基准集清单：L1 官方公开样例(可入库) / L2 合成(可入库) / L3 真实脱敏(真值含真实金额→仅指针+hash 入库，本体与金额留本地)。绝不合并单一准确率；复现条件：L1/L2 无外部依赖，L3 需本地 private 文件（hash 校验）。",
+ "sha256_private_index": "492d5d26a6006896b665e14d600a41f4c9656b232c3fd0de255108fa191d234b",
+ "samples": [
+  {
+   "sample_id": "l1_xbrl_ordinary",
+   "source_tier": "L1",
+   "file": "tests/corpus/official-einv-xbrl-ordinary.xml",
+   "truth": {
+    "invoice_no": "23440000000000100012",
+    "issue_date": "2023-11-13",
+    "amount": "500",
+    "tax": "0",
+    "total": "500",
+    "seller_name": "示例商贸（广州）有限公司"
+   },
+   "note": "财政部官方公开 XBRL 样例（普通）"
+  },
+  {
+   "sample_id": "l1_xbrl_special",
+   "source_tier": "L1",
+   "file": "tests/corpus/official-einv-xbrl-special.xml",
+   "truth": {
+    "invoice_no": "23440000000000100011",
+    "issue_date": "2023-11-13",
+    "amount": "9000.00",
+    "tax": "1170.00",
+    "total": "10170.00",
+    "seller_name": "示例照明（广东）有限公司"
+   },
+   "note": "财政部官方公开 XBRL 样例（特殊）"
+  },
+  {
+   "sample_id": "l1_gd_special",
+   "source_tier": "L1",
+   "file": "tests/corpus/official-gd-special.xml",
+   "truth": {
+    "invoice_no": "23440000000000100001",
+    "issue_date": "2023-02-23",
+    "amount": "2.00",
+    "tax": "0.12",
+    "total": "2.12",
+    "seller_name": "示例制造集团有限公司",
+    "buyer_name": "示例商贸有限公司"
+   },
+   "note": "广东官方公开样例（特殊票）"
+  },
+  {
+   "sample_id": "l1_bj_platform",
+   "source_tier": "L1",
+   "file": "tests/corpus/bj-platform-it.xml",
+   "truth": {
+    "invoice_no": "24110000000000100003",
+    "issue_date": "2025-03-12",
+    "amount": "123456.78",
+    "tax": "7407.41",
+    "total": "130864.19",
+    "seller_name": "示例科技有限公司",
+    "buyer_name": "示例商贸有限公司"
+   },
+   "note": "北京平台公开样例（IT服务）"
+  },
+  {
+   "sample_id": "l1_gaode_taxi",
+   "source_tier": "L1",
+   "file": "tests/corpus/gaode-js-taxi.xml",
+   "truth": {
+    "invoice_no": "26320000000000100001",
+    "issue_date": "2025-05-20",
+    "amount": "46.07",
+    "tax": "1.38",
+    "total": "47.45",
+    "seller_name": "示例出行服务有限公司示例分公司",
+    "buyer_name": "xxxxxx有限责任公司"
+   },
+   "note": "高德出租车行程公开样例"
+  },
+  {
+   "sample_id": "synthetic_1",
+   "source_tier": "L2",
+   "file": "benchmark/synthetic/synthetic_1.pdf",
+   "truth": {
+    "invoice_no": "25300000000090000000",
+    "issue_date": "2026-08-01",
+    "amount": "100.00",
+    "tax": "13.00",
+    "total": "113.00",
+    "seller_name": "示例服务有限公司1",
+    "buyer_name": "示例采购有限公司"
+   },
+   "note": "合成（生成器规则重建）"
+  },
+  {
+   "sample_id": "synthetic_2",
+   "source_tier": "L2",
+   "file": "benchmark/synthetic/synthetic_2.pdf",
+   "truth": {
+    "invoice_no": "25300000000090000001",
+    "issue_date": "2026-08-02",
+    "amount": "150.50",
+    "tax": "19.57",
+    "total": "170.07",
+    "seller_name": "示例服务有限公司2",
+    "buyer_name": "示例采购有限公司"
+   },
+   "note": "合成（生成器规则重建）"
+  },
+  {
+   "sample_id": "synthetic_3",
+   "source_tier": "L2",
+   "file": "benchmark/synthetic/synthetic_3.pdf",
+   "truth": {
+    "invoice_no": "25300000000090000002",
+    "issue_date": "2026-08-03",
+    "amount": "201.00",
+    "tax": "26.13",
+    "total": "227.13",
+    "seller_name": "示例服务有限公司3",
+    "buyer_name": "示例采购有限公司"
+   },
+   "note": "合成（生成器规则重建）"
+  },
+  {
+   "sample_id": "synthetic_4",
+   "source_tier": "L2",
+   "file": "benchmark/synthetic/synthetic_4.pdf",
+   "truth": {
+    "invoice_no": "25300000000090000003",
+    "issue_date": "2026-08-04",
+    "amount": "251.50",
+    "tax": "32.70",
+    "total": "284.20",
+    "seller_name": "示例服务有限公司4",
+    "buyer_name": "示例采购有限公司"
+   },
+   "note": "合成（生成器规则重建）"
+  },
+  {
+   "sample_id": "synthetic_5",
+   "source_tier": "L2",
+   "file": "benchmark/synthetic/synthetic_5.pdf",
+   "truth": {
+    "invoice_no": "25300000000090000004",
+    "issue_date": "2026-08-05",
+    "amount": "302.00",
+    "tax": "39.26",
+    "total": "341.26",
+    "seller_name": "示例服务有限公司5",
+    "buyer_name": "示例采购有限公司"
+   },
+   "note": "合成（生成器规则重建）"
+  },
+  {
+   "sample_id": "synthetic_6",
+   "source_tier": "L2",
+   "file": "benchmark/synthetic/synthetic_6_motor_exempt_single.pdf",
+   "truth": {
+    "invoice_no": "25452000000051553220",
+    "issue_date": "2025-05-12",
+    "amount": "169655.56",
+    "tax": "0",
+    "total": "169655.56",
+    "seller_name": "精灵汽车销售（南宁）有限公司",
+    "buyer_name": "马鞍山精灵汽车贸易有限公司"
+   },
+   "note": "合成（机动车免税单笔，0%税率）"
+  },
+  {
+   "sample_id": "synthetic_7",
+   "source_tier": "L2",
+   "file": "benchmark/synthetic/synthetic_7_motor_exempt_multi.pdf",
+   "truth": {
+    "invoice_no": "25452000000051553220",
+    "issue_date": "2025-05-12",
+    "amount": "3548937.20",
+    "tax": "0",
+    "total": "3548937.20",
+    "seller_name": "精灵汽车销售（南宁）有限公司",
+    "buyer_name": "马鞍山精灵汽车贸易有限公司"
+   },
+   "note": "合成（机动车免税多行，0%税率）"
+  },
+  {
+   "sample_id": "anon_01",
+   "source_tier": "L3",
+   "file": "anon_01.pdf",
+   "private_ref": {
+    "file": "benchmark/private/real_private_index.json",
+    "index": 0
+   },
+   "truth": null,
+   "note": "真实脱敏副本（anon_xx.pdf 本体在仓外 ~/invoice-private/）；真值含真实金额，仅存本地"
+  },
+  {
+   "sample_id": "anon_02",
+   "source_tier": "L3",
+   "file": "anon_02.pdf",
+   "private_ref": {
+    "file": "benchmark/private/real_private_index.json",
+    "index": 1
+   },
+   "truth": null,
+   "note": "真实脱敏副本（anon_xx.pdf 本体在仓外 ~/invoice-private/）；真值含真实金额，仅存本地"
+  },
+  {
+   "sample_id": "anon_03",
+   "source_tier": "L3",
+   "file": "anon_03.pdf",
+   "private_ref": {
+    "file": "benchmark/private/real_private_index.json",
+    "index": 2
+   },
+   "truth": null,
+   "note": "真实脱敏副本（anon_xx.pdf 本体在仓外 ~/invoice-private/）；真值含真实金额，仅存本地"
+  },
+  {
+   "sample_id": "anon_04",
+   "source_tier": "L3",
+   "file": "anon_04.pdf",
+   "private_ref": {
+    "file": "benchmark/private/real_private_index.json",
+    "index": 3
+   },
+   "truth": null,
+   "note": "真实脱敏副本（anon_xx.pdf 本体在仓外 ~/invoice-private/）；真值含真实金额，仅存本地"
+  },
+  {
+   "sample_id": "anon_05",
+   "source_tier": "L3",
+   "file": "anon_05.pdf",
+   "private_ref": {
+    "file": "benchmark/private/real_private_index.json",
+    "index": 4
+   },
+   "truth": null,
+   "note": "真实脱敏副本（anon_xx.pdf 本体在仓外 ~/invoice-private/）；真值含真实金额，仅存本地"
+  },
+  {
+   "sample_id": "anon_06",
+   "source_tier": "L3",
+   "file": "anon_06.pdf",
+   "private_ref": {
+    "file": "benchmark/private/real_private_index.json",
+    "index": 5
+   },
+   "truth": null,
+   "note": "真实脱敏副本（anon_xx.pdf 本体在仓外 ~/invoice-private/）；真值含真实金额，仅存本地"
+  },
+  {
+   "sample_id": "anon_07",
+   "source_tier": "L3",
+   "file": "anon_07.pdf",
+   "private_ref": {
+    "file": "benchmark/private/real_private_index.json",
+    "index": 6
+   },
+   "truth": null,
+   "note": "真实脱敏副本（anon_xx.pdf 本体在仓外 ~/invoice-private/）；真值含真实金额，仅存本地"
+  },
+  {
+   "sample_id": "anon_08",
+   "source_tier": "L3",
+   "file": "anon_08.pdf",
+   "private_ref": {
+    "file": "benchmark/private/real_private_index.json",
+    "index": 7
+   },
+   "truth": null,
+   "note": "真实脱敏副本（anon_xx.pdf 本体在仓外 ~/invoice-private/）；真值含真实金额，仅存本地"
+  },
+  {
+   "sample_id": "anon_09",
+   "source_tier": "L3",
+   "file": "anon_09.pdf",
+   "private_ref": {
+    "file": "benchmark/private/real_private_index.json",
+    "index": 8
+   },
+   "truth": null,
+   "note": "真实脱敏副本（anon_xx.pdf 本体在仓外 ~/invoice-private/）；真值含真实金额，仅存本地"
+  },
+  {
+   "sample_id": "anon_10",
+   "source_tier": "L3",
+   "file": "anon_10.pdf",
+   "private_ref": {
+    "file": "benchmark/private/real_private_index.json",
+    "index": 9
+   },
+   "truth": null,
+   "note": "真实脱敏副本（anon_xx.pdf 本体在仓外 ~/invoice-private/）；真值含真实金额，仅存本地"
+  },
+  {
+   "sample_id": "anon_11",
+   "source_tier": "L3",
+   "file": "anon_11.pdf",
+   "private_ref": {
+    "file": "benchmark/private/real_private_index.json",
+    "index": 10
+   },
+   "truth": null,
+   "note": "真实脱敏副本（anon_xx.pdf 本体在仓外 ~/invoice-private/）；真值含真实金额，仅存本地"
+  },
+  {
+   "sample_id": "anon_12",
+   "source_tier": "L3",
+   "file": "anon_12.pdf",
+   "private_ref": {
+    "file": "benchmark/private/real_private_index.json",
+    "index": 11
+   },
+   "truth": null,
+   "note": "真实脱敏副本（anon_xx.pdf 本体在仓外 ~/invoice-private/）；真值含真实金额，仅存本地"
+  },
+  {
+   "sample_id": "anon_13",
+   "source_tier": "L3",
+   "file": "anon_13.pdf",
+   "private_ref": {
+    "file": "benchmark/private/real_private_index.json",
+    "index": 12
+   },
+   "truth": null,
+   "note": "真实脱敏副本（anon_xx.pdf 本体在仓外 ~/invoice-private/）；真值含真实金额，仅存本地"
+  },
+  {
+   "sample_id": "anon_14",
+   "source_tier": "L3",
+   "file": "anon_14.pdf",
+   "private_ref": {
+    "file": "benchmark/private/real_private_index.json",
+    "index": 13
+   },
+   "truth": null,
+   "note": "真实脱敏副本（anon_xx.pdf 本体在仓外 ~/invoice-private/）；真值含真实金额，仅存本地"
+  },
+  {
+   "sample_id": "anon_15",
+   "source_tier": "L3",
+   "file": "anon_15.pdf",
+   "private_ref": {
+    "file": "benchmark/private/real_private_index.json",
+    "index": 14
+   },
+   "truth": null,
+   "note": "真实脱敏副本（anon_xx.pdf 本体在仓外 ~/invoice-private/）；真值含真实金额，仅存本地"
+  },
+  {
+   "sample_id": "anon_16",
+   "source_tier": "L3",
+   "file": "anon_16.pdf",
+   "private_ref": {
+    "file": "benchmark/private/real_private_index.json",
+    "index": 15
+   },
+   "truth": null,
+   "note": "真实脱敏副本（anon_xx.pdf 本体在仓外 ~/invoice-private/）；真值含真实金额，仅存本地"
+  },
+  {
+   "sample_id": "anon_17",
+   "source_tier": "L3",
+   "file": "anon_17.pdf",
+   "private_ref": {
+    "file": "benchmark/private/real_private_index.json",
+    "index": 16
+   },
+   "truth": null,
+   "note": "真实脱敏副本（anon_xx.pdf 本体在仓外 ~/invoice-private/）；真值含真实金额，仅存本地"
+  },
+  {
+   "sample_id": "anon_18",
+   "source_tier": "L3",
+   "file": "anon_18.pdf",
+   "private_ref": {
+    "file": "benchmark/private/real_private_index.json",
+    "index": 17
+   },
+   "truth": null,
+   "note": "真实脱敏副本（anon_xx.pdf 本体在仓外 ~/invoice-private/）；真值含真实金额，仅存本地"
+  },
+  {
+   "sample_id": "anon_19",
+   "source_tier": "L3",
+   "file": "anon_19.pdf",
+   "private_ref": {
+    "file": "benchmark/private/real_private_index.json",
+    "index": 18
+   },
+   "truth": null,
+   "note": "真实脱敏副本（anon_xx.pdf 本体在仓外 ~/invoice-private/）；真值含真实金额，仅存本地"
+  },
+  {
+   "sample_id": "anon_20",
+   "source_tier": "L3",
+   "file": "anon_20.pdf",
+   "private_ref": {
+    "file": "benchmark/private/real_private_index.json",
+    "index": 19
+   },
+   "truth": null,
+   "note": "真实脱敏副本（anon_xx.pdf 本体在仓外 ~/invoice-private/）；真值含真实金额，仅存本地"
+  },
+  {
+   "sample_id": "anon_21",
+   "source_tier": "L3",
+   "file": "anon_21.pdf",
+   "private_ref": {
+    "file": "benchmark/private/real_private_index.json",
+    "index": 20
+   },
+   "truth": null,
+   "note": "真实脱敏副本（anon_xx.pdf 本体在仓外 ~/invoice-private/）；真值含真实金额，仅存本地"
+  },
+  {
+   "sample_id": "anon_22",
+   "source_tier": "L3",
+   "file": "anon_22.pdf",
+   "private_ref": {
+    "file": "benchmark/private/real_private_index.json",
+    "index": 21
+   },
+   "truth": null,
+   "note": "真实脱敏副本（anon_xx.pdf 本体在仓外 ~/invoice-private/）；真值含真实金额，仅存本地"
+  },
+  {
+   "sample_id": "anon_23",
+   "source_tier": "L3",
+   "file": "anon_23.pdf",
+   "private_ref": {
+    "file": "benchmark/private/real_private_index.json",
+    "index": 22
+   },
+   "truth": null,
+   "note": "真实脱敏副本（anon_xx.pdf 本体在仓外 ~/invoice-private/）；真值含真实金额，仅存本地"
+  },
+  {
+   "sample_id": "anon_24",
+   "source_tier": "L3",
+   "file": "anon_24.pdf",
+   "private_ref": {
+    "file": "benchmark/private/real_private_index.json",
+    "index": 23
+   },
+   "truth": null,
+   "note": "真实脱敏副本（anon_xx.pdf 本体在仓外 ~/invoice-private/）；真值含真实金额，仅存本地"
+  },
+  {
+   "sample_id": "anon_25",
+   "source_tier": "L3",
+   "file": "anon_25.pdf",
+   "private_ref": {
+    "file": "benchmark/private/real_private_index.json",
+    "index": 24
+   },
+   "truth": null,
+   "note": "真实脱敏副本（anon_xx.pdf 本体在仓外 ~/invoice-private/）；真值含真实金额，仅存本地"
+  },
+  {
+   "sample_id": "anon_26",
+   "source_tier": "L3",
+   "file": "anon_26.pdf",
+   "private_ref": {
+    "file": "benchmark/private/real_private_index.json",
+    "index": 25
+   },
+   "truth": null,
+   "note": "真实脱敏副本（anon_xx.pdf 本体在仓外 ~/invoice-private/）；真值含真实金额，仅存本地"
+  },
+  {
+   "sample_id": "anon_27",
+   "source_tier": "L3",
+   "file": "anon_27.pdf",
+   "private_ref": {
+    "file": "benchmark/private/real_private_index.json",
+    "index": 26
+   },
+   "truth": null,
+   "note": "真实脱敏副本（anon_xx.pdf 本体在仓外 ~/invoice-private/）；真值含真实金额，仅存本地"
+  },
+  {
+   "sample_id": "anon_28",
+   "source_tier": "L3",
+   "file": "anon_28.pdf",
+   "private_ref": {
+    "file": "benchmark/private/real_private_index.json",
+    "index": 27
+   },
+   "truth": null,
+   "note": "真实脱敏副本（anon_xx.pdf 本体在仓外 ~/invoice-private/）；真值含真实金额，仅存本地"
+  },
+  {
+   "sample_id": "anon_29",
+   "source_tier": "L3",
+   "file": "anon_29.pdf",
+   "private_ref": {
+    "file": "benchmark/private/real_private_index.json",
+    "index": 28
+   },
+   "truth": null,
+   "note": "真实脱敏副本（anon_xx.pdf 本体在仓外 ~/invoice-private/）；真值含真实金额，仅存本地"
+  },
+  {
+   "sample_id": "anon_30",
+   "source_tier": "L3",
+   "file": "anon_30.pdf",
+   "private_ref": {
+    "file": "benchmark/private/real_private_index.json",
+    "index": 29
+   },
+   "truth": null,
+   "note": "真实脱敏副本（anon_xx.pdf 本体在仓外 ~/invoice-private/）；真值含真实金额，仅存本地"
+  },
+  {
+   "sample_id": "anon_31",
+   "source_tier": "L3",
+   "file": "anon_31.pdf",
+   "private_ref": {
+    "file": "benchmark/private/real_private_index.json",
+    "index": 30
+   },
+   "truth": null,
+   "note": "真实脱敏副本（anon_xx.pdf 本体在仓外 ~/invoice-private/）；真值含真实金额，仅存本地"
+  },
+  {
+   "sample_id": "synthetic_8",
+   "source_tier": "L2",
+   "file": "benchmark/synthetic/synthetic_8_bad_expected.pdf",
+   "truth": {
+    "invoice_no": "25300000000090000007",
+    "issue_date": "2026-13-45",
+    "amount": "100.00",
+    "tax": "13.00",
+    "total": "120.00",
+    "buyer_name": "示例采购有限公司",
+    "seller_name": "示例服务有限公司BAD"
+   },
+   "note": "合成 BAD 样本（构造：勾稽不符+非法日期）——使漏报率口径可测（RV-361 条件）"
+  }
+ ]
+}

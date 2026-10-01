@@ -1,0 +1,239 @@
+{
+ "goldset_version": "v0.1.0",
+ "generated_at": "2026-10-01 16:05:18",
+ "note": "真值比对口径（RV-20261001-360 修订）；旧 benchmark.py 自洽 reconcile 不可与本报告同表比较",
+ "tiers": {
+  "L2": {
+   "n": 8,
+   "skipped": 0,
+   "parse_rate": "8/8",
+   "field_accuracy": 0.8393,
+   "field_comparable": "47/56",
+   "miss_rate": "0/1",
+   "false_positive_rate": "0/7",
+   "avg_ms": 396.5,
+   "p95_ms": 615.8
+  }
+ },
+ "rows": [
+  {
+   "sample_id": "synthetic_1",
+   "tier": "L2",
+   "file": "benchmark/synthetic/synthetic_1.pdf",
+   "parsed": true,
+   "skipped": false,
+   "field_acc": {
+    "matched": 6,
+    "comparable": 7,
+    "detail": {
+     "invoice_no": "ok",
+     "issue_date": "ok",
+     "amount": "ok",
+     "tax": "ok",
+     "total": "ok",
+     "buyer_name": "ok",
+     "seller_name": "truth=示例服务有限公司1|got=示例服务有限公司"
+    }
+   },
+   "expected_issues": [],
+   "got_review_needed": false,
+   "missed": 0,
+   "false_positive": 0,
+   "elapsed_ms": 784.6,
+   "error": ""
+  },
+  {
+   "sample_id": "synthetic_2",
+   "tier": "L2",
+   "file": "benchmark/synthetic/synthetic_2.pdf",
+   "parsed": true,
+   "skipped": false,
+   "field_acc": {
+    "matched": 6,
+    "comparable": 7,
+    "detail": {
+     "invoice_no": "ok",
+     "issue_date": "ok",
+     "amount": "ok",
+     "tax": "ok",
+     "total": "ok",
+     "buyer_name": "ok",
+     "seller_name": "truth=示例服务有限公司2|got=示例服务有限公司"
+    }
+   },
+   "expected_issues": [],
+   "got_review_needed": false,
+   "missed": 0,
+   "false_positive": 0,
+   "elapsed_ms": 294.0,
+   "error": ""
+  },
+  {
+   "sample_id": "synthetic_3",
+   "tier": "L2",
+   "file": "benchmark/synthetic/synthetic_3.pdf",
+   "parsed": true,
+   "skipped": false,
+   "field_acc": {
+    "matched": 6,
+    "comparable": 7,
+    "detail": {
+     "invoice_no": "ok",
+     "issue_date": "ok",
+     "amount": "ok",
+     "tax": "ok",
+     "total": "ok",
+     "buyer_name": "ok",
+     "seller_name": "truth=示例服务有限公司3|got=示例服务有限公司"
+    }
+   },
+   "expected_issues": [],
+   "got_review_needed": false,
+   "missed": 0,
+   "false_positive": 0,
+   "elapsed_ms": 294.8,
+   "error": ""
+  },
+  {
+   "sample_id": "synthetic_4",
+   "tier": "L2",
+   "file": "benchmark/synthetic/synthetic_4.pdf",
+   "parsed": true,
+   "skipped": false,
+   "field_acc": {
+    "matched": 6,
+    "comparable": 7,
+    "detail": {
+     "invoice_no": "ok",
+     "issue_date": "ok",
+     "amount": "ok",
+     "tax": "ok",
+     "total": "ok",
+     "buyer_name": "ok",
+     "seller_name": "truth=示例服务有限公司4|got=示例服务有限公司"
+    }
+   },
+   "expected_issues": [],
+   "got_review_needed": false,
+   "missed": 0,
+   "false_positive": 0,
+   "elapsed_ms": 295.5,
+   "error": ""
+  },
+  {
+   "sample_id": "synthetic_5",
+   "tier": "L2",
+   "file": "benchmark/synthetic/synthetic_5.pdf",
+   "parsed": true,
+   "skipped": false,
+   "field_acc": {
+    "matched": 6,
+    "comparable": 7,
+    "detail": {
+     "invoice_no": "ok",
+     "issue_date": "ok",
+     "amount": "ok",
+     "tax": "ok",
+     "total": "ok",
+     "buyer_name": "ok",
+     "seller_name": "truth=示例服务有限公司5|got=示例服务有限公司"
+    }
+   },
+   "expected_issues": [],
+   "got_review_needed": false,
+   "missed": 0,
+   "false_positive": 0,
+   "elapsed_ms": 298.0,
+   "error": ""
+  },
+  {
+   "sample_id": "synthetic_6",
+   "tier": "L2",
+   "file": "benchmark/synthetic/synthetic_6_motor_exempt_single.pdf",
+   "parsed": true,
+   "skipped": false,
+   "field_acc": {
+    "matched": 7,
+    "comparable": 7,
+    "detail": {
+     "invoice_no": "ok",
+     "issue_date": "ok",
+     "amount": "ok",
+     "tax": "ok",
+     "total": "ok",
+     "buyer_name": "ok",
+     "seller_name": "ok"
+    }
+   },
+   "expected_issues": [],
+   "got_review_needed": false,
+   "missed": 0,
+   "false_positive": 0,
+   "elapsed_ms": 281.5,
+   "error": ""
+  },
+  {
+   "sample_id": "synthetic_7",
+   "tier": "L2",
+   "file": "benchmark/synthetic/synthetic_7_motor_exempt_multi.pdf",
+   "parsed": true,
+   "skipped": false,
+   "field_acc": {
+    "matched": 7,
+    "comparable": 7,
+    "detail": {
+     "invoice_no": "ok",
+     "issue_date": "ok",
+     "amount": "ok",
+     "tax": "ok",
+     "total": "ok",
+     "buyer_name": "ok",
+     "seller_name": "ok"
+    }
+   },
+   "expected_issues": [],
+   "got_review_needed": false,
+   "missed": 0,
+   "false_positive": 0,
+   "elapsed_ms": 615.8,
+   "error": ""
+  },
+  {
+   "sample_id": "synthetic_8",
+   "tier": "L2",
+   "file": "benchmark/synthetic/synthetic_8_bad_expected.pdf",
+   "parsed": true,
+   "skipped": false,
+   "field_acc": {
+    "matched": 3,
+    "comparable": 7,
+    "detail": {
+     "invoice_no": "ok",
+     "issue_date": "truth=2026-13-45|got=",
+     "amount": "truth=100.00|got=0",
+     "tax": "truth=13.00|got=0",
+     "total": "ok",
+     "buyer_name": "ok",
+     "seller_name": "truth=示例服务有限公司BAD|got=示例服务有限公司"
+    }
+   },
+   "expected_issues": [
+    {
+     "code": "RECONCILE",
+     "level": "error",
+     "note": "勾稽不符：amount+tax=113.00 ≠ total=120.00"
+    },
+    {
+     "code": "DATE_INVALID",
+     "level": "error",
+     "note": "开票日期非法：2026-13-45"
+    }
+   ],
+   "got_review_needed": true,
+   "missed": 0,
+   "false_positive": 0,
+   "elapsed_ms": 307.5,
+   "error": ""
+  }
+ ]
+}

@@ -67,6 +67,17 @@ uvicorn app.main:app --reload     # 浏览器打开 http://127.0.0.1:8000
 - 脱敏副本受控保留在本机 `~/invoice-private/`（仓库外，通过环境变量 `INVOICE_PRIVATE_DIR` 注入），**永不入库/不上 Pages/不进第三方/不用于训练**。
 - 基准集构成：`benchmark/synthetic`（自造，进 Git）· `benchmark/public`（官方公告样张等公开素材，标注来源许可）· `benchmark/private`（仅存脱敏映射与结果归档，.gitignore 永不入库）。
 
+## 基准集（goldset）——真值比对一键跑分（T-053 · RV-20261001-360 修订）
+
+`benchmark/goldset/goldset.json`（v0.1.0，2026-10-01）冻结 43 条样本：L1 官方公开样例 5 / L2 合成 7 / L3 真实脱敏指针 31。
+
+- **口径**：解析成功率、字段准确率（发票号/日期/金额/税额/合计/购方/销方逐字段比对真值）、漏报率（派生标签该报而未报）、误报率（不该报而报）、端到端耗时（avg/P95）；分层报告，**绝不合并单一准确率**。
+- **派生标签**（`scripts/gold_labeler.py`）只从真值的数学/格式关系派生（勾稽容差 ±0.005、日期合法、票号 20 位、金额/税额非负），**独立于规则引擎 R1-R11**，杜绝"规则自己定标签又自己跑分"的循环论证。
+- **L3 复现条件**：清单只含指针 + private 索引 SHA256（真实金额值留在本地 `benchmark/private/real_private_index.json`，不入库）；样本本体在仓外 `~/invoice-private/`。缺副本时 L3 标记 `skipped`，不计入指标。
+- **⚠ 旧 `benchmark.py` 的 reconcile 是"自洽"（synthetic 无真值文件、official 组硬编码），与 goldset 真值比对**不可同表比较**（旧 latest.json 的 100% 属先行版，非准确率证据）。
+
+跑分：`python3 scripts/run_goldset.py --json`（结果落 `benchmark/results/goldset_report.json`）。
+
 ## 企业主体配置（F-20260923-04 · RV-46/47）
 
 R2 抬头/税号校验要真正工作，必须配置本公司主体（前端"真实模式 → 连接后端 → 企业主体设置"，或环境变量）。

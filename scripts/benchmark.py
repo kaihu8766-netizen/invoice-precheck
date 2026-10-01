@@ -1,5 +1,14 @@
 #!/usr/bin/env python3
-"""benchmark.py —— 基准集一键跑分（OPEN_ISSUES #44 阻塞项，DeepSeek 4 周路线 Week2）。
+"""benchmark.py —— [DEPRECATED] 先行版跑分（RV-20261001-361 标记）。
+
+!! 弃用声明（RV-20261001-360/361）!!
+本脚本的 reconcile 为"自洽"（synthetic 无真值文件、official 组硬编码 false），
+结果不可作为准确率证据。请改用 scripts/run_goldset.py（真值比对四指标+字段准确率，分层报告）。
+保留原因：历史产物 benchmark/results/latest.json 由本脚本生成，供追溯；
+新产物 goldset_report.json 与旧产物不可同表比较。
+
+原说明保留：
+
 
 四指标（DECISIONS 口径）：
 - 解析成功率：文件成功解析出有效发票（有发票号+价税合计>0）占比
