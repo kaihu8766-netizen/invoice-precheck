@@ -317,7 +317,8 @@ def _classify(staged_diff: str, rules_path: Path | None = None) -> tuple[list[st
     # 该目录属 project-trace 仓，本仓规则管不到；project-trace 侧由 #62 门禁 +
     # gate_rules.trace.yaml gate_self 承接）
     HARD_GATE_SELF = ("scripts/trace_gate.py", ".githooks/commit-msg", "scripts/gate_rules.yaml",
-                      "AGENTS.md")
+                      "AGENTS.md", "scripts/gate_rules.trace.yaml")  # F-20261009-01：trace.yaml 硬编码锚
+    # （防自指逃逸：即使 trace.yaml 删改 scheme_required 段，改它本身仍命中 gate_self 必审）
     if any(f.startswith(h) for f in files for h in HARD_GATE_SELF):
         hits.append("gate_self")
     changed_lines = _diff_changed_lines(staged_diff) if staged_diff.strip() else set()
@@ -981,31 +982,42 @@ def cmd_preflight(desc: str) -> int:
     return 0
 
 
-def cmd_check_scheme(message: str) -> int:
+def cmd_check_scheme(message: str, rules: str = "") -> int:
     """功能提交第三闸门（commit-msg 调用）：message 以 feat 约定开头 **或** staged diff 命中
-    需事前对齐类（demo_data）→ 必须有已批准 scheme-RV。
+    需事前对齐类（demo_data / scheme_required）→ 必须有已批准 scheme-RV。
 
     RV-23 口径：
     - 触发正则 FEAT_RE = ^feat[(][^)]+[)]?[!]?:（feat:/feat(scope):/feat!:/feat(scope)!:）
     - RV-77 修正：触发条件扩展为 FEAT_RE 匹配 **或** staged diff 命中 demo_data
       （演示数据口径/语义改动，即使 fix: 前缀也要求 scheme 事前对齐；防"改口径用 fix 绕过"）
+    - F-20261009-01：需事前对齐类扩为 {demo_data, scheme_required}（project-trace 机制文件类）；
+      新增 --rules 参数（此前未传 → _classify 恒读本仓 gate_rules.yaml = project-trace 死路径，
+      DeepSeek RV-20261009-398 抓到）；project-trace commit-msg 现传 gate_rules.trace.yaml
     - message 中出现的全部 F-xxx 都必须存在 adopted scheme-RV（防挂靠包装）
     - adopted 判据：档案 status=adopted 且 phase=scheme 且 feature 匹配（RV-23 口径 4：任一即可，保留多轮评审历史）
     - adopted 为执行者按用户拍板填写 → 属诚实边界（防忘不防绕，RV-23 口径 3 方案 A）
-    - 方案档案与代码同次提交：check 读工作区档案，存在即通过（RV-23 口径 5 预期行为）
+    - 方案档案与代码同次提交：check 读工作区档案，存在即通过（RV-23 口径 5 预期行为；
+      时序性由 audit-scheme 事后审计兜——本闸门只抬门槛到"补 scheme-RV 档案"，不证时序）
     """
     import subprocess
     diff = subprocess.run(["git", "diff", "--cached", "--binary", "--", ".", *EXCLUDE_PATHS],
                           capture_output=True, text=True, cwd=ROOT).stdout
-    hits, _ = _classify(diff)
-    # RV-77：需事前对齐类 = demo_data（演示数据口径语义）；红线类仍由 check-rv 管
-    NEEDS_SCHEME = {"demo_data"}
+    hits, _ = _classify(diff, Path(rules) if rules else None)
+    # RV-77：需事前对齐类 = demo_data（演示数据口径语义）；F-20261009-01 加 scheme_required
+    # （project-trace 机制文件类）；红线类仍由 check-rv 管
+    NEEDS_SCHEME = {"demo_data", "scheme_required"}
     diff_trigger = bool(set(hits) & NEEDS_SCHEME)
+    # F-20261009-01（RV-399 条件）：规则文件自身硬编码 scheme 锚——即使 trace.yaml 删改
+    # scheme_required 段，改它本身仍触发 scheme 层（与规则内容解耦，防自指逃逸到事后 RV 层）
+    staged_files = subprocess.run(["git", "diff", "--cached", "--name-only", "--", ".", *EXCLUDE_PATHS],
+                                  capture_output=True, text=True, cwd=ROOT).stdout.split()
+    if any(f.startswith("scripts/gate_rules.trace.yaml") for f in staged_files):
+        diff_trigger = True
     if not FEAT_RE.match(message.lstrip()) and not diff_trigger:
-        print("[check-scheme] 非功能提交且 diff 未命中需事前对齐类（demo_data），跳过")
+        print("[check-scheme] 非功能提交且 diff 未命中需事前对齐类，跳过")
         return 0
     if diff_trigger:
-        print(f"[check-scheme] diff 命中需事前对齐类：{sorted(set(hits) & NEEDS_SCHEME)}（演示数据口径改动，须已批准方案评审）")
+        print(f"[check-scheme] diff 命中需事前对齐类：{sorted(set(hits) & NEEDS_SCHEME)}（须已批准方案评审）")
     fids = sorted(set("F-" + m for m in FID_RE.findall(message)))
     if not fids:
         print("✗ 需事前对齐的提交必须引用功能登记 F-xxx（如 F-20260923-01）", file=sys.stderr)
@@ -1213,6 +1225,7 @@ def main() -> int:
     crk.add_argument("--hash-field", default="diff_hash", help="档案中对比的哈希字段")
     pf = sub.add_parser("preflight"); pf.add_argument("--desc", required=True)
     cs = sub.add_parser("check-scheme"); cs.add_argument("--message", required=True)
+    cs.add_argument("--rules", default="", help="自定义规则文件（默认本仓 gate_rules.yaml；project-trace 传 gate_rules.trace.yaml）")
     au = sub.add_parser("audit-scheme")
     rs = sub.add_parser("redline-scan")
     rs.set_defaults(requires_trace=False)  # RV-126：只扫本仓 tracked 文件，不依赖 project-trace（CI 无 TRACE 也能跑）
@@ -1242,7 +1255,7 @@ def main() -> int:
     if args.cmd == "preflight":
         return cmd_preflight(args.desc)
     if args.cmd == "check-scheme":
-        return cmd_check_scheme(args.message)
+        return cmd_check_scheme(args.message, args.rules)
     if args.cmd == "audit-scheme":
         return cmd_audit_scheme()
     if args.cmd == "redline-scan":
