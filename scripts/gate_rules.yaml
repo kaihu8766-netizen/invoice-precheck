@@ -58,3 +58,9 @@ light_whitelist:
 # 预授权（RV-347）：观察期内允许免评审把 mode 从 deny 切回 warn（快速降级留痕：git diff 可审计）。
 risk_gate:
   mode: warn        # 观察期默认 warn；7 天期满后经评审切 deny
+
+# F-20261009-02 ⑥：discussion 独立维度（不依赖 risk_level 推导）
+# 命中下列类的提交必须事前讨论（scheme 对齐），无论 risk 档是 high/medium
+discussion_required:
+  - gate_self          # 门禁自身改动
+  - data_redline        # 真实数据/脱敏逻辑

@@ -636,13 +636,26 @@ def cmd_classify(staged: bool, rules: str = "", json_output: bool = False) -> in
         return 2
     hits, diff_hash = _classify(diff, rp)
     risk = _classify_risk(diff, hits, diff_hash)
+    # F-20261009-02 ⑥：discussion 独立维度（不依赖 risk_level 推导）
+    # gate_rules.yaml 顶层 discussion_required: [类名] → 命中即需事前讨论，无论 risk 档
+    discussion_hits = []
+    try:
+        import yaml as _y
+        _rules_all = _y.safe_load((rp or Path(__file__).parent / "gate_rules.yaml").read_text(encoding="utf-8"))
+        _disc = _rules_all.get("discussion_required", []) or []
+        discussion_hits = [h for h in hits if h in _disc]
+    except Exception:
+        pass
     if json_output:
-        print(_json.dumps({"hits": hits, "diff_hash": diff_hash, "risk_level": risk}, ensure_ascii=False))
+        print(_json.dumps({"hits": hits, "diff_hash": diff_hash, "risk_level": risk,
+                           "discussion_required_hits": discussion_hits}, ensure_ascii=False))
         return 0 if not hits else 1
     if hits:
         print(f"[classify] 命中评审红线：{', '.join(hits)}")
     else:
         print("[classify] 未命中评审红线（可仅带常规 ID 提交）")
+    if discussion_hits:
+        print(f"[classify] 需事前讨论类（独立维度）：{', '.join(discussion_hits)}")
     print(f"[classify] diff_hash={diff_hash}")
     print(f"[classify] risk_level={risk}")
     return 0 if not hits else 1
@@ -942,9 +955,23 @@ def _next_feature_no() -> int:
 
 
 def _find_scheme_rv(fid: str) -> Path | None:
-    """查功能登记 F-xxx 是否有已批准(adopted)且 phase=scheme 的方案评审档案。"""
+    """查功能登记 F-xxx 是否有已批准(adopted)且 phase=scheme 的方案评审档案。
+
+    F-20261009-02（RV-400 修正：fail-closed legacy 白名单 + 双源校验）：
+    - 严格：frontmatter phase=scheme + feature=fid + status=adopted
+    - legacy fallback（仅白名单，防删 phase 行绕过）：frontmatter 缺 phase 字段
+      且 legacy_scheme: true 显式标记 且 feature=fid 且 adopted → 才放行；
+      无标记的旧档案不匹配（删 phase 行 ≠ 自动放行）
+    - phase 存在但 ≠scheme → 不匹配（继续循环）
+    - 双源：frontmatter 通过后，索引行须同时含该档案文件名且 status=adopted
+      （frontmatter 与索引单边改不算；同次提交同改可过=已知诚实边界，由 audit 兜）
+    """
     if not RV_DIR.exists():
         return None
+    index_txt = ""
+    index_file = RV_DIR / "索引.md"
+    if index_file.exists():
+        index_txt = index_file.read_text(encoding="utf-8", errors="replace")
     for f in sorted(RV_DIR.glob("*.md")):
         if f.name == "索引.md":
             continue
@@ -952,9 +979,20 @@ def _find_scheme_rv(fid: str) -> Path | None:
         fm = re.search(r"phase:\s*(\S+)", head)
         feat = re.search(r"feature:\s*(\S+)", head)
         st = re.search(r"status:\s*(\S+)", head)
-        if fm and fm.group(1) == "scheme" and feat and feat.group(1) == fid \
-                and st and st.group(1) == "adopted":
-            return f
+        legacy = re.search(r"legacy_scheme:\s*(\S+)", head)
+        if not (feat and feat.group(1) == fid and st and st.group(1) == "adopted"):
+            continue
+        matched = False
+        if fm and fm.group(1) == "scheme":
+            matched = True
+        elif fm is None and legacy and legacy.group(1) == "true":
+            matched = True
+        if matched:
+            # 双源校验：索引行须出现档案文件名且状态为已生效（adopted/covered 均算——
+            # covered 是历史归档状态，曾批准后被新方案取代，对历史 feature 仍有效）
+            for line in index_txt.splitlines():
+                if f.name in line and re.search(r"\|\s*(adopted|covered)\s*\|", line):
+                    return f
     return None
 
 
