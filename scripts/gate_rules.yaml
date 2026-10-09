@@ -57,7 +57,7 @@ light_whitelist:
 # 观察期：落地（2026-10-01）起 7 天，观察期满收紧为 deny 需新一轮评审（改配置本身是 gate_self）。
 # 预授权（RV-347）：观察期内允许免评审把 mode 从 deny 切回 warn（快速降级留痕：git diff 可审计）。
 risk_gate:
-  mode: warn        # 观察期默认 warn；7 天期满后经评审切 deny
+  mode: deny        # F-20261009-02：观察期(7天)已满，切强制阻断
 
 # F-20261009-02 ⑥：discussion 独立维度（不依赖 risk_level 推导）
 # 命中下列类的提交必须事前讨论（scheme 对齐），无论 risk 档是 high/medium
